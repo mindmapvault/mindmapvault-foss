@@ -139,4 +139,4 @@ Contribution expectations:
 
 ## License
 
-MindMapVault FOSS is licensed under the terms in LICENSE.
+MindMapVault FOSS is released under the MIT license. See LICENSE for details.

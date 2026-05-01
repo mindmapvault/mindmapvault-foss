@@ -85,6 +85,16 @@ When Copilot generates documentation or comments, it should:
 - keep comments technical and concise
 - avoid marketing language
 
+## Release Hygiene (Mandatory)
+
+- After each merged code change, create a new version entry.
+- Document the change in `CHANGELOG.md` in the same task.
+- Update the application version in `frontend_app/package.json`.
+- Keep desktop release versions in sync by updating:
+  - `desktop/src-tauri/tauri.conf.json`
+  - `desktop/src-tauri/Cargo.toml`
+- Do not leave implementation changes without an explicit version/changelog update.
+
 ## Testing and Validation
 
 Copilot should generate:

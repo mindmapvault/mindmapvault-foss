@@ -1,5 +1,6 @@
 import type { ClipboardEvent, DragEvent, RefObject } from 'react';
 import type { NodeAttachmentRef } from '../types';
+import { handleDelegatedLinkClick } from '../utils/openExternal';
 
 interface MindMapNotesDialogProps {
   open: boolean;
@@ -203,7 +204,13 @@ export function MindMapNotesDialog({
             />
           </div>
           <div className="mm-notes-preview-pane">
-            <div className="mm-notes-preview" dangerouslySetInnerHTML={{ __html: notesPreviewHtml }} />
+            <div
+              className="mm-notes-preview"
+              dangerouslySetInnerHTML={{ __html: notesPreviewHtml }}
+              onClick={(e) => {
+                handleDelegatedLinkClick(e as unknown as MouseEvent);
+              }}
+            />
           </div>
         </div>
         <div className="mm-notes-footer">

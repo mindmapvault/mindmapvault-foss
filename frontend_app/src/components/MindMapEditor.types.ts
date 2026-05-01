@@ -22,6 +22,7 @@ export interface MindMapEditorProps {
   onOpenSecurePanel?: (tab: 'attachments' | 'shares') => void;
   onNodeFileDrop?: (nodeId: string, files: File[]) => Promise<NodeAttachmentRef[]>;
   onOpenNodeAttachment?: (attachment: NodeAttachmentRef) => Promise<void> | void;
+  onFetchNodeAttachmentContent?: (attachment: NodeAttachmentRef) => Promise<{ name: string; contentType: string; blob: Blob } | null>;
   onDeleteNodeAttachment?: (attachment: NodeAttachmentRef) => Promise<void> | void;
   onLoadNodeAttachmentPreview?: (attachment: NodeAttachmentRef) => Promise<string | null>;
 }

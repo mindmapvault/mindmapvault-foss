@@ -1,6 +1,6 @@
 {
   "name": "mindmapvault-desktop-app",
-  "version": "0.3.15",
+  "version": "0.3.16",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,6 +12,9 @@
     "tauri:build": "cd ../desktop/src-tauri && npx --prefix ../../frontend_app tauri build --config tauri.conf.json"
   },
   "dependencies": {
+    "@tauri-apps/plugin-dialog": "^2.4.2",
+    "@tauri-apps/plugin-fs": "^2.4.1",
+    "@tauri-apps/plugin-shell": "^2.3.2",
     "@noble/curves": "^1.9.7",
     "@noble/hashes": "^1.8.0",
     "@noble/post-quantum": "^0.2.1",

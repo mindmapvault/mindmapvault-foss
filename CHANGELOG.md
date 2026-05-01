@@ -14,6 +14,36 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Validation
 
+## [0.3.16] - 2026-05-01
+
+### Added
+- Added in-app attachment preview dialog in the editor notes workflow:
+  - Supports image previews (`image/*`, including PNG/JPG).
+  - Supports PDF previews (`application/pdf`).
+  - Includes direct download action from the preview dialog.
+  - Files modified: `frontend_app/src/components/MindMapEditor.tsx`, `frontend_app/src/components/MindMapEditor.css`, `frontend_app/src/components/MindMapEditor.types.ts`, `frontend_app/src/pages/EditorPage.tsx`
+
+### Changed
+- Improved external URL opening behavior in desktop runtime:
+  - Node URL links now route through Tauri shell plugin path (with browser fallback), replacing fragile `window.open`-only behavior.
+  - Notes markdown preview links and hover-preview links now use the same external-open helper.
+  - Files modified: `frontend_app/src/utils/openExternal.ts`, `frontend_app/src/components/MindMapEditor.tsx`, `frontend_app/src/components/MindMapNotesDialog.tsx`
+
+- Improved attachment save/open reliability in desktop runtime:
+  - Unified attachment save path to use shared desktop-aware downloader (`downloadBlob`) instead of raw anchor/object-URL click.
+  - Added editor callback for fetching decrypted attachment content for preview rendering.
+  - Files modified: `frontend_app/src/pages/EditorPage.tsx`, `frontend_app/src/utils/download.ts`
+
+### Fixed
+- Fixed attachment preview dialog layering issue where it appeared behind the notes modal:
+  - Added dedicated overlay stacking class for attachment preview.
+  - Raised preview modal z-index above notes modal.
+  - Files modified: `frontend_app/src/components/MindMapEditor.tsx`, `frontend_app/src/components/MindMapEditor.css`
+
+### Validation
+- Frontend build passes: `pnpm --dir frontend_app build`
+- Desktop/Tauri build passes: `pnpm --dir frontend_app tauri:build`
+
 ## [0.3.15] - 2026-05-01
 
 ### Fixed

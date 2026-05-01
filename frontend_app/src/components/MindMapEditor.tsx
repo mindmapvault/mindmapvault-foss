@@ -60,6 +60,7 @@ import { layoutTree, bezierPath } from './MindMapLayout';
 import { appendAttachmentMarkdownLinks, getVisibleNodeTextLines } from '../utils/nodeAttachments';
 import { exportSvgAsPdf, renderSvgToCanvas } from '../utils/pdfExport';
 import { downloadBlob, downloadDataUrl } from '../utils/download';
+import { handleDelegatedLinkClick, openExternalUrl } from '../utils/openExternal';
 import './MindMapEditor.css';
 
 // ── Drag state ────────────────────────────────────────────────────────────────
@@ -80,6 +81,7 @@ export function DesktopMindMapEditor({
   onExportMarkdown, titleChanged, onRenameTitle, renamingTitle,
   versionLabel, versionTooltip,
   onTreeChange, onSelectionChange, onNodeFileDrop, onOpenNodeAttachment,
+  onFetchNodeAttachmentContent,
   onDeleteNodeAttachment,
   onLoadNodeAttachmentPreview,
 }: MindMapEditorProps) {
@@ -105,6 +107,12 @@ export function DesktopMindMapEditor({
   const [showMarkdownHelp, setShowMarkdownHelp] = useState(false);
   const [notesDropActive, setNotesDropActive] = useState(false);
   const [notesUploadBusy, setNotesUploadBusy] = useState(false);
+  const [attachmentPreviewOpen, setAttachmentPreviewOpen] = useState(false);
+  const [attachmentPreviewTitle, setAttachmentPreviewTitle] = useState('');
+  const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState<string | null>(null);
+  const [attachmentPreviewType, setAttachmentPreviewType] = useState<'image' | 'pdf' | 'unsupported'>('unsupported');
+  const [attachmentPreviewContentType, setAttachmentPreviewContentType] = useState<string>('');
+  const [attachmentPreviewBusy, setAttachmentPreviewBusy] = useState(false);
 
   // ── View ───────────────────────────────────────────────────────────────────
   const [zoom, setZoom] = useState(() => {
@@ -352,6 +360,62 @@ export function DesktopMindMapEditor({
   useEffect(() => {
     attachmentPreviewUrlsRef.current = attachmentPreviewUrls;
   }, [attachmentPreviewUrls]);
+
+  useEffect(() => {
+    return () => {
+      if (attachmentPreviewUrl) URL.revokeObjectURL(attachmentPreviewUrl);
+    };
+  }, [attachmentPreviewUrl]);
+
+  const closeAttachmentPreview = useCallback(() => {
+    setAttachmentPreviewOpen(false);
+    setAttachmentPreviewBusy(false);
+    setAttachmentPreviewTitle('');
+    setAttachmentPreviewType('unsupported');
+    setAttachmentPreviewContentType('');
+    setAttachmentPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
+  }, []);
+
+  const previewOrOpenAttachment = useCallback(async (attachment: NodeAttachmentRef) => {
+    const contentType = (attachment.content_type || '').toLowerCase();
+    const isImage = contentType.startsWith('image/');
+    const isPdf = contentType === 'application/pdf' || attachment.name.toLowerCase().endsWith('.pdf');
+
+    if (!isImage && !isPdf) {
+      await onOpenNodeAttachment?.(attachment);
+      return;
+    }
+
+    if (!onFetchNodeAttachmentContent) {
+      await onOpenNodeAttachment?.(attachment);
+      return;
+    }
+
+    setAttachmentPreviewBusy(true);
+    setAttachmentPreviewOpen(true);
+    setAttachmentPreviewTitle(attachment.name || 'Attachment preview');
+    setAttachmentPreviewType(isPdf ? 'pdf' : 'image');
+    setAttachmentPreviewContentType(attachment.content_type || 'application/octet-stream');
+
+    const content = await onFetchNodeAttachmentContent(attachment);
+    if (!content) {
+      setAttachmentPreviewBusy(false);
+      await onOpenNodeAttachment?.(attachment);
+      return;
+    }
+
+    const url = URL.createObjectURL(content.blob);
+    setAttachmentPreviewContentType(content.contentType || attachment.content_type || 'application/octet-stream');
+    setAttachmentPreviewTitle(content.name || attachment.name);
+    setAttachmentPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return url;
+    });
+    setAttachmentPreviewBusy(false);
+  }, [onFetchNodeAttachmentContent, onOpenNodeAttachment]);
 
   useEffect(() => () => {
     Object.values(attachmentPreviewUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
@@ -1798,7 +1862,7 @@ export function DesktopMindMapEditor({
                 onMouseDown={(e) => { e.stopPropagation(); }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  window.open(openUrl, '_blank', 'noopener,noreferrer');
+                  void openExternalUrl(openUrl);
                 }}
               >
                 {urlItem.label || rawUrl}
@@ -2085,7 +2149,13 @@ export function DesktopMindMapEditor({
             }}
           >
             <div className="mm-note-hover-title">{hoveredNoteData.title}</div>
-            <div className="mm-note-hover-text" dangerouslySetInnerHTML={{ __html: hoveredNoteData.html }} />
+            <div
+              className="mm-note-hover-text"
+              dangerouslySetInnerHTML={{ __html: hoveredNoteData.html }}
+              onClick={(e) => {
+                handleDelegatedLinkClick(e as unknown as MouseEvent);
+              }}
+            />
           </div>
         )}
         {shortcutToast && (<div className="mm-shortcut-toast"><span className="mm-shortcut-toast-key">{shortcutToast.split('—')[0].trim()}</span>{shortcutToast.includes('—') && <span className="mm-shortcut-toast-desc">{shortcutToast.split('—')[1]?.trim()}</span>}</div>)}
@@ -2284,7 +2354,7 @@ export function DesktopMindMapEditor({
             setNotesDropActive(false);
           }
         }}
-        onOpenAttachment={(attachment) => { void onOpenNodeAttachment?.(attachment); }}
+        onOpenAttachment={(attachment) => { void previewOrOpenAttachment(attachment); }}
         onDeleteAttachment={(attachment) => { void deleteNotesAttachment(attachment); }}
         onAddAttachmentFiles={(files) => { void uploadFilesIntoNotes(files); }}
         onInsertMarkdownAction={insertMarkdownAction}
@@ -2303,6 +2373,50 @@ export function DesktopMindMapEditor({
         onSaveNotes={saveNotes}
         onDeleteNotes={deleteNotes}
       />
+
+      {attachmentPreviewOpen && (
+        <>
+          <div className="mm-overlay mm-overlay--attachment-preview" onClick={closeAttachmentPreview} />
+          <div className="mm-attachment-preview-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="mm-attachment-preview-header">
+              <span>{attachmentPreviewTitle || 'Attachment preview'}</span>
+              <button className="mm-btn-icon" onClick={closeAttachmentPreview} title="Close preview">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="mm-attachment-preview-body">
+              {attachmentPreviewBusy && <div className="mm-attachment-preview-placeholder">Loading preview…</div>}
+              {!attachmentPreviewBusy && attachmentPreviewType === 'image' && attachmentPreviewUrl && (
+                <img className="mm-attachment-preview-image" src={attachmentPreviewUrl} alt={attachmentPreviewTitle || 'Attachment'} />
+              )}
+              {!attachmentPreviewBusy && attachmentPreviewType === 'pdf' && attachmentPreviewUrl && (
+                <iframe className="mm-attachment-preview-pdf" src={attachmentPreviewUrl} title={attachmentPreviewTitle || 'PDF preview'} />
+              )}
+              {!attachmentPreviewBusy && !attachmentPreviewUrl && (
+                <div className="mm-attachment-preview-placeholder">Preview is unavailable for this file.</div>
+              )}
+            </div>
+            <div className="mm-attachment-preview-footer">
+              <button
+                className="mm-btn mm-btn--primary"
+                onClick={async () => {
+                  if (!attachmentPreviewUrl) return;
+                  const response = await fetch(attachmentPreviewUrl);
+                  const blob = await response.blob();
+                  await downloadBlob(blob, attachmentPreviewTitle || 'attachment');
+                }}
+              >
+                Download
+              </button>
+              <button className="mm-btn" onClick={closeAttachmentPreview}>Close</button>
+              <span className="mm-attachment-preview-meta">{attachmentPreviewContentType}</span>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── Shortcuts panel ─────────────────────────────────────────── */}
       {showShortcuts && (

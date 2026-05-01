@@ -34,7 +34,7 @@ import {
   type VaultPreviewSummary,
 } from '../utils/vaultPreview';
 import { decryptAttachmentForOwner } from '../crypto/encryptedVault';
-import packageJson from '../../package.json';
+// packageJson intentionally omitted when not used in this view
 
 interface LocalStorageDirInfo {
   path: string;
@@ -1115,7 +1115,7 @@ export function VaultsPage() {
   const usedBytes = storageSummary?.total_bytes ?? 0;
   const attachedFileCount = storageSummary?.attachment_count ?? 0;
   const attachedFileBytes = storageSummary?.attachment_bytes ?? 0;
-  const appVersion = `v${String(packageJson.version ?? 'dev')}`;
+  
 
   return (
     <>
@@ -1126,7 +1126,6 @@ export function VaultsPage() {
           <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <LogoWithText size={28} />
-              <p className="mt-1 text-xs text-slate-500">{appVersion}</p>
             </div>
             <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end sm:gap-3">
               <span className="hidden text-sm text-slate-400 sm:inline">{username}</span>

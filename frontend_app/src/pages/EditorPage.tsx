@@ -23,6 +23,7 @@ import type { AttachmentMetadata, MapShareOwnerSummary, MindMapTree, NodeAttachm
 import { getPlanErrorPrompt, type PlanErrorPrompt } from '../utils/planErrors';
 import { createEncryptedFilePreview } from '../utils/filePreview';
 import { treeToMarkdown } from '../utils/markdownExport';
+import { downloadBlob } from '../utils/download';
 import {
   createCloudTreeVaultPreview,
   isVaultPreviewAttachmentMeta,
@@ -199,14 +200,7 @@ export function EditorPage() {
   const saveBytesToFile = useCallback((bytes: Uint8Array, fileName: string, contentType: string) => {
     const payload = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
     const blob = new Blob([payload], { type: contentType });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = fileName;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
+    void downloadBlob(blob, fileName);
   }, []);
 
   const refreshSecureData = useCallback(async () => {
@@ -510,14 +504,7 @@ export function EditorPage() {
   const handleExportMarkdown = useCallback((tree: MindMapTree, currentTitle: string) => {
     const md = treeToMarkdown(tree.root, currentTitle);
     const blob = new Blob([md], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${buildExportFileBaseName(currentTitle)}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    void downloadBlob(blob, `${buildExportFileBaseName(currentTitle)}.md`);
   }, [buildExportFileBaseName]);
 
   const handleUploadFiles = useCallback(async (files: FileList) => {
@@ -740,6 +727,40 @@ export function EditorPage() {
       setSecureError(err instanceof Error ? err.message : 'Failed to download node attachment');
     }
   }, [id, isLocalMode, saveBytesToFile, sessionKeys]);
+
+  const handleFetchNodeAttachmentContent = useCallback(async (attachment: NodeAttachmentRef): Promise<{ name: string; contentType: string; blob: Blob } | null> => {
+    if (!id || !sessionKeys) return null;
+
+    if (isLocalMode) {
+      if (!attachment.inline_data_base64) return null;
+      const bytes = fromBase64(attachment.inline_data_base64);
+      const payload = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+      const contentType = attachment.content_type || 'application/octet-stream';
+      return {
+        name: attachment.name,
+        contentType,
+        blob: new Blob([payload], { type: contentType }),
+      };
+    }
+
+    try {
+      const download = await encryptedVaultApi.getAttachmentDownload(id, attachment.attachment_id);
+      const bytes = await encryptedVaultApi.downloadUrl(download.download_url);
+      const plaintext = download.encrypted
+        ? await decryptAttachmentForOwner(bytes, download.encryption_meta, sessionKeys.masterKey)
+        : bytes;
+      const payload = plaintext.buffer.slice(plaintext.byteOffset, plaintext.byteOffset + plaintext.byteLength) as ArrayBuffer;
+      const contentType = download.content_type || attachment.content_type || 'application/octet-stream';
+      return {
+        name: download.name || attachment.name,
+        contentType,
+        blob: new Blob([payload], { type: contentType }),
+      };
+    } catch (err) {
+      setSecureError(err instanceof Error ? err.message : 'Failed to load node attachment');
+      return null;
+    }
+  }, [id, isLocalMode, sessionKeys]);
 
   const handleLoadNodeAttachmentPreview = useCallback(async (attachment: NodeAttachmentRef): Promise<string | null> => {
     if (!id || !sessionKeys) return null;
@@ -999,6 +1020,7 @@ export function EditorPage() {
         onOpenSecurePanel={openSecurePanel}
         onNodeFileDrop={(nodeId, files) => uploadEncryptedNodeFiles(nodeId, files)}
         onOpenNodeAttachment={(attachment) => { void handleOpenNodeAttachment(attachment); }}
+        onFetchNodeAttachmentContent={(attachment) => handleFetchNodeAttachmentContent(attachment)}
         onDeleteNodeAttachment={(attachment) => { void handleDeleteNodeAttachment(attachment); }}
         onLoadNodeAttachmentPreview={(attachment) => handleLoadNodeAttachmentPreview(attachment)}
       />

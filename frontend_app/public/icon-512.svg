@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="vb" cx="0.38" cy="0.38" r="0.65">
+      <stop offset="0%" stop-color="#B07CDB"/>
+      <stop offset="25%" stop-color="#8B5CF6"/>
+      <stop offset="55%" stop-color="#6D28D9"/>
+      <stop offset="80%" stop-color="#4C1D95"/>
+      <stop offset="100%" stop-color="#2E1065"/>
+    </radialGradient>
+    <linearGradient id="or" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#E9D5FF"/>
+      <stop offset="15%" stop-color="#A78BFA"/>
+      <stop offset="40%" stop-color="#7C3AED"/>
+      <stop offset="65%" stop-color="#5B21B6"/>
+      <stop offset="85%" stop-color="#4C1D95"/>
+      <stop offset="100%" stop-color="#6D28D9"/>
+    </linearGradient>
+    <linearGradient id="ir" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#C4B5FD"/>
+      <stop offset="50%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#3B0764"/>
+    </linearGradient>
+    <linearGradient id="sp" x1="0.3" y1="0" x2="0.7" y2="1">
+      <stop offset="0%" stop-color="#E9D5FF"/>
+      <stop offset="30%" stop-color="#C4B5FD"/>
+      <stop offset="70%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#5B21B6"/>
+    </linearGradient>
+    <linearGradient id="wr" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#DDD6FE"/>
+      <stop offset="25%" stop-color="#A78BFA"/>
+      <stop offset="50%" stop-color="#7C3AED"/>
+      <stop offset="75%" stop-color="#6D28D9"/>
+      <stop offset="100%" stop-color="#C4B5FD"/>
+    </linearGradient>
+    <radialGradient id="hc" cx="0.35" cy="0.35" r="0.65">
+      <stop offset="0%" stop-color="#DDD6FE"/>
+      <stop offset="50%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#3B0764"/>
+    </radialGradient>
+    <linearGradient id="dr" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1E0533"/>
+      <stop offset="50%" stop-color="#3B0764"/>
+      <stop offset="100%" stop-color="#1E0533"/>
+    </linearGradient>
+  </defs>
+  <!-- Background for icon contexts -->
+  <rect width="512" height="512" rx="80" fill="#0F0520"/>
+  <!-- Vault centered -->
+  <g transform="translate(256,256)">
+    <!-- Outer rim -->
+    <circle cx="0" cy="0" r="200" fill="url(#or)" stroke="#2E1065" stroke-width="5"/>
+    <circle cx="0" cy="0" r="189" fill="none" stroke="#1E0533" stroke-width="6"/>
+    <circle cx="0" cy="0" r="183" fill="url(#ir)" stroke="#4C1D95" stroke-width="3"/>
+    <circle cx="0" cy="0" r="175" fill="url(#dr)" stroke="#1E0533" stroke-width="5"/>
+    <!-- Face -->
+    <circle cx="0" cy="0" r="167" fill="url(#vb)" stroke="#5B21B6" stroke-width="2"/>
+    <circle cx="0" cy="0" r="148" fill="none" stroke="#7C3AED" stroke-width="1" opacity="0.5"/>
+    <circle cx="0" cy="0" r="132" fill="none" stroke="#6D28D9" stroke-width="0.8" opacity="0.35"/>
+    <!-- Sheen -->
+    <path d="M-110,-98 A140,140 0 0,1 60,-116" fill="none" stroke="#DDD6FE" stroke-width="3" opacity="0.15" stroke-linecap="round"/>
+    <!-- Handle wheel -->
+    <circle cx="0" cy="0" r="81" fill="none" stroke="url(#wr)" stroke-width="15"/>
+    <circle cx="0" cy="0" r="72" fill="none" stroke="#2E1065" stroke-width="2" opacity="0.5"/>
+    <!-- Spokes -->
+    <rect x="-12" y="-78" width="24" height="56" rx="8" fill="url(#sp)" stroke="#5B21B6" stroke-width="1"/>
+    <rect x="-12" y="22" width="24" height="56" rx="8" fill="url(#sp)" stroke="#5B21B6" stroke-width="1"/>
+    <!-- Hub -->
+    <circle cx="0" cy="0" r="31" fill="url(#hc)" stroke="#A78BFA" stroke-width="3"/>
+    <circle cx="0" cy="0" r="20" fill="#1E0533" stroke="#6D28D9" stroke-width="3"/>
+    <circle cx="0" cy="0" r="11" fill="#2E1065" stroke="#8B5CF6" stroke-width="1.5"/>
+    <circle cx="0" cy="0" r="5" fill="#DDD6FE"/>
+    <circle cx="-5" cy="-5" r="2.5" fill="#F5F3FF" opacity="0.6"/>
+  </g>
+</svg>

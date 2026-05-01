@@ -1,0 +1,236 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" width="960" height="560">
+  <defs>
+    <radialGradient id="vaultBody" cx="0.38" cy="0.38" r="0.65">
+      <stop offset="0%" stop-color="#B07CDB"/>
+      <stop offset="25%" stop-color="#8B5CF6"/>
+      <stop offset="55%" stop-color="#6D28D9"/>
+      <stop offset="80%" stop-color="#4C1D95"/>
+      <stop offset="100%" stop-color="#2E1065"/>
+    </radialGradient>
+    <linearGradient id="outerRim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#E9D5FF"/>
+      <stop offset="15%" stop-color="#A78BFA"/>
+      <stop offset="40%" stop-color="#7C3AED"/>
+      <stop offset="65%" stop-color="#5B21B6"/>
+      <stop offset="85%" stop-color="#4C1D95"/>
+      <stop offset="100%" stop-color="#6D28D9"/>
+    </linearGradient>
+    <linearGradient id="innerRim" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0%" stop-color="#C4B5FD"/>
+      <stop offset="50%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#3B0764"/>
+    </linearGradient>
+    <linearGradient id="spoke" x1="0.3" y1="0" x2="0.7" y2="1">
+      <stop offset="0%" stop-color="#E9D5FF"/>
+      <stop offset="30%" stop-color="#C4B5FD"/>
+      <stop offset="70%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#5B21B6"/>
+    </linearGradient>
+    <linearGradient id="wheelRing" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#DDD6FE"/>
+      <stop offset="25%" stop-color="#A78BFA"/>
+      <stop offset="50%" stop-color="#7C3AED"/>
+      <stop offset="75%" stop-color="#6D28D9"/>
+      <stop offset="100%" stop-color="#C4B5FD"/>
+    </linearGradient>
+    <radialGradient id="hubCenter" cx="0.35" cy="0.35" r="0.65">
+      <stop offset="0%" stop-color="#DDD6FE"/>
+      <stop offset="50%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#3B0764"/>
+    </radialGradient>
+    <linearGradient id="depthRing" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1E0533"/>
+      <stop offset="50%" stop-color="#3B0764"/>
+      <stop offset="100%" stop-color="#1E0533"/>
+    </linearGradient>
+    <filter id="vaultShadow">
+      <feDropShadow dx="4" dy="6" stdDeviation="10" flood-color="#0A0012" flood-opacity="0.7"/>
+    </filter>
+    <filter id="cardShadow">
+      <feDropShadow dx="1" dy="2" stdDeviation="2.5" flood-color="#00000022" flood-opacity="0.25"/>
+    </filter>
+    <filter id="innerShadow">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur"/>
+      <feOffset dx="2" dy="2"/>
+      <feFlood flood-color="#0A0012" flood-opacity="0.5"/>
+      <feComposite in2="blur" operator="in"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ===== ROUND VAULT ===== -->
+  <g filter="url(#vaultShadow)">
+    <circle cx="140" cy="280" r="128" fill="url(#outerRim)" stroke="#2E1065" stroke-width="3"/>
+    <circle cx="140" cy="280" r="121" fill="none" stroke="#1E0533" stroke-width="4"/>
+    <circle cx="140" cy="280" r="117" fill="url(#innerRim)" stroke="#4C1D95" stroke-width="2"/>
+    <circle cx="140" cy="280" r="112" fill="url(#depthRing)" stroke="#1E0533" stroke-width="3"/>
+    <circle cx="140" cy="280" r="107" fill="url(#vaultBody)" stroke="#5B21B6" stroke-width="1.5"/>
+    <circle cx="140" cy="280" r="95" fill="none" stroke="#7C3AED" stroke-width="0.7" opacity="0.5"/>
+    <circle cx="140" cy="280" r="85" fill="none" stroke="#6D28D9" stroke-width="0.5" opacity="0.35"/>
+    <path d="M70,220 A90,90 0 0,1 180,205" fill="none" stroke="#DDD6FE" stroke-width="2" opacity="0.15" stroke-linecap="round"/>
+    <!-- Handle wheel -->
+    <circle cx="140" cy="280" r="52" fill="none" stroke="url(#wheelRing)" stroke-width="10" filter="url(#innerShadow)"/>
+    <circle cx="140" cy="280" r="46" fill="none" stroke="#2E1065" stroke-width="1.5" opacity="0.5"/>
+    <rect x="132" y="230" width="16" height="36" rx="5" fill="url(#spoke)" stroke="#5B21B6" stroke-width="0.8"/>
+    <rect x="132" y="294" width="16" height="36" rx="5" fill="url(#spoke)" stroke="#5B21B6" stroke-width="0.8"/>
+    <circle cx="140" cy="280" r="20" fill="url(#hubCenter)" stroke="#A78BFA" stroke-width="2"/>
+    <circle cx="140" cy="280" r="13" fill="#1E0533" stroke="#6D28D9" stroke-width="2"/>
+    <circle cx="140" cy="280" r="7" fill="#2E1065" stroke="#8B5CF6" stroke-width="1"/>
+    <circle cx="140" cy="280" r="3" fill="#DDD6FE"/>
+    <circle cx="137" cy="277" r="1.5" fill="#F5F3FF" opacity="0.6"/>
+  </g>
+
+  <!-- ===== CONNECTIONS (vault purple color) ===== -->
+  <g fill="none" stroke="#A78BFA" stroke-width="2.2" stroke-linecap="round">
+    <!-- Vault border to Level 1 -->
+    <path d="M268,280 C305,280 305,100 345,100"/>
+    <path d="M268,280 C305,280 305,195 345,195"/>
+    <path d="M268,280 C305,280 305,340 345,340"/>
+    <path d="M268,280 C305,280 305,460 345,460"/>
+
+    <!-- Zero Knowledge -> children -->
+    <path d="M460,100 C490,100 490,58 520,58"/>
+    <path d="M460,100 C490,100 490,100 520,100"/>
+    <path d="M460,100 C490,100 490,142 520,142"/>
+
+    <!-- Encryption -> children -->
+    <path d="M458,195 C490,195 490,195 520,195"/>
+
+    <!-- Key Mgmt -> children -->
+    <path d="M468,340 C500,340 500,278 530,278"/>
+    <path d="M468,340 C500,340 500,320 530,320"/>
+    <path d="M468,340 C500,340 500,362 530,362"/>
+    <path d="M468,340 C500,340 500,404 530,404"/>
+
+    <!-- AES-256-GCM -> child -->
+    <path d="M625,195 C660,195 660,195 690,195"/>
+
+    <!-- Argon2id -> child -->
+    <path d="M612,58 C645,58 645,58 680,58"/>
+
+    <!-- X25519 -> child -->
+    <path d="M618,278 C650,278 650,278 680,278"/>
+
+    <!-- ML-KEM-768 -> child -->
+    <path d="M632,320 C660,320 660,320 690,320"/>
+  </g>
+
+  <!-- ===== NODES ===== -->
+
+  <!-- ROOT connector at vault rim -->
+  <circle cx="268" cy="280" r="9" fill="white" stroke="#A78BFA" stroke-width="1.5"/>
+  <line x1="263" y1="280" x2="273" y2="280" stroke="#7C3AED" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- L1: Zero Knowledge -->
+  <g filter="url(#cardShadow)">
+    <rect x="345" y="82" width="115" height="36" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1.2"/>
+    <text x="402" y="105" font-family="system-ui, -apple-system, sans-serif" font-size="12.5" fill="#334155" text-anchor="middle" font-weight="500">Zero Knowledge</text>
+  </g>
+  <circle cx="460" cy="100" r="8" fill="white" stroke="#C4B5FD" stroke-width="1.2"/>
+  <line x1="455" y1="100" x2="465" y2="100" stroke="#8B5CF6" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- L1: Encryption -->
+  <g filter="url(#cardShadow)">
+    <rect x="345" y="177" width="113" height="36" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1.2"/>
+    <text x="401" y="200" font-family="system-ui, -apple-system, sans-serif" font-size="12.5" fill="#334155" text-anchor="middle" font-weight="500">Encryption</text>
+  </g>
+  <circle cx="458" cy="195" r="8" fill="white" stroke="#C4B5FD" stroke-width="1.2"/>
+  <line x1="453" y1="195" x2="463" y2="195" stroke="#8B5CF6" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- L1: Key Management -->
+  <g filter="url(#cardShadow)">
+    <rect x="345" y="322" width="123" height="36" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1.2"/>
+    <text x="406" y="345" font-family="system-ui, -apple-system, sans-serif" font-size="12.5" fill="#334155" text-anchor="middle" font-weight="500">Key Management</text>
+  </g>
+  <circle cx="468" cy="340" r="8" fill="white" stroke="#C4B5FD" stroke-width="1.2"/>
+  <line x1="463" y1="340" x2="473" y2="340" stroke="#8B5CF6" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- L1: Mind Map Editor -->
+  <g filter="url(#cardShadow)">
+    <rect x="345" y="442" width="130" height="36" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1.2"/>
+    <text x="410" y="465" font-family="system-ui, -apple-system, sans-serif" font-size="12.5" fill="#334155" text-anchor="middle" font-weight="500">Mind Map Editor</text>
+  </g>
+
+  <!-- L2: Argon2id (child of Zero Knowledge) -->
+  <g filter="url(#cardShadow)">
+    <rect x="520" y="40" width="92" height="36" rx="8" fill="white" stroke="#A78BFA" stroke-width="2"/>
+    <text x="566" y="63" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#334155" text-anchor="middle">Argon2id</text>
+  </g>
+  <circle cx="612" cy="58" r="8" fill="white" stroke="#C4B5FD" stroke-width="1.2"/>
+  <line x1="607" y1="58" x2="617" y2="58" stroke="#8B5CF6" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- L2: HKDF-SHA256 (child of Zero Knowledge) -->
+  <g filter="url(#cardShadow)">
+    <rect x="520" y="82" width="105" height="36" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1.2"/>
+    <text x="572" y="105" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#334155" text-anchor="middle">HKDF-SHA256</text>
+  </g>
+
+  <!-- L2: Auth Token (child of Zero Knowledge) -->
+  <g filter="url(#cardShadow)">
+    <rect x="520" y="124" width="98" height="36" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1.2"/>
+    <text x="569" y="147" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#334155" text-anchor="middle">Auth Token</text>
+  </g>
+
+  <!-- L2: AES-256-GCM (child of Encryption) -->
+  <g filter="url(#cardShadow)">
+    <rect x="520" y="177" width="105" height="36" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1.2"/>
+    <text x="572" y="200" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#334155" text-anchor="middle">AES-256-GCM</text>
+  </g>
+  <circle cx="625" cy="195" r="8" fill="white" stroke="#C4B5FD" stroke-width="1.2"/>
+  <line x1="620" y1="195" x2="630" y2="195" stroke="#8B5CF6" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- L2: X25519 (child of Key Management) -->
+  <g filter="url(#cardShadow)">
+    <rect x="530" y="260" width="88" height="36" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1.2"/>
+    <text x="574" y="283" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#334155" text-anchor="middle">X25519</text>
+  </g>
+  <circle cx="618" cy="278" r="8" fill="white" stroke="#C4B5FD" stroke-width="1.2"/>
+  <line x1="613" y1="278" x2="623" y2="278" stroke="#8B5CF6" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- L2: ML-KEM-768 (child of Key Management) -->
+  <g filter="url(#cardShadow)">
+    <rect x="530" y="302" width="102" height="36" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1.2"/>
+    <text x="581" y="325" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#334155" text-anchor="middle">ML-KEM-768</text>
+  </g>
+  <circle cx="632" cy="320" r="8" fill="white" stroke="#C4B5FD" stroke-width="1.2"/>
+  <line x1="627" y1="320" x2="637" y2="320" stroke="#8B5CF6" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- L2: Ephemeral DEK (child of Key Management) -->
+  <g filter="url(#cardShadow)">
+    <rect x="530" y="344" width="115" height="36" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1.2"/>
+    <text x="587" y="367" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#334155" text-anchor="middle">Ephemeral DEK</text>
+  </g>
+
+  <!-- L2: Hybrid KEM (child of Key Management) -->
+  <g filter="url(#cardShadow)">
+    <rect x="530" y="386" width="100" height="36" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1.2"/>
+    <text x="580" y="409" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#334155" text-anchor="middle">Hybrid KEM</text>
+  </g>
+
+  <!-- L3: Master Key (child of Argon2id) -->
+  <g filter="url(#cardShadow)">
+    <rect x="680" y="40" width="98" height="36" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1.2"/>
+    <text x="729" y="63" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#334155" text-anchor="middle">Master Key</text>
+  </g>
+
+  <!-- L3: E2E Blob (child of AES-256-GCM) -->
+  <g filter="url(#cardShadow)">
+    <rect x="690" y="177" width="88" height="36" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1.2"/>
+    <text x="734" y="200" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#334155" text-anchor="middle">E2E Blob</text>
+  </g>
+
+  <!-- L3: ECDH (child of X25519) -->
+  <g filter="url(#cardShadow)">
+    <rect x="680" y="260" width="72" height="36" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1.2"/>
+    <text x="716" y="283" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#334155" text-anchor="middle">ECDH</text>
+  </g>
+
+  <!-- L3: Post-Quantum (child of ML-KEM-768) -->
+  <g filter="url(#cardShadow)">
+    <rect x="690" y="302" width="110" height="36" rx="8" fill="white" stroke="#E2E8F0" stroke-width="1.2"/>
+    <text x="745" y="325" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#334155" text-anchor="middle">Post-Quantum</text>
+  </g>
+</svg>

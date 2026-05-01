@@ -1,0 +1,11 @@
+{
+  "name": "mindmapvault-oss-workspace",
+  "private": true,
+  "packageManager": "pnpm@10.17.1",
+  "scripts": {
+    "dev:app": "pnpm --dir frontend_app dev",
+    "build:app": "pnpm --dir frontend_app build",
+    "tauri:dev": "pnpm --dir frontend_app tauri:dev",
+    "tauri:build": "pnpm --dir frontend_app tauri:build"
+  }
+}

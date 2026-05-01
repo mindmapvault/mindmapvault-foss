@@ -1,0 +1,365 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS design tokens ───────────────────────────────────────────────────── */
+:root {
+  /* Dark mode (default) */
+  --surface:      #0f172a;
+  --surface-1:    #1e293b;
+  --surface-2:    #334155;
+  --accent:       #7C3AED;
+  --accent-hover: #4f46e5;
+  --text-primary:   #ffffff;
+  --text-secondary: #94a3b8;
+  --text-muted:     #64748b;
+  --border:       #334155;
+  --border-light: #475569;
+  --input-bg:     #0f172a;
+  --bg:           var(--surface);
+  --card:         var(--surface-1);
+  --fg:           var(--text-primary);
+  --fg-muted:     var(--text-secondary);
+  color-scheme: dark;
+}
+
+:root.light {
+  --surface:      #f8fafc;
+  --surface-1:    #ffffff;
+  --surface-2:    #f1f5f9;
+  /* --accent and --accent-hover are set dynamically by JS */
+  --text-primary:   #0f172a;
+  --text-secondary: #475569;
+  --text-muted:     #94a3b8;
+  --border:       #e2e8f0;
+  --border-light: #cbd5e1;
+  --input-bg:     #ffffff;
+  --bg:           var(--surface);
+  --card:         var(--surface-1);
+  --fg:           var(--text-primary);
+  --fg-muted:     var(--text-secondary);
+  color-scheme: light;
+}
+
+/* ── Base ────────────────────────────────────────────────────────────────── */
+@layer base {
+  * { box-sizing: border-box; }
+  html, body, #root { height: 100%; }
+  body {
+    background-color: var(--surface);
+    color: var(--text-primary);
+    transition: background-color 0.2s, color 0.2s;
+  }
+}
+
+/* ── Light-mode overrides for hardcoded Tailwind colour classes ──────────── */
+.light .text-white                          { color: var(--text-primary)   !important; }
+.light .text-slate-100                      { color: var(--text-primary)   !important; }
+.light .text-slate-300,
+.light .text-slate-400                      { color: var(--text-secondary) !important; }
+.light .text-slate-500,
+.light .text-slate-600                      { color: var(--text-muted)     !important; }
+
+.light .border-slate-700,
+.light .border-slate-800                    { border-color: var(--border)       !important; }
+.light .border-slate-600                    { border-color: var(--border-light) !important; }
+
+.light .hover\:border-slate-500:hover,
+.light .hover\:border-slate-600:hover       { border-color: var(--border-light) !important; }
+.light .hover\:text-white:hover             { color: var(--text-primary)        !important; }
+.light .hover\:bg-slate-700:hover           { background-color: var(--surface-2) !important; }
+.light .bg-slate-700                        { background-color: var(--surface-2) !important; }
+
+/* text-slate-200 is used for card section headings and button labels */
+.light .text-slate-200                      { color: var(--text-primary)    !important; }
+
+/* bg-slate-800 is used as the progress-bar track in cloud mode */
+.light .bg-slate-800                        { background-color: var(--surface-2) !important; }
+
+/* Icon-button hover: slate-300 is nearly invisible on a white surface */
+.light .hover\:text-slate-300:hover         { color: var(--text-secondary)  !important; }
+
+/* Amber warnings: bright yellow (#fcd34d) is unreadable on white */
+.light .text-amber-300                      { color: #b45309                !important; }
+.light .bg-amber-900\/20                    { background-color: #fffbeb     !important; }
+.light .border-amber-700\/60               { border-color: #fde68a         !important; }
+
+/* Red errors: light red-400 & near-black red-900 backgrounds need light equivalents */
+.light .text-red-400                        { color: #dc2626                !important; }
+.light .bg-red-900\/30                      { background-color: #fef2f2     !important; }
+.light .border-red-800                      { border-color: #fca5a5         !important; }
+.light .hover\:bg-red-900\/30:hover         { background-color: #fee2e2     !important; }
+.light .hover\:text-red-400:hover           { color: #dc2626                !important; }
+
+.light .subscription-dialog                 { background: rgba(248, 250, 252, 0.72) !important; }
+.light .subscription-dialog__panel          {
+  background: linear-gradient(180deg, #ffffff, #f8fafc) !important;
+  border-color: var(--border-light) !important;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.16) !important;
+}
+.light .subscription-dialog__hero           {
+  background: radial-gradient(circle at top left, rgba(14, 165, 233, 0.12), transparent 42%), linear-gradient(180deg, #ffffff, #f8fafc) !important;
+  border-color: var(--border) !important;
+}
+.light .subscription-dialog__body           {
+  background: linear-gradient(180deg, #f8fafc, #f1f5f9) !important;
+}
+.light .subscription-dialog__pill           {
+  background: rgba(16, 185, 129, 0.08) !important;
+  border-color: rgba(16, 185, 129, 0.28) !important;
+  color: #047857 !important;
+}
+.light .subscription-dialog__close          {
+  background: #ffffff !important;
+  border-color: var(--border-light) !important;
+  color: var(--text-secondary) !important;
+}
+.light .subscription-dialog__stat,
+.light .subscription-dialog__section        {
+  background: rgba(255, 255, 255, 0.88) !important;
+  border-color: var(--border) !important;
+}
+
+.light .confirm-dialog                       { background: rgba(248, 250, 252, 0.74) !important; }
+.light .confirm-dialog__panel               {
+  background: linear-gradient(180deg, #ffffff, #f8fafc) !important;
+  border-color: var(--border-light) !important;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.16) !important;
+}
+.light .confirm-dialog__hero                {
+  background: radial-gradient(circle at top left, rgba(239, 68, 68, 0.12), transparent 38%), linear-gradient(180deg, #ffffff, #f8fafc) !important;
+  border-color: var(--border) !important;
+}
+.light .confirm-dialog__pill                {
+  background: rgba(239, 68, 68, 0.08) !important;
+  border-color: rgba(239, 68, 68, 0.22) !important;
+  color: #b91c1c !important;
+}
+.light .confirm-dialog__title               { color: var(--text-primary) !important; }
+.light .confirm-dialog__message             { color: var(--text-secondary) !important; }
+.light .confirm-dialog__actions             { border-color: var(--border) !important; }
+.light .confirm-dialog__cancel              {
+  background: #ffffff !important;
+  border-color: var(--border-light) !important;
+  color: var(--text-secondary) !important;
+}
+.light .confirm-dialog__cancel:hover        {
+  border-color: var(--border-light) !important;
+  color: var(--text-primary) !important;
+}
+.light .confirm-dialog__confirm             { color: #ffffff !important; }
+
+.light input:not([type='color']),
+.light textarea                             { background-color: var(--input-bg); color: var(--text-primary); }
+.light input::placeholder,
+.light textarea::placeholder                { color: var(--text-muted); }
+
+/* ── ReactFlow – dark mode overrides ─────────────────────────────────────── */
+/*
+ * ReactFlow ships with a white-background stylesheet. We remap its own CSS
+ * custom properties so nodes, edges, controls and minimap all respect the
+ * active theme without touching any React code.
+ */
+:root {
+  /* Node */
+  --xy-node-background-color-default:         #1e293b;
+  --xy-node-color-default:                    #ffffff;
+  --xy-node-border-default:                   1px solid #334155;
+  --xy-node-border-radius-default:            8px;
+  --xy-node-boxshadow-hover-default:          0 0 0 1px #6366f1;
+  --xy-node-boxshadow-selected-default:       0 0 0 2px #6366f1;
+
+  /* Edge */
+  --xy-edge-stroke-default:                   #94a3b8;
+  --xy-edge-stroke-width-default:             1.5;
+  --xy-edge-stroke-selected-default:          #6366f1;
+  --xy-connection-stroke-default:             #6366f1;
+
+  /* Handle (the little circles on nodes) */
+  --xy-handle-background-color-default:       #94a3b8;
+  --xy-handle-border-color-default:           #1e293b;
+
+  /* Controls panel */
+  --xy-controls-button-background-color-default:        #1e293b;
+  --xy-controls-button-background-color-hover-default:  #334155;
+  --xy-controls-button-color-default:                   #94a3b8;
+  --xy-controls-button-color-hover-default:             #ffffff;
+  --xy-controls-button-border-color-default:            #334155;
+  --xy-controls-box-shadow-default:                     0 4px 12px rgba(0,0,0,0.4);
+
+  /* Attribution */
+  --xy-attribution-background-color-default:  #1e293b;
+}
+
+/* Light mode – restore ReactFlow defaults (they match light naturally) */
+:root.light {
+  --xy-node-background-color-default:         #ffffff;
+  --xy-node-color-default:                    #0f172a;
+  --xy-node-border-default:                   1px solid #e2e8f0;
+  --xy-node-boxshadow-hover-default:          0 0 0 1px var(--accent);
+  --xy-node-boxshadow-selected-default:       0 0 0 2px var(--accent);
+
+  --xy-edge-stroke-default:                   #94a3b8;
+  --xy-edge-stroke-selected-default:          var(--accent);
+  --xy-connection-stroke-default:             var(--accent);
+
+  --xy-handle-background-color-default:       #94a3b8;
+  --xy-handle-border-color-default:           #ffffff;
+
+  --xy-controls-button-background-color-default:        #ffffff;
+  --xy-controls-button-background-color-hover-default:  #f1f5f9;
+  --xy-controls-button-color-default:                   #475569;
+  --xy-controls-button-color-hover-default:             #0f172a;
+  --xy-controls-button-border-color-default:            #e2e8f0;
+  --xy-controls-box-shadow-default:                     0 2px 6px rgba(0,0,0,0.12);
+
+  --xy-attribution-background-color-default:  #ffffff;
+}
+
+/* ── Mind-map node hover actions ─────────────────────────────────────────── */
+.mind-node:hover .mind-actions {
+  opacity: 1 !important;
+  pointer-events: all !important;
+}
+
+/* ── Utilities ───────────────────────────────────────────────────────────── */
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+}
+
+/* ── Whitepaper Markdown dialog ───────────────────────────────────────────── */
+.whitepaper-md h1 {
+  margin-bottom: 1rem;
+  font-size: 1.5rem;
+  line-height: 1.3;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.whitepaper-md h2 {
+  margin: 1.75rem 0 0.75rem;
+  font-size: 1.25rem;
+  line-height: 1.35;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.whitepaper-md h3 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.whitepaper-md p,
+.whitepaper-md li,
+.whitepaper-md td {
+  color: var(--text-secondary);
+}
+
+.whitepaper-md p { margin: 0.75rem 0; }
+.whitepaper-md ul,
+.whitepaper-md ol {
+  margin: 0.75rem 0;
+  padding-left: 1.4rem;
+}
+
+.whitepaper-md ul { list-style: disc; }
+.whitepaper-md ol { list-style: decimal; }
+
+.whitepaper-md table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.whitepaper-md th,
+.whitepaper-md td {
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.whitepaper-md th {
+  background: var(--surface);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.whitepaper-md code {
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 0.1rem 0.25rem;
+  font-size: 0.8rem;
+}
+
+.whitepaper-md pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.7rem;
+  overflow-x: auto;
+}
+
+.whitepaper-md pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.whitepaper-md a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.whitepaper-md hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.2rem 0;
+}
+
+:root.light .whitepaper-md {
+  font-weight: 500;
+}
+
+/* ── EncryptedVaultDialog light mode ─────────────────────────────────────── */
+.light .encrypted-vault-dialog             { background: rgba(248, 250, 252, 0.72) !important; }
+.light .encrypted-vault-dialog__panel      {
+  background: var(--surface-1) !important;
+  border-color: var(--border-light) !important;
+}
+.light .encrypted-vault-dialog__header,
+.light .encrypted-vault-dialog__tabs       {
+  border-color: var(--border) !important;
+  background: var(--surface-1) !important;
+}
+.light .encrypted-vault-dialog__body       { background: var(--surface-1) !important; }
+.light .encrypted-vault-dialog__section    {
+  background: var(--surface-2) !important;
+  border-color: var(--border) !important;
+}
+.light .encrypted-vault-dialog__dropzone   {
+  background: var(--surface-2) !important;
+  border-color: var(--border-light) !important;
+}
+.light .encrypted-vault-dialog__empty      {
+  background: var(--surface-2) !important;
+  border-color: var(--border) !important;
+}
+.light .encrypted-vault-dialog__file-row:hover { background: var(--surface-2) !important; }
+.light .encrypted-vault-dialog__input      {
+  background: var(--surface-1) !important;
+  border-color: var(--border-light) !important;
+  color: var(--text-primary) !important;
+}
+.light .encrypted-vault-dialog__input::placeholder { color: var(--text-muted) !important; }
+.light .encrypted-vault-dialog__select     {
+  background: var(--surface-1) !important;
+  border-color: var(--border) !important;
+  color: var(--text-primary) !important;
+}
+.light .encrypted-vault-dialog__field-label { color: var(--text-secondary) !important; }

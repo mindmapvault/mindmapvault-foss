@@ -5,7 +5,7 @@ This document defines the security model, threat boundaries, and disclosure proc
 ## Scope
 
 MindMapVault FOSS is a local-first desktop application (React + Tauri).
-
+All core operations are performed locally, and the application does not make outbound network requests.
 Security goals:
 
 - preserve confidentiality of vault content at rest through local encryption

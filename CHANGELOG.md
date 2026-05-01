@@ -14,6 +14,16 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Validation
 
+## [0.3.19] - 2026-05-01
+
+### Fixed
+- Fixed desktop release workflow startup failure on Linux and Windows where `actions/setup-node` with `cache: pnpm` executed before pnpm was available in PATH.
+- Reordered workflow setup steps so `pnpm/action-setup` runs before `actions/setup-node` in both desktop jobs.
+- File modified: `.github/workflows/desktop-build.yml`
+
+### Validation
+- Frontend build passes locally: `pnpm --dir frontend_app build`
+
 ## [0.3.18] - 2026-05-01
 
 ### Changed

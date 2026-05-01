@@ -14,6 +14,34 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Validation
 
+## [0.3.18] - 2026-05-01
+
+### Changed
+- Updated GitHub Actions desktop release workflow to opt JavaScript-based actions into Node 24 runtime ahead of Node 20 removal by setting:
+  - `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true`
+- This addresses deprecation warnings for action runtimes in desktop Linux/Windows release jobs.
+- File modified: `.github/workflows/desktop-build.yml`
+
+### Validation
+- Frontend build passes locally: `pnpm --dir frontend_app build`
+
+## [0.3.17] - 2026-05-01
+
+### Fixed
+- Fixed desktop release workflow checksum steps failing on both Linux and Windows due to hardcoded binary names (`MindMapVault` / `MindMapVault.exe`) that no longer match produced artifacts.
+- Checksum generation now hashes the discovered release artifacts from prior find steps instead of fixed filenames.
+- Updated checksum upload steps to use dynamic checksum paths from workflow outputs.
+- File modified: `.github/workflows/desktop-build.yml`
+
+### Changed
+- Optimized CI build performance by enabling:
+  - pnpm dependency cache via `actions/setup-node` cache settings
+  - Rust build cache via `Swatinem/rust-cache`
+- File modified: `.github/workflows/desktop-build.yml`
+
+### Validation
+- Frontend build passes locally: `pnpm --dir frontend_app build`
+
 ## [0.3.16] - 2026-05-01
 
 ### Added

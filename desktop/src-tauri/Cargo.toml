@@ -1,6 +1,6 @@
 [package]
 name = "mindmapvault-foss-desktop"
-version = "0.3.16-oss"
+version = "0.3.18-oss"
 edition = "2021"
 
 [[bin]]

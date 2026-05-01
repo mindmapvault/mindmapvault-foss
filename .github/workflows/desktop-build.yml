@@ -7,6 +7,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   desktop-linux:
     name: Desktop Build (Linux)
@@ -30,6 +33,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -38,6 +43,9 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -48,14 +56,20 @@ jobs:
       - name: Find Linux artifacts
         id: linux_paths
         run: |
-          echo "appimage_path=$(ls desktop/src-tauri/target/release/bundle/appimage/*.AppImage)" >> $GITHUB_OUTPUT
-          echo "binary_path=desktop/src-tauri/target/release/MindMapVault" >> $GITHUB_OUTPUT
+          APPIMAGE_PATH=$(find desktop/src-tauri/target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' | head -n 1)
+          if [ -z "$APPIMAGE_PATH" ]; then
+            echo "AppImage artifact not found" >&2
+            exit 1
+          fi
+          CHECKSUM_PATH="${APPIMAGE_PATH}.sha256"
+          echo "appimage_path=$APPIMAGE_PATH" >> $GITHUB_OUTPUT
+          echo "appimage_checksum_path=$CHECKSUM_PATH" >> $GITHUB_OUTPUT
 
       - name: Generate SHA256 checksums (Linux)
         run: |
-          cd desktop/src-tauri/target/release
-          sha256sum MindMapVault > MindMapVault.sha256
-          sha256sum bundle/appimage/*.AppImage > MindMapVault.AppImage.sha256
+          APPIMAGE_PATH='${{ steps.linux_paths.outputs.appimage_path }}'
+          CHECKSUM_PATH='${{ steps.linux_paths.outputs.appimage_checksum_path }}'
+          sha256sum "$APPIMAGE_PATH" > "$CHECKSUM_PATH"
 
       - name: Upload Linux AppImage to release
         uses: actions/upload-release-asset@v1
@@ -73,7 +87,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: desktop/src-tauri/target/release/MindMapVault.AppImage.sha256
+          asset_path: ${{ steps.linux_paths.outputs.appimage_checksum_path }}
           asset_name: MindMapVault-Linux.AppImage.sha256
           asset_content_type: text/plain
 
@@ -90,6 +104,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -98,6 +114,9 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -110,14 +129,20 @@ jobs:
         shell: powershell
         run: |
           $exe = Get-ChildItem desktop/src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
+          if (-not $exe) {
+            throw "Windows NSIS installer artifact not found"
+          }
+          $checksumPath = "$($exe.FullName).sha256"
           echo "exe_path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+          echo "exe_checksum_path=$checksumPath" >> $env:GITHUB_OUTPUT
 
       - name: Generate SHA256 checksums (Windows)
         shell: powershell
         run: |
-          cd desktop/src-tauri/target/release
-          Get-FileHash MindMapVault.exe -Algorithm SHA256 | Out-File MindMapVault.exe.sha256
-          Get-FileHash bundle/nsis/*.exe -Algorithm SHA256 | Out-File MindMapVault.nsis.sha256
+          $exePath = "${{ steps.win_paths.outputs.exe_path }}"
+          $checksumPath = "${{ steps.win_paths.outputs.exe_checksum_path }}"
+          $hash = (Get-FileHash -Path $exePath -Algorithm SHA256).Hash.ToLower()
+          "$hash  $(Split-Path -Path $exePath -Leaf)" | Out-File -FilePath $checksumPath -Encoding ascii
 
       - name: Upload Windows EXE to release
         uses: actions/upload-release-asset@v1
@@ -135,6 +160,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: desktop/src-tauri/target/release/MindMapVault.nsis.sha256
+          asset_path: ${{ steps.win_paths.outputs.exe_checksum_path }}
           asset_name: MindMapVault-Windows.exe.sha256
           asset_content_type: text/plain

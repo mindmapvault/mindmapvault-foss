@@ -2,7 +2,7 @@
 
 MindMapVault FOSS is a local-first, privacy-focused desktop mind-mapping application.
 
-It is built for users who want full control of their knowledge workspace: local storage, client-side encryption, offline-capable editing, and no mandatory cloud account for core workflows.
+All core functionality works offline, all data stays on the device, and the repository contains no cloud code, no telemetry, and no external service dependencies.
 
 ## Why This Project
 

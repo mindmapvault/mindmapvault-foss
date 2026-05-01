@@ -1,16 +1,11 @@
 name: desktop-build
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
-  workflow_dispatch:
+  release:
+    types: [created]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   desktop-linux:
@@ -50,13 +45,38 @@ jobs:
       - name: Build desktop app (AppImage)
         run: pnpm --dir frontend_app tauri:build
 
-      - name: Upload Linux bundle artifacts
-        uses: actions/upload-artifact@v4
+      - name: Find Linux artifacts
+        id: linux_paths
+        run: |
+          echo "appimage_path=$(ls desktop/src-tauri/target/release/bundle/appimage/*.AppImage)" >> $GITHUB_OUTPUT
+          echo "binary_path=desktop/src-tauri/target/release/MindMapVault" >> $GITHUB_OUTPUT
+
+      - name: Generate SHA256 checksums (Linux)
+        run: |
+          cd desktop/src-tauri/target/release
+          sha256sum MindMapVault > MindMapVault.sha256
+          sha256sum bundle/appimage/*.AppImage > MindMapVault.AppImage.sha256
+
+      - name: Upload Linux AppImage to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: desktop-linux-bundles
-          path: |
-            desktop/src-tauri/target/release/MindMapVault
-            desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ steps.linux_paths.outputs.appimage_path }}
+          asset_name: MindMapVault-Linux.AppImage
+          asset_content_type: application/octet-stream
+
+      - name: Upload Linux checksum to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: desktop/src-tauri/target/release/MindMapVault.AppImage.sha256
+          asset_name: MindMapVault-Linux.AppImage.sha256
+          asset_content_type: text/plain
+
 
   desktop-windows:
     name: Desktop Build (Windows)
@@ -85,10 +105,36 @@ jobs:
       - name: Build desktop app (NSIS + EXE)
         run: pnpm --dir frontend_app tauri:build
 
-      - name: Upload Windows bundle artifacts
-        uses: actions/upload-artifact@v4
+      - name: Find Windows artifacts
+        id: win_paths
+        shell: powershell
+        run: |
+          $exe = Get-ChildItem desktop/src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
+          echo "exe_path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Generate SHA256 checksums (Windows)
+        shell: powershell
+        run: |
+          cd desktop/src-tauri/target/release
+          Get-FileHash MindMapVault.exe -Algorithm SHA256 | Out-File MindMapVault.exe.sha256
+          Get-FileHash bundle/nsis/*.exe -Algorithm SHA256 | Out-File MindMapVault.nsis.sha256
+
+      - name: Upload Windows EXE to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: desktop-windows-bundles
-          path: |
-            desktop/src-tauri/target/release/MindMapVault.exe
-            desktop/src-tauri/target/release/bundle/nsis/*.exe
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ steps.win_paths.outputs.exe_path }}
+          asset_name: MindMapVault-Windows.exe
+          asset_content_type: application/octet-stream
+
+      - name: Upload Windows checksum to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: desktop/src-tauri/target/release/MindMapVault.nsis.sha256
+          asset_name: MindMapVault-Windows.exe.sha256
+          asset_content_type: text/plain

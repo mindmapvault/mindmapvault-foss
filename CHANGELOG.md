@@ -14,6 +14,17 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Validation
 
+## [0.3.15] - 2026-05-01
+
+### Fixed
+- Improve export reliability for PNG and PDF exports in the editor:
+  - Set `crossOrigin='anonymous'` on the intermediate Image used to rasterize SVGs before canvas drawing.
+  - Added a `canvas.toDataURL()` fallback when `canvas.toBlob()` does not yield a blob (improves download reliability across runtimes).
+  - Ensures exported images include the themed background and watermark.
+  - Files modified: `frontend_app/src/utils/pdfExport.ts`, `frontend_app/src/components/MindMapEditor.tsx`
+
+### Validation
+- Built frontend and verified no TypeScript or bundling errors (`pnpm --dir frontend_app build`).
 
 ## [0.3.14] - 2026-05-01
 
@@ -52,14 +63,4 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - Frontend build passes after migration cleanup:
   - `pnpm --dir frontend_app build`
 
-## [0.3.15] - 2026-05-01
 
-### Fixed
-- Improve export reliability for PNG and PDF exports in the editor:
-  - Set `crossOrigin='anonymous'` on the intermediate Image used to rasterize SVGs before canvas drawing.
-  - Added a `canvas.toDataURL()` fallback when `canvas.toBlob()` does not yield a blob (improves download reliability across runtimes).
-  - Ensures exported images include the themed background and watermark.
-  - Files modified: `frontend_app/src/utils/pdfExport.ts`, `frontend_app/src/components/MindMapEditor.tsx`
-
-### Validation
-- Built frontend and verified no TypeScript or bundling errors (`pnpm --dir frontend_app build`).

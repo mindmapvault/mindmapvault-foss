@@ -14,6 +14,19 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Validation
 
+## [0.3.26] - 2026-05-03
+
+### Changed
+- **Desktop UX / Branding** — Updated local unlock screen messaging to make product scope explicit: `MindMapVault FOSS` and `Local-only desktop edition (no cloud)`.
+- **Desktop Badge Reliability** — Replaced the remote Tauri badge image URL with a local inline SVG in `DesktopTauriBadge.tsx`, removing CSP-blocked external image fetches and ensuring the badge icon renders offline.
+- **Desktop Packaging Labeling** — Updated desktop product/window naming in `desktop/src-tauri/tauri.conf.json` to clearly identify the app as the FOSS local-only edition in app/install surfaces.
+- **CSP Compatibility** — Expanded `connect-src` in `desktop/src-tauri/tauri.conf.json` to include `http://tauri.localhost` and `https://tauri.localhost`, preventing blocked WebView/devtools metadata requests while preserving restrictive CSP defaults.
+- **WASM Runtime Compatibility** — Updated desktop CSP `script-src` to allow WebAssembly compilation used by local crypto paths (`'wasm-unsafe-eval'` and `'unsafe-eval'`), resolving local profile creation failures caused by blocked `WebAssembly.compile()`.
+
+### Validation
+- `pnpm exec tsc --noEmit` in `frontend_app` → clean.
+- `pnpm build` in `frontend_app` → clean.
+
 ## [0.3.25] - 2026-05-03
 
 ### Security / Reliability

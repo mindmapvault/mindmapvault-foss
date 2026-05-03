@@ -324,9 +324,9 @@ export function LocalUnlockPage() {
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-[var(--fg)] mb-1">
-            MindMapVault
+            MindMapVault FOSS
           </h1>
-          <p className="text-xs text-[var(--fg-muted)] mb-1">Privacy-first mind maps</p>
+          <p className="text-xs text-[var(--fg-muted)] mb-1">Local-only desktop edition (no cloud)</p>
           <p className="text-sm text-[var(--fg-muted)]">
             {step === 'unlock' && `Local vault workspace — ${selectedUsername || profile?.username}`}
             {step === 'empty'  && 'No vault found in this folder'}

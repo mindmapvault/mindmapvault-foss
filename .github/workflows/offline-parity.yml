@@ -14,15 +14,12 @@ on:
       - '.github/workflows/offline-parity.yml'
   workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   offline-parity:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout FOSS
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Check cross-repo PAT availability
         id: check-pat
@@ -38,14 +35,14 @@ jobs:
       - name: Checkout Server counterpart (optional)
         id: checkout-server
         if: steps.check-pat.outputs.available == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: mindmapvault/mindmapvault-server
           path: server-repo
           token: ${{ secrets.MMV_CROSS_REPO_PAT }}
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
 

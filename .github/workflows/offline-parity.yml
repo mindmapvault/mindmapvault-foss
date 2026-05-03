@@ -21,9 +21,20 @@ jobs:
       - name: Checkout FOSS
         uses: actions/checkout@v4
 
+      - name: Check cross-repo PAT availability
+        id: check-pat
+        run: |
+          if [ -n "$MMV_CROSS_REPO_PAT" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          MMV_CROSS_REPO_PAT: ${{ secrets.MMV_CROSS_REPO_PAT }}
+
       - name: Checkout Server counterpart (optional)
         id: checkout-server
-        continue-on-error: true
+        if: steps.check-pat.outputs.available == 'true'
         uses: actions/checkout@v4
         with:
           repository: mindmapvault/mindmapvault-server
@@ -33,12 +44,12 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Run offline parity check (with server contract)
-        if: steps.checkout-server.outcome == 'success'
+        if: steps.check-pat.outputs.available == 'true'
         run: node scripts/check_frontend_offline_parity.mjs --foss-root=. --server-root=server-repo
 
       - name: Run offline parity check (FOSS-only, no server contract)
-        if: steps.checkout-server.outcome != 'success'
+        if: steps.check-pat.outputs.available == 'false'
         run: node scripts/check_frontend_offline_parity.mjs --foss-root=. --strict=false

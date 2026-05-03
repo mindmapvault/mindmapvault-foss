@@ -28,8 +28,10 @@ import { marked } from 'marked';
 import type { MindMapTree, MindMapTreeNode, NodeAttachmentRef, UrlEntry } from '../types';
 import { useThemeStore } from '../store/theme';
 import { ThemePanel } from './ThemePanel';
+import { MindMapIconPicker } from './MindMapIconPicker.tsx';
 import { MindMapColorPicker } from './MindMapColorPicker';
 import { MindMapDateDialog } from './MindMapDateDialog';
+import DynamicLucideIcon from './DynamicLucideIcon.tsx';
 import { MindMapNotesDialog } from './MindMapNotesDialog';
 import { useUserLabels } from '../hooks/useUserLabels';
 import type { MindMapEditorProps } from './MindMapEditor.types';
@@ -38,6 +40,7 @@ import {
   COLOR_PALETTE,
   PROGRESS_PRESETS,
   CHECKBOX_SIZE,
+  ICON_SIZE,
   PROGRESS_PIE_SIZE,
   NODE_LINE_H,
   NODE_PAD_X,
@@ -136,6 +139,7 @@ export function DesktopMindMapEditor({
   const [shortcutsPos, setShortcutsPos] = useState<{ x: number; y: number } | null>(null);
   const scDragRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showIconPicker, setShowIconPicker] = useState(false);
   const [showDateDialog, setShowDateDialog] = useState(false);
   const [showUrlDialog, setShowUrlDialog] = useState(false);
   const [rootLeftCollapsed, setRootLeftCollapsed] = useState(false);
@@ -633,6 +637,22 @@ export function DesktopMindMapEditor({
     setNodeProgress(nodeId, next);
   }, [root, setNodeProgress]);
 
+  // ── Icons ─────────────────────────────────────────────────────────────────
+  const setNodeIcon = useCallback((nodeId: string, iconName: string | null) => {
+    const newRoot = cloneTree(root);
+    const found = findNode(newRoot, nodeId);
+    if (!found) return;
+    if (!found.node.icons) found.node.icons = [];
+    if (iconName === null) {
+      found.node.icons = [];
+    } else {
+      const idx = found.node.icons.indexOf(iconName);
+      if (idx >= 0) found.node.icons.splice(idx, 1);
+      else found.node.icons.push(iconName);
+    }
+    mutate(newRoot);
+  }, [root, mutate]);
+
   // ── Dates ─────────────────────────────────────────────────────────────────
   const setNodeDates = useCallback((nodeId: string, startDate: string | null, endDate: string | null) => {
     const newRoot = cloneTree(root);
@@ -817,6 +837,22 @@ export function DesktopMindMapEditor({
     for (const id of getTargetIds()) {
       const f = findNode(newRoot, id); if (!f) continue;
       f.node.customX = undefined; f.node.customY = undefined;
+    }
+    mutate(newRoot);
+  }, [root, mutate, getTargetIds]);
+
+  const bulkSetIcon = useCallback((iconName: string | null) => {
+    const newRoot = cloneTree(root);
+    for (const id of getTargetIds()) {
+      const f = findNode(newRoot, id); if (!f) continue;
+      if (!f.node.icons) f.node.icons = [];
+      if (iconName === null) {
+        f.node.icons = [];
+      } else {
+        const idx = f.node.icons.indexOf(iconName);
+        if (idx >= 0) f.node.icons.splice(idx, 1);
+        else f.node.icons.push(iconName);
+      }
     }
     mutate(newRoot);
   }, [root, mutate, getTargetIds]);
@@ -1167,6 +1203,12 @@ export function DesktopMindMapEditor({
       if (e.key === 'Escape') { cancelEdit(); e.preventDefault(); }
       return;
     }
+    // When the icon picker or colour picker is open, only allow Escape to
+    // close it - all other keys are handled by the picker so we must not navigate.
+    if (showIconPicker) {
+      if (e.key === 'Escape') { setShowIconPicker(false); e.preventDefault(); }
+      return;
+    }
     if (showColorPicker) {
       if (e.key === 'Escape') { setShowColorPicker(false); e.preventDefault(); }
       return;
@@ -1190,7 +1232,7 @@ export function DesktopMindMapEditor({
       nodeAttachmentInputRef.current?.click();
       showToast('F6 — Attach encrypted file');
     }
-    else if (e.key === 'Escape') { setShowShortcuts(false); setShowColorPicker(false); setShowExportMenu(false); setContextMenu(null); setSearchOpen(false); setMultiSelect(new Set()); setShowTagDialog(false); }
+    else if (e.key === 'Escape') { setShowShortcuts(false); setShowColorPicker(false); setShowIconPicker(false); setShowExportMenu(false); setContextMenu(null); setSearchOpen(false); setMultiSelect(new Set()); setShowTagDialog(false); }
     else if (e.key === 'F9' || (e.ctrlKey && e.key === 'z' && !e.shiftKey)) { e.preventDefault(); undo(); showToast('Undo'); }
     else if (e.key === 'F10' || (e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) { e.preventDefault(); redo(); showToast('Redo'); }
     else if (e.key === ' ') { e.preventDefault(); hasBulk ? bulkToggleCollapse() : toggleCollapse(selectedId); showToast('Space — Fold / Unfold'); }
@@ -1205,6 +1247,7 @@ export function DesktopMindMapEditor({
       hasBulk ? bulkCycleProgress() : cycleProgress(selectedId);
       showToast('P — Progress');
     }
+    else if (e.key.toLowerCase() === 'i' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setShowIconPicker((v) => !v); showToast('I — Icons'); }
     else if (e.key.toLowerCase() === 'd' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setShowDateDialog((v) => !v); showToast('D — Dates'); }
     else if (e.key.toLowerCase() === 'u' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setShowUrlDialog((v) => !v); showToast('U — URL'); }
     else if (e.key.toLowerCase() === 'r' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); hasBulk ? bulkResetPosition() : resetNodePosition(selectedId); showToast('R — Reset pos'); }
@@ -1255,7 +1298,7 @@ export function DesktopMindMapEditor({
     else if (e.key === '+') { e.preventDefault(); setZoom((z) => Math.min(3, z + 0.15)); }
     else if (e.key === '-') { e.preventDefault(); setZoom((z) => Math.max(0.3, z - 0.15)); }
     }, [editingId, notesOpen, openNotes, saveNotes, selectedId, root, layout, addChild, addSibling, deleteNode, cancelEdit, cycleColor, cycleProgress,
-      toggleCheckbox, undo, redo, toggleCollapse, openNotes, showToast, resetNodePosition, resetAllPositions, autoAlignSubtree, showColorPicker, focusMode, focusedIds,
+      toggleCheckbox, undo, redo, toggleCollapse, openNotes, showToast, resetNodePosition, resetAllPositions, autoAlignSubtree, showIconPicker, showColorPicker, focusMode, focusedIds,
       hasBulk, bulkDelete, bulkToggleCheckbox, bulkCycleProgress, bulkToggleCollapse, bulkResetPosition]);
 
   useEffect(() => {
@@ -1687,9 +1730,10 @@ export function DesktopMindMapEditor({
     const fontWeight = isRoot ? 'bold' : 'normal';
     const attachments = getNodeAttachments(node.id, node.attachments);
 
+    const iconCount = (node.icons ?? []).length;
     const hasCheckbox = node.checked != null;
     const hasProgress = node.progress != null;
-    const leftPad = (hasCheckbox ? CHECKBOX_SIZE + 6 : 0) + (hasProgress ? PROGRESS_PIE_SIZE + 6 : 0);
+    const leftPad = (hasCheckbox ? CHECKBOX_SIZE + 6 : 0) + (iconCount > 0 ? (ICON_SIZE + 4) * iconCount + 2 : 0) + (hasProgress ? PROGRESS_PIE_SIZE + 6 : 0);
 
     const urlCount = (node.urls ?? []).length;
     const linkId = node.link?.id || null;
@@ -1776,8 +1820,21 @@ export function DesktopMindMapEditor({
           </g>
         )}
 
+        {iconCount > 0 && !isEditing && (
+          <g
+            transform={`translate(${box.x + NODE_PAD_X + (hasCheckbox ? CHECKBOX_SIZE + 6 : 0) - 2}, ${bodyTopY + bodyH / 2 - ICON_SIZE / 2})`}
+            style={{ pointerEvents: 'none' }}
+          >
+            {(node.icons ?? []).map((iconName, ii) => (
+              <g key={`${iconName}-${ii}`} transform={`translate(${ii * (ICON_SIZE + 4)}, 0)`}>
+                <DynamicLucideIcon name={iconName} size={ICON_SIZE} color={textColor} />
+              </g>
+            ))}
+          </g>
+        )}
+
         {hasProgress && renderProgressPie(
-          box.x + NODE_PAD_X + (hasCheckbox ? CHECKBOX_SIZE + 6 : 0) + PROGRESS_PIE_SIZE / 2,
+          box.x + NODE_PAD_X + (hasCheckbox ? CHECKBOX_SIZE + 6 : 0) + (iconCount > 0 ? (ICON_SIZE + 4) * iconCount + 2 : 0) + PROGRESS_PIE_SIZE / 2,
           bodyTopY + bodyH / 2, node.progress!, PROGRESS_PIE_SIZE, () => cycleProgress(node.id))}
 
         {isEditing ? (
@@ -2034,6 +2091,10 @@ export function DesktopMindMapEditor({
             </button>
             <MindMapColorPicker open={showColorPicker} currentColor={selNode?.color ?? null} onSelect={(c) => { hasBulk ? bulkSetColor(c) : setNodeColor(selectedId, c); setShowColorPicker(false); }} onClose={() => setShowColorPicker(false)} showToast={showToast} />
           </div>
+          <div style={{ position: 'relative' }}>
+            <button className="mm-btn" onClick={() => setShowIconPicker((v) => !v)} title="Icons (I)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></button>
+            <MindMapIconPicker open={showIconPicker} currentIcons={selNode?.icons ?? []} onSelect={(name: string | null) => hasBulk ? bulkSetIcon(name) : setNodeIcon(selectedId, name)} onClose={() => setShowIconPicker(false)} showToast={showToast} />
+          </div>
           <button
             className={`mm-btn mm-btn--notes${selNodeAttachmentCount > 0 ? ' mm-btn--notes-has-files' : ''}`}
             onClick={() => { openNotes(selectedId); setNotesOpen(true); }}
@@ -2165,7 +2226,7 @@ export function DesktopMindMapEditor({
       <div className="mm-statusbar">
         <span>{flattenTree(root).length} node{flattenTree(root).length !== 1 ? 's' : ''}{multiSelect.size > 0 ? ` · ${multiSelect.size} selected` : ''}</span>
         <span>{selNode ? `Selected: ${selNode.text.split('\n')[0]}` : ''}</span>
-        <span className="mm-statusbar-hint">Tab=child · Enter=sibling · F2=rename · F6=attach file · Space=fold · C=check · P=progress · D=date · Ctrl+F=search</span>
+        <span className="mm-statusbar-hint">Tab=child · Enter=sibling · F2=rename · F6=attach file · Space=fold · C=check · P=progress · I=icon · D=date · Ctrl+F=search</span>
       </div>
 
       {/* ── Context menu ────────────────────────────────────────────── */}
@@ -2189,6 +2250,7 @@ export function DesktopMindMapEditor({
             <div className="mm-context-divider" />
             {cmHasChildren && <button className="mm-context-item" onClick={() => { toggleCollapse(contextMenu.nodeId); setContextMenu(null); }}>{cmNode.collapsed ? 'Expand' : 'Collapse'} <kbd>Space</kbd></button>}
             <button className="mm-context-item" onClick={() => { openNotes(contextMenu.nodeId); setNotesOpen(true); setContextMenu(null); }}>Notes <kbd>F3</kbd></button>
+            <button className="mm-context-item" onClick={() => { setShowIconPicker(true); setContextMenu(null); }}>Icon <kbd>I</kbd></button>
             <button className="mm-context-item" onClick={() => {
               cmHasCheckbox ? toggleCheckbox(contextMenu.nodeId) : addCheckbox(contextMenu.nodeId);
               setContextMenu(null);
@@ -2442,7 +2504,7 @@ export function DesktopMindMapEditor({
             ['F4', 'Colour picker'], ['F5 / F', 'Focus mode'], ['F6', 'Attach encrypted file'], ['F1', 'Shortcuts'], ['F9 / Ctrl+Z', 'Undo'], ['F10 / Ctrl+Y', 'Redo'], ['Space', 'Fold / Unfold'],
             ['↑ ↓ ← →', 'Navigate (spatial)'], ['⇧+Arrow', 'Multi-select'], ['Ctrl+Click', 'Toggle select'], ['⇧+Drag', 'Rectangle select'],
             ['Home', 'Root'], ['+ −', 'Zoom'], ['Ctrl+S', 'Save'],
-            ['C', 'Checkbox'], ['P', 'Progress'], ['D', 'Dates'], ['U', 'URL'], ['R', 'Reset pos'],
+            ['C', 'Checkbox'], ['P', 'Progress'], ['I', 'Icons'], ['D', 'Dates'], ['U', 'URL'], ['R', 'Reset pos'],
             ['Ctrl+⇧R', 'Reset all'], ['Ctrl+F', 'Search'], ['Esc', 'Cancel / Clear'],
           ].map(([k, v]) => (<div key={k} className="mm-shortcut-row"><kbd className="mm-kbd">{k}</kbd><span>{v}</span></div>))}</div>
         </div>

@@ -9,15 +9,29 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ### Added
 
 ### Changed
+
+### Removed
+
+### Validation
+
+## [0.3.27] - 2026-05-03
+
+### Changed
+- **Editor UX / Node Icons** - Restored full node icon workflow in `frontend_app/src/components/MindMapEditor.tsx` using the same interaction model as the server variant:
+  - Added toolbar icon picker access and context-menu icon action.
+  - Added keyboard shortcut `I` to toggle the icon picker, with Escape close behavior parity.
+  - Added inline icon rendering on nodes (including bulk multi-select icon toggling).
+  - Added shortcuts/help panel entry and status-bar hint for icon actions.
+- **Editor Components** - Added reusable icon picker infrastructure in `frontend_app/src/components/MindMapIconPicker.tsx` and `frontend_app/src/components/DynamicLucideIcon.tsx`, plus shared icon constants and picker styling.
 - **CI / Release Automation** — Updated `.github/workflows/desktop-build.yml` to modern action/runtime setup for desktop release builds:
   - Upgraded `actions/checkout` to `v5` and `actions/setup-node` to `v5`.
   - Replaced `pnpm/action-setup` with Corepack (`corepack prepare pnpm@10.17.1 --activate`) to reduce Node runtime deprecation noise.
   - Replaced deprecated `actions/upload-release-asset@v1` uploads with `gh release upload ... --clobber` for Linux and Windows artifacts.
   - Kept `$GITHUB_OUTPUT` usage for step outputs (no deprecated `set-output` command usage).
 
-### Removed
-
 ### Validation
+- `pnpm exec tsc --noEmit` in `frontend_app` → clean.
+- `node scripts/check_frontend_offline_parity.mjs` in repo root → passed.
 
 ## [0.3.26] - 2026-05-03
 

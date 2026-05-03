@@ -415,6 +415,103 @@
   z-index: 10;
 }
 .mm-search-icon { width: 14px; height: 14px; color: var(--mm-btn-text); flex-shrink: 0; }
+
+/* ── Icon picker ─────────────────────────────────────────────────────────── */
+.mm-icon-picker {
+  position: absolute;
+  top: 38px;
+  right: 0;
+  width: 280px;
+  background: var(--mm-notes-bg);
+  border: 1px solid var(--mm-notes-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  max-height: 360px;
+}
+
+.mm-icon-picker-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mm-btn-text);
+  user-select: none;
+}
+
+.mm-icon-search {
+  margin: 4px 8px 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--mm-btn-border);
+  background: var(--mm-btn-bg);
+  color: var(--mm-btn-text);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.mm-icon-search:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.25);
+}
+
+.mm-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  padding: 0 6px 8px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.mm-icon-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1.5px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mm-btn-text);
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s, transform 0.1s;
+  outline: none;
+  padding: 0;
+}
+.mm-icon-item:hover {
+  background: var(--mm-btn-bg);
+  border-color: var(--mm-btn-border);
+  transform: scale(1.12);
+}
+.mm-icon-item:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.35);
+  background: var(--mm-btn-bg);
+  transform: scale(1.12);
+}
+.mm-icon-item.active {
+  background: rgba(124, 58, 237, 0.18);
+  border-color: var(--accent);
+  color: #fff;
+}
+.mm-icon-item.active:hover,
+.mm-icon-item.active:focus-visible {
+  background: rgba(124, 58, 237, 0.3);
+}
+
+.mm-icon-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 18px 8px;
+  color: #888;
+  font-size: 12px;
+}
+
 .mm-search-input {
   flex: 1;
   background: var(--mm-btn-bg);

@@ -45,6 +45,34 @@ export const COLOR_PALETTE: string[] = [
 /** Progress presets for node progress circles. */
 export const PROGRESS_PRESETS: number[] = [0, 25, 50, 75, 100];
 
+/** Curated popular icons shown first in the icon picker. */
+export const POPULAR_ICONS: string[] = [
+  'Star', 'Heart', 'ThumbsUp', 'ThumbsDown', 'Flag',
+  'Bookmark', 'Bell', 'Clock', 'Calendar', 'Zap',
+  'Target', 'Award', 'Trophy', 'Crown', 'Flame',
+  'Lightbulb', 'Rocket', 'Bug', 'Shield', 'Lock',
+  'Unlock', 'Eye', 'EyeOff', 'Check', 'X',
+  'AlertTriangle', 'AlertCircle', 'Info', 'HelpCircle', 'MessageCircle',
+  'Mail', 'Phone', 'MapPin', 'Home', 'Building',
+  'User', 'Users', 'UserCheck', 'Settings', 'Wrench',
+  'Hammer', 'Cpu', 'Database', 'Server', 'Cloud',
+  'Wifi', 'Globe', 'Link', 'Paperclip', 'File',
+  'FileText', 'Folder', 'FolderOpen', 'Image', 'Camera',
+  'Video', 'Music', 'PlayCircle', 'PauseCircle', 'StopCircle',
+  'BarChart', 'PieChart', 'TrendingUp', 'TrendingDown', 'Activity',
+  'DollarSign', 'CreditCard', 'ShoppingCart', 'Package', 'Truck',
+  'Plane', 'Car', 'Bike', 'Train', 'Ship',
+  'Sun', 'Moon', 'CloudRain', 'Snowflake', 'Droplets',
+  'TreePine', 'Leaf', 'Flower2', 'Apple', 'Coffee',
+  'Utensils', 'Wine', 'Cigarette', 'Pill', 'Stethoscope',
+  'Headphones', 'Speaker', 'Mic', 'Volume2', 'Radio',
+  'Monitor', 'Smartphone', 'Tablet', 'Watch', 'Battery',
+  'Plug', 'Printer', 'Scan', 'QrCode', 'Fingerprint',
+  'Key', 'Trash2', 'Archive', 'Send', 'Download',
+  'Upload', 'RefreshCw', 'RotateCcw', 'Copy', 'Scissors',
+  'PenTool', 'Brush', 'Palette', 'Layers', 'Layout',
+];
+
 // ── Layout constants ────────────────────────────────────────────
 
 export const NODE_LINE_H = 20;
@@ -58,6 +86,7 @@ export const LINK_STRIP_H = 18;
 export const TAG_STRIP_H = 18;
 export const TOP_META_STRIP_H = 18;
 export const DATE_BADGE_OFFSET_H = 34;
+export const ICON_SIZE = 16;
 export const CHECKBOX_SIZE = 16;
 export const PROGRESS_PIE_SIZE = 32;
 export const ATTACHMENT_PREVIEW_H = 44;

@@ -35,6 +35,8 @@ pub enum LocalStoreError {
     Json(#[from] serde_json::Error),
     #[error("Not found: {0}")]
     NotFound(String),
+    #[error("Invalid username: {0}")]
+    InvalidUsername(String),
 }
 
 impl serde::Serialize for LocalStoreError {
@@ -137,9 +139,26 @@ pub struct LocalStorageSummary {
 
 // ── Path helpers ──────────────────────────────────────────────────────────────
 
+/// Rejects usernames that could escape the intended storage directory via
+/// path traversal. A valid username is non-empty, contains no path separators
+/// (`/`, `\`), no null bytes, and is not a bare `.` or `..` component.
+fn validate_username(username: &str) -> Result<(), LocalStoreError> {
+    if username.is_empty()
+        || username == "."
+        || username == ".."
+        || username.contains('/')
+        || username.contains('\\')
+        || username.contains('\0')
+    {
+        return Err(LocalStoreError::InvalidUsername(username.to_string()));
+    }
+    Ok(())
+}
+
 fn local_dir(app: &AppHandle) -> Result<PathBuf, LocalStoreError> {
     let cfg = read_config(app)?;
     let username = cfg.active_username.as_deref().unwrap_or("default");
+    validate_username(username)?;
     let dir = root_dir(app)?.join(username);
     fs::create_dir_all(&dir)?;
     Ok(dir)
@@ -200,6 +219,7 @@ fn profiles_dir(app: &AppHandle) -> Result<PathBuf, LocalStoreError> {
 }
 
 fn profile_path_for(app: &AppHandle, username: &str) -> Result<PathBuf, LocalStoreError> {
+    validate_username(username)?;
     Ok(profiles_dir(app)?.join(format!("{}.json", username)))
 }
 
@@ -314,11 +334,16 @@ fn write_bytes_atomic(path: &PathBuf, data: &[u8]) -> Result<(), LocalStoreError
     let tmp_path = path.with_extension(format!("tmp-{}", Uuid::new_v4()));
     fs::write(&tmp_path, data)?;
 
-    if path.exists() {
-        fs::remove_file(path)?;
+    // std::fs::rename uses rename(2) on POSIX (atomic replace) and
+    // MoveFileExW(MOVEFILE_REPLACE_EXISTING) on Windows. Both replace the
+    // destination in a single step, so no explicit remove_file is needed.
+    // The old delete-then-rename pattern created a crash window where the
+    // target file did not exist, which could silently lose data.
+    if let Err(e) = fs::rename(&tmp_path, path) {
+        // Clean up the temp file before propagating the error.
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e.into());
     }
-
-    fs::rename(&tmp_path, path)?;
     Ok(())
 }
 

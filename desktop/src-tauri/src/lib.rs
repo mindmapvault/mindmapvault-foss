@@ -13,6 +13,13 @@ use tauri::{
     Manager,
 };
 
+// DevTools are intentionally always enabled for transparency — users can
+// inspect what the app is doing in their name at any time. This is a
+// deliberate privacy-first design decision, not an oversight.
+// Risk acknowledged: session keys and decrypted key material live in the JS
+// heap and are reachable from the DevTools console. This is acceptable for
+// a local-only FOSS tool where the person opening DevTools is the same
+// person who owns the vault.
 const OPEN_WEBVIEW_DEVTOOLS_MENU_ID: &str = "open-webview-devtools";
 
 pub fn run() {

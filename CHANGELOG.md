@@ -14,6 +14,35 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Validation
 
+## [0.3.23] - 2026-05-04
+
+### Changed
+- **Security** — Added `deriveAttachmentWrapKey` to `frontend_app/src/crypto/kdf.ts`. New function derives a domain-separated 32-byte AES-GCM key via `HKDF-SHA256(master_key, info="crypt-mind-attachment-wrap-v1")`. New attachment encryptions (`encryptAttachmentForOwner`) now use this key and record `key_wrap: 'hkdf-attachment-v1'` in their metadata, ending the dual-role use of raw master key bytes for both HKDF IKM and direct AES-GCM encryption.
+- **Security** — `decryptAttachmentForOwner` branches on `encryptionMeta.key_wrap`: records tagged `'hkdf-attachment-v1'` use `deriveAttachmentWrapKey`; older records tagged `'master-aes-256-gcm'` fall back to `deriveMasterAesKey` for backward compatibility. Existing encrypted attachments are unaffected.
+- **Security** — `deriveShareKey` default `parallelism` raised from `1` to `4` to match `DEFAULT_ARGON2_PARAMS` (`p_cost: 4`). Share bundles store their Argon2id parameters in `encryptionMeta`, so existing share bundles decrypt using their stored value and are unaffected.
+- `deriveMasterAesKey` comment updated to explicitly mark it as backward-compat-only for older attachment records and for unlock-flow private-key wrapping (migration of the latter is a documented follow-up).
+
+### Validation
+- TypeScript type-check (`tsc --noEmit`) in `frontend_app` - 2026-05-03
+
+### Fixed
+- **Reliability** — Eliminated a crash-window data-loss bug in `write_bytes_atomic` (`desktop/src-tauri/src/local_store.rs`). The previous implementation deleted the target file before renaming the temp file into place; a crash or power loss in that gap permanently destroyed the data. The fix removes the explicit `remove_file` entirely. `std::fs::rename` calls `rename(2)` on POSIX (atomic replace) and `MoveFileExW` with `MOVEFILE_REPLACE_EXISTING` on Windows — both replace the destination in a single step without a separate delete. A temp-file cleanup on rename error is now also handled explicitly.
+
+### Validation
+- `cargo check` in `desktop/src-tauri`
+
+## [0.3.21] - 2026-05-03
+
+### Changed
+- **Security** — Added `validate_username` in `desktop/src-tauri/src/local_store.rs` to reject usernames containing path-separator characters (`/`, `\`, `..`, null byte). Previously a crafted username could escape the intended per-user storage directory (path traversal). The fix validates the username in both `local_dir` and `profile_path_for` and returns `LocalStoreError::InvalidUsername` on rejection.
+- **Security** — Replaced `"csp": null` with an explicit Content Security Policy in `desktop/src-tauri/tauri.conf.json`. The policy restricts scripts to `'self'`, blocks inline script injection, and limits `connect-src` to Tauri IPC. This prevents a malicious vault file from executing injected JavaScript inside the WebView with access to all Tauri invoke commands.
+- **Transparency** — Added an explanatory comment in `desktop/src-tauri/src/lib.rs` above the DevTools menu constant documenting that always-on DevTools is an intentional transparency design decision, along with the accepted risk (session keys reachable from the console) and its rationale.
+
+### Validation
+- `cargo check` in `desktop/src-tauri`
+- `node scripts/check_foss_saas_residue.mjs`
+- `node scripts/check_frontend_offline_parity.mjs`
+
 ## [0.3.20] - 2026-05-03
 
 ### Added

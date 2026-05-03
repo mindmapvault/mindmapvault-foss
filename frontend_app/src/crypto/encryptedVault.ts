@@ -1,6 +1,6 @@
 import { argon2id } from 'hash-wasm';
 import { aesDecrypt, aesEncrypt, importAesKey } from './aes';
-import { deriveMasterAesKey } from './kdf';
+import { deriveAttachmentWrapKey, deriveMasterAesKey } from './kdf';
 import { fromBase64, randomBytes, toBase64, toBuf, toHex } from './utils';
 import type { MindMapTree } from '../types';
 
@@ -11,7 +11,7 @@ type AttachmentEncryptionMeta = {
   format: 'cryptmind-attachment-v1';
   algorithm: 'aes-256-gcm';
   wrapped_key_b64: string;
-  key_wrap: 'master-aes-256-gcm';
+  key_wrap: 'master-aes-256-gcm' | 'hkdf-attachment-v1';
 };
 
 type ShareEncryptionMeta = {
@@ -60,7 +60,7 @@ export async function encryptAttachmentForOwner(
   const fileKey = randomBytes(32);
   const fileCryptoKey = await importAesKey(fileKey);
   const ciphertext = await aesEncrypt(fileCryptoKey, plaintext);
-  const wrapKey = await deriveMasterAesKey(masterKey);
+  const wrapKey = await deriveAttachmentWrapKey(masterKey);
   const wrappedKey = await aesEncrypt(wrapKey, fileKey);
 
   return {
@@ -70,7 +70,7 @@ export async function encryptAttachmentForOwner(
       format: 'cryptmind-attachment-v1',
       algorithm: 'aes-256-gcm',
       wrapped_key_b64: toBase64(wrappedKey),
-      key_wrap: 'master-aes-256-gcm',
+      key_wrap: 'hkdf-attachment-v1',
     },
   };
 }
@@ -85,13 +85,15 @@ export async function decryptAttachmentForOwner(
     throw new Error('Attachment is missing owner-side encryption metadata');
   }
 
-  const wrapKey = await deriveMasterAesKey(masterKey);
+  const wrapKey = meta.key_wrap === 'hkdf-attachment-v1'
+    ? await deriveAttachmentWrapKey(masterKey)
+    : await deriveMasterAesKey(masterKey);
   const fileKey = await aesDecrypt(wrapKey, fromBase64(meta.wrapped_key_b64));
   const fileCryptoKey = await importAesKey(fileKey);
   return aesDecrypt(fileCryptoKey, ciphertext);
 }
 
-async function deriveShareKey(passphrase: string, salt: Uint8Array, params = { memory_kib: 65536, iterations: 3, parallelism: 1 }) {
+async function deriveShareKey(passphrase: string, salt: Uint8Array, params = { memory_kib: 65536, iterations: 3, parallelism: 4 }) {
   const result = await argon2id({
     password: passphrase,
     salt,

@@ -61,11 +61,29 @@ export async function deriveTitleKey(masterKey: Uint8Array): Promise<CryptoKey> 
 }
 
 /**
- * Returns a CryptoKey wrapping the master key bytes directly.
- * Used only for encrypting/decrypting the user's own private keys at rest.
+ * Returns a CryptoKey wrapping the master key bytes directly as AES-GCM.
+ *
+ * BACKWARD-COMPAT ONLY: kept for decrypting attachments written before v0.3.23
+ * and for private-key wrapping in unlock flows (migration TODO).
+ * New attachment encryption uses deriveAttachmentWrapKey instead.
  */
 export async function deriveMasterAesKey(masterKey: Uint8Array): Promise<CryptoKey> {
   return crypto.subtle.importKey('raw', toBuf(masterKey), { name: 'AES-GCM', length: 256 }, false, [
+    'encrypt',
+    'decrypt',
+  ]);
+}
+
+/**
+ * Derives a 32-byte AES-GCM key for wrapping attachment file keys:
+ *   attachment_wrap_key = HKDF-SHA256(master_key, info="crypt-mind-attachment-wrap-v1", len=32)
+ *
+ * Provides domain separation so the raw master key material is never used
+ * for both HKDF IKM and direct AES-GCM operations simultaneously.
+ */
+export async function deriveAttachmentWrapKey(masterKey: Uint8Array): Promise<CryptoKey> {
+  const keyBytes = hkdf(sha256, masterKey, undefined, 'crypt-mind-attachment-wrap-v1', 32);
+  return crypto.subtle.importKey('raw', toBuf(keyBytes), { name: 'AES-GCM', length: 256 }, false, [
     'encrypt',
     'decrypt',
   ]);

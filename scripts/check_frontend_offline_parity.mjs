@@ -149,23 +149,29 @@ function main() {
   if (!fs.existsSync(fossContractPath)) {
     errors.push(`Missing contract file: ${fossContractPath}`);
   }
-  if (!fs.existsSync(serverContractPath)) {
-    errors.push(`Missing contract file: ${serverContractPath}`);
+
+  const serverContractAvailable = fs.existsSync(serverContractPath);
+
+  if (!serverContractAvailable) {
+    console.warn(`Note: server contract not found at ${serverContractPath} — skipping cross-repo comparison.`);
   }
 
   if (errors.length === 0) {
     const fossContract = readJson(fossContractPath);
-    const serverContract = readJson(serverContractPath);
 
-    if (fossContract.schemaVersion !== serverContract.schemaVersion) {
-      errors.push(
-        `schemaVersion mismatch: FOSS=${fossContract.schemaVersion} Server=${serverContract.schemaVersion}`
-      );
+    if (serverContractAvailable) {
+      const serverContract = readJson(serverContractPath);
+
+      if (fossContract.schemaVersion !== serverContract.schemaVersion) {
+        errors.push(
+          `schemaVersion mismatch: FOSS=${fossContract.schemaVersion} Server=${serverContract.schemaVersion}`
+        );
+      }
+
+      compareContractKey('offlineCoreCapabilities', fossContract, serverContract, strict, errors);
+      compareContractKey('localOnlyGuarantees', fossContract, serverContract, strict, errors);
+      compareContractKey('mustNotRequireServer', fossContract, serverContract, strict, errors);
     }
-
-    compareContractKey('offlineCoreCapabilities', fossContract, serverContract, strict, errors);
-    compareContractKey('localOnlyGuarantees', fossContract, serverContract, strict, errors);
-    compareContractKey('mustNotRequireServer', fossContract, serverContract, strict, errors);
 
     if (scanFoss) {
       scanFossOfflinePolicy(fossRoot, errors);

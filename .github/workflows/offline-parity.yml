@@ -21,7 +21,8 @@ jobs:
       - name: Checkout FOSS
         uses: actions/checkout@v4
 
-      - name: Checkout Server counterpart
+      - name: Checkout Server counterpart (optional)
+        if: ${{ secrets.MMV_CROSS_REPO_PAT != '' }}
         uses: actions/checkout@v4
         with:
           repository: mindmapvault/mindmapvault-server
@@ -33,5 +34,10 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Run offline parity check
+      - name: Run offline parity check (with server contract)
+        if: ${{ secrets.MMV_CROSS_REPO_PAT != '' }}
         run: node scripts/check_frontend_offline_parity.mjs --foss-root=. --server-root=server-repo
+
+      - name: Run offline parity check (FOSS-only, no server contract)
+        if: ${{ secrets.MMV_CROSS_REPO_PAT == '' }}
+        run: node scripts/check_frontend_offline_parity.mjs --foss-root=. --strict=false

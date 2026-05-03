@@ -6,7 +6,7 @@ use local_store::{
     import_vault_file, is_wsl_environment, list_local_profiles, list_local_vaults,
     pick_local_storage_dir, reset_local_storage_dir, save_local_profile,
     save_local_vault, save_local_vault_blob, set_active_user, set_local_storage_dir,
-    update_local_vault_meta,
+    update_local_vault_meta, verify_local_vault_integrity,
 };
 use local_store::apply_local_password_rotation;
 use tauri::{
@@ -77,6 +77,8 @@ pub fn run() {
             import_vault_file,
             // Password rotation
             apply_local_password_rotation,
+            // Integrity verification
+            verify_local_vault_integrity,
         ])
         .run(tauri::generate_context!())
         .expect("error while running MindMapVault desktop");

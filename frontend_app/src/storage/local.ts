@@ -110,7 +110,6 @@ export class LocalStorageAdapter implements StorageAdapter {
   async updateMeta(id: string, body: UpdateVaultMetaRequest): Promise<void> {
     await invoke('update_local_vault_meta', {
       id,
-      vaultColor: body.vault_color ?? null,
       vaultNoteEncrypted: body.vault_note_encrypted ?? null,
       vaultSharingMode: body.vault_sharing_mode ?? null,
       vaultEncryptionMode: body.vault_encryption_mode ?? null,

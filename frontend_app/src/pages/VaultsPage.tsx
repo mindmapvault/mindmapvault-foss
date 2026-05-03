@@ -85,6 +85,19 @@ function normalizeHexColor(input?: string): string {
   return /^#[0-9a-fA-F]{6}$/.test(input) ? input : fallback;
 }
 
+function vaultColorStorageKey(vaultId: string): string {
+  return `vault-color-${vaultId}`;
+}
+
+function getLocalVaultColor(vaultId: string, fallback?: string): string {
+  const stored = localStorage.getItem(vaultColorStorageKey(vaultId)) ?? undefined;
+  return normalizeHexColor(stored ?? fallback);
+}
+
+function setLocalVaultColor(vaultId: string, color: string): void {
+  localStorage.setItem(vaultColorStorageKey(vaultId), normalizeHexColor(color));
+}
+
 function normalizeSharingMode(input?: string): VaultSharingMode {
   return input === 'shared' ? 'shared' : 'private';
 }
@@ -683,11 +696,14 @@ export function VaultsPage() {
 
         setMaps(
           items.map((m, i) => {
-            const color = normalizeHexColor(m.vault_color);
+            const color = isLocalMode
+              ? getLocalVaultColor(m.id, m.vault_color)
+              : normalizeHexColor(m.vault_color);
             const maxVersions = Math.max(1, m.max_versions ?? 50);
             const note = decryptedNotes[i] ?? '';
             return {
               ...m,
+              vault_color: color,
               title: decryptedTitles[i],
               vaultNote: note,
               draftNote: note,
@@ -704,20 +720,26 @@ export function VaultsPage() {
         );
       } else {
         setMaps(
-          items.map((m) => ({
-            ...m,
-            title: null,
-            vaultNote: '',
-            draftNote: '',
-            draftLabels: normalizeVaultLabels(
-              m.vault_labels ?? (isLocalMode ? (JSON.parse(localStorage.getItem(`vault-labels-${m.id}`) ?? '[]') as string[]) : []),
-            ),
-            draftColor: normalizeHexColor(m.vault_color),
-            draftSharingMode: normalizeSharingMode(m.vault_sharing_mode),
-            draftEncryptionMode: normalizeEncryptionMode(m.vault_encryption_mode),
-            draftMaxVersions: Math.max(1, m.max_versions ?? 50),
-            metaSaving: false,
-          })),
+          items.map((m) => {
+            const color = isLocalMode
+              ? getLocalVaultColor(m.id, m.vault_color)
+              : normalizeHexColor(m.vault_color);
+            return {
+              ...m,
+              vault_color: color,
+              title: null,
+              vaultNote: '',
+              draftNote: '',
+              draftLabels: normalizeVaultLabels(
+                m.vault_labels ?? (isLocalMode ? (JSON.parse(localStorage.getItem(`vault-labels-${m.id}`) ?? '[]') as string[]) : []),
+              ),
+              draftColor: color,
+              draftSharingMode: normalizeSharingMode(m.vault_sharing_mode),
+              draftEncryptionMode: normalizeEncryptionMode(m.vault_encryption_mode),
+              draftMaxVersions: Math.max(1, m.max_versions ?? 50),
+              metaSaving: false,
+            };
+          }),
         );
       }
       setActiveShareCounts({});
@@ -1051,8 +1073,12 @@ export function VaultsPage() {
         ? await encryptTitle(notePlain, sessionKeys.masterKey)
         : '';
 
+      if (isLocalMode) {
+        setLocalVaultColor(map.id, map.draftColor);
+      }
+
       await storage.updateMeta(map.id, {
-        vault_color: map.draftColor,
+        ...(isLocalMode ? {} : { vault_color: map.draftColor }),
         vault_note_encrypted: noteEncrypted,
         vault_sharing_mode: map.draftSharingMode,
         vault_encryption_mode: map.draftEncryptionMode,

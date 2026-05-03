@@ -38,7 +38,10 @@ export const useAuthStore = create<AuthState>()(
       logout: () =>
         set({ accessToken: null, refreshToken: null, username: null, sessionKeys: null }),
 
-      isAuthenticated: () => !!get().accessToken,
+      isAuthenticated: () => {
+        const state = get();
+        return !!state.accessToken || (!!state.username && !!state.sessionKeys);
+      },
 
       hasSessionKeys: () => !!get().sessionKeys,
     }),

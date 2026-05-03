@@ -86,7 +86,7 @@ export async function buildPasswordRotationBundle(
   }
 
   // ── 2. Derive new master key with a fresh salt ────────────────────────────
-  const newSalt = randomBytes(16);
+  const newSalt = randomBytes(32);
   const newSaltB64 = toBase64(newSalt);
   const newMasterKey = await deriveMasterKey(newPassword, newSaltB64, DEFAULT_ARGON2_PARAMS);
 

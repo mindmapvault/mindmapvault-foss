@@ -120,7 +120,7 @@ export async function createEncryptedShareBundle(
   },
   passphrase: string,
 ): Promise<ShareCipherBundle> {
-  const salt = randomBytes(16);
+  const salt = randomBytes(32);
   const { key, params } = await deriveShareKey(passphrase, salt);
   const shareCryptoKey = await importAesKey(key);
   const ciphertext = await aesEncrypt(shareCryptoKey, textEncoder.encode(JSON.stringify(payload)));

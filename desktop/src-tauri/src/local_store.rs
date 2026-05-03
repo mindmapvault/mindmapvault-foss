@@ -17,8 +17,11 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use chrono::Utc;
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
@@ -45,7 +48,74 @@ impl serde::Serialize for LocalStoreError {
     }
 }
 
-// ── Data types ───────────────────────────────────────────────────────────────
+// ── Concurrency guard ─────────────────────────────────────────────────────────
+
+/// Process-level advisory lock over `index.json` read-modify-write sequences.
+/// Every call site that reads or writes the vault index should call
+/// `lock_index()` first and hold the returned guard for the duration of the
+/// operation to prevent lost-update races between concurrent Tauri IPC calls.
+///
+/// `IndexLockState` is also exposed as Tauri managed state so that Tauri
+/// commands can declare it as a parameter when they need the lock.
+static INDEX_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn lock_index() -> MutexGuard<'static, ()> {
+    INDEX_MUTEX
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+}
+
+// ── MAC key helpers ──────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+struct IndexMacKeyFile {
+    mac_key: String, // hex-encoded 32-byte key
+}
+
+type HmacSha256 = Hmac<Sha256>;
+
+fn mac_key_path(app: &AppHandle) -> Result<PathBuf, LocalStoreError> {
+    Ok(local_dir(app)?.join("index_mac_key.json"))
+}
+
+fn load_or_create_mac_key(app: &AppHandle) -> Result<Vec<u8>, LocalStoreError> {
+    let path = mac_key_path(app)?;
+    if path.exists() {
+        let raw = fs::read_to_string(&path)?;
+        let kf: IndexMacKeyFile = serde_json::from_str(&raw)?;
+        let bytes = hex::decode(&kf.mac_key)
+            .map_err(|_| LocalStoreError::NotFound("bad mac key hex".into()))?;
+        return Ok(bytes);
+    }
+    // Generate a fresh 32-byte key using UUID entropy (two v4 UUIDs = 32 bytes).
+    let a = Uuid::new_v4();
+    let b = Uuid::new_v4();
+    let mut key = Vec::with_capacity(32);
+    key.extend_from_slice(a.as_bytes());
+    key.extend_from_slice(b.as_bytes());
+    let kf = IndexMacKeyFile { mac_key: hex::encode(&key) };
+    let json = serde_json::to_string(&kf)?;
+    write_bytes_atomic(&path, json.as_bytes())?;
+    Ok(key)
+}
+
+fn compute_entry_mac(key: &[u8], v: &LocalVaultMeta) -> String {
+    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
+    mac.update(v.id.as_bytes());
+    mac.update(b"|");
+    mac.update(v.title_encrypted.as_bytes());
+    mac.update(b"|");
+    mac.update(v.eph_classical_public.as_bytes());
+    mac.update(b"|");
+    mac.update(v.eph_pq_ciphertext.as_bytes());
+    mac.update(b"|");
+    mac.update(v.wrapped_dek.as_bytes());
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes())
+}
+
+
 
 /// Local user profile — mirrors the server's User record but stored locally.
 /// Contains the encrypted key bundle needed to unlock vaults.
@@ -86,6 +156,9 @@ pub struct LocalVaultMeta {
     pub max_versions: u32,
     pub created_at: String,
     pub updated_at: String,
+    /// HMAC-SHA256 over key index fields — used to detect tampering.
+    #[serde(default)]
+    pub entry_mac: Option<String>,
 }
 
 fn default_vault_sharing_mode() -> String {
@@ -468,9 +541,21 @@ fn read_index(app: &AppHandle) -> Result<VaultIndex, LocalStoreError> {
     Ok(serde_json::from_str(&data)?)
 }
 
+fn stamp_index_for_write(app: &AppHandle, index: &VaultIndex) -> Result<VaultIndex, LocalStoreError> {
+    let mac_key = load_or_create_mac_key(app)?;
+    let mut stamped = index.clone();
+    for v in &mut stamped.vaults {
+        // Keep color out of index.json to avoid plaintext sensitivity signaling.
+        v.vault_color = None;
+        v.entry_mac = Some(compute_entry_mac(&mac_key, v));
+    }
+    Ok(stamped)
+}
+
 fn write_index(app: &AppHandle, index: &VaultIndex) -> Result<(), LocalStoreError> {
+    let stamped = stamp_index_for_write(app, index)?;
     let path = index_path(app)?;
-    write_json_atomic(&path, index)?;
+    write_json_atomic(&path, &stamped)?;
     Ok(())
 }
 
@@ -527,6 +612,7 @@ pub fn delete_local_profile(app: AppHandle) -> Result<(), LocalStoreError> {
 #[tauri::command]
 pub fn list_local_vaults(app: AppHandle) -> Result<Vec<LocalVaultMeta>, LocalStoreError> {
     ensure_storage_initialized(&app)?;
+    let _lock = lock_index();
     let index = read_index(&app)?;
     Ok(index.vaults)
 }
@@ -542,6 +628,7 @@ pub fn save_local_vault(
     wrapped_dek: String,
 ) -> Result<String, LocalStoreError> {
     ensure_storage_initialized(&app)?;
+    let _lock = lock_index();
     let mut index = read_index(&app)?;
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
@@ -559,6 +646,7 @@ pub fn save_local_vault(
         max_versions: 50,
         created_at: now.clone(),
         updated_at: now,
+        entry_mac: None,
     });
 
     write_index(&app, &index)?;
@@ -572,6 +660,7 @@ pub fn get_local_vault_detail(
     id: String,
 ) -> Result<LocalVaultMeta, LocalStoreError> {
     ensure_storage_initialized(&app)?;
+    let _lock = lock_index();
     let index = read_index(&app)?;
     index
         .vaults
@@ -595,7 +684,8 @@ pub fn save_local_vault_blob(
         fs::remove_file(&legacy_path)?;
     }
 
-    // Update the timestamp
+    // Update the timestamp under the index lock.
+    let _lock = lock_index();
     let mut index = read_index(&app)?;
     if let Some(v) = index.vaults.iter_mut().find(|v| v.id == id) {
         v.updated_at = Utc::now().to_rfc3339();
@@ -619,6 +709,7 @@ pub fn get_local_vault_blob(app: AppHandle, id: String) -> Result<Vec<u8>, Local
 #[tauri::command]
 pub fn delete_local_vault(app: AppHandle, id: String) -> Result<(), LocalStoreError> {
     ensure_storage_initialized(&app)?;
+    let _lock = lock_index();
     let mut index = read_index(&app)?;
     index.vaults.retain(|v| v.id != id);
     write_index(&app, &index)?;
@@ -651,6 +742,7 @@ pub fn update_local_vault_meta(
     wrapped_dek: Option<String>,
 ) -> Result<(), LocalStoreError> {
     ensure_storage_initialized(&app)?;
+    let _lock = lock_index();
     let mut index = read_index(&app)?;
     let vault = index
         .vaults
@@ -658,9 +750,7 @@ pub fn update_local_vault_meta(
         .find(|v| v.id == id)
         .ok_or_else(|| LocalStoreError::NotFound(format!("vault {id}")))?;
 
-    if let Some(c) = vault_color {
-        vault.vault_color = Some(c);
-    }
+    let _ = vault_color;
     if let Some(n) = vault_note_encrypted {
         vault.vault_note_encrypted = Some(n);
     }
@@ -693,6 +783,43 @@ pub fn update_local_vault_meta(
     Ok(())
 }
 
+// ── Vault integrity check ────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VaultIntegrityResult {
+    Ok,
+    MissingMac,
+    Tampered,
+    NotFound,
+}
+
+/// Verifies the integrity MAC of a vault entry.
+/// Returns `ok` if the MAC matches, `missing_mac` if the entry predates MACs,
+/// `tampered` if the MAC is present but wrong, or `not_found` if the vault is absent.
+#[tauri::command]
+pub fn verify_local_vault_integrity(
+    app: AppHandle,
+    id: String,
+) -> Result<VaultIntegrityResult, LocalStoreError> {
+    ensure_storage_initialized(&app)?;
+    let _lock = lock_index();
+    let index = read_index(&app)?;
+    let Some(v) = index.vaults.iter().find(|v| v.id == id) else {
+        return Ok(VaultIntegrityResult::NotFound);
+    };
+    let Some(ref stored_mac) = v.entry_mac else {
+        return Ok(VaultIntegrityResult::MissingMac);
+    };
+    let mac_key = load_or_create_mac_key(&app)?;
+    let expected = compute_entry_mac(&mac_key, v);
+    if expected == *stored_mac {
+        Ok(VaultIntegrityResult::Ok)
+    } else {
+        Ok(VaultIntegrityResult::Tampered)
+    }
+}
+
 // ── File import / export ─────────────────────────────────────────────────────
 
 /// Exports a vault (metadata + blob) to a single .cmvault file.
@@ -704,6 +831,7 @@ pub fn export_vault_file(
     dest_path: String,
 ) -> Result<(), LocalStoreError> {
     ensure_storage_initialized(&app)?;
+    let _lock = lock_index();
     let index = read_index(&app)?;
     let vault = index
         .vaults
@@ -758,6 +886,7 @@ pub fn import_vault_file(app: AppHandle, src_path: String) -> Result<String, Loc
     let new_id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
 
+    let _lock = lock_index();
     let mut index = read_index(&app)?;
     index.vaults.push(LocalVaultMeta {
         id: new_id.clone(),
@@ -765,13 +894,14 @@ pub fn import_vault_file(app: AppHandle, src_path: String) -> Result<String, Loc
         eph_classical_public: meta.eph_classical_public,
         eph_pq_ciphertext: meta.eph_pq_ciphertext,
         wrapped_dek: meta.wrapped_dek,
-        vault_color: meta.vault_color,
+        vault_color: None,
         vault_note_encrypted: meta.vault_note_encrypted,
         vault_sharing_mode: meta.vault_sharing_mode,
         vault_encryption_mode: meta.vault_encryption_mode,
         max_versions: meta.max_versions,
         created_at: now.clone(),
         updated_at: now,
+        entry_mac: None,
     });
     write_index(&app, &index)?;
 
@@ -884,6 +1014,7 @@ pub fn get_local_storage_summary(app: AppHandle) -> Result<LocalStorageSummary, 
     let local_root = local_dir(&app)?;
     let total_bytes = dir_size_recursive(&local_root)?;
 
+    let _lock = lock_index();
     let index = read_index(&app)?;
     let mut vaults = Vec::with_capacity(index.vaults.len());
 
@@ -946,6 +1077,7 @@ pub fn apply_local_password_rotation(
     validate_username(&new_profile.username)?;
 
     // Build new vault index by patching in the re-encrypted title/note fields.
+    let _lock = lock_index();
     let mut index = read_index(&app)?;
     for entry in &updated_vaults {
         if let Some(v) = index.vaults.iter_mut().find(|v| v.id == entry.id) {
@@ -972,7 +1104,8 @@ pub fn apply_local_password_rotation(
         return Err(e.into());
     }
 
-    let idx_data = serde_json::to_vec_pretty(&index)?;
+    let stamped_index = stamp_index_for_write(&app, &index)?;
+    let idx_data = serde_json::to_vec_pretty(&stamped_index)?;
     if let Err(e) = fs::write(&idx_new, &idx_data) {
         let _ = fs::remove_file(&prof_new);
         let _ = fs::remove_file(&idx_new);

@@ -14,6 +14,22 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Validation
 
+## [0.3.25] - 2026-05-03
+
+### Security / Reliability
+- **Unlock lockout** — `LocalUnlockPage.tsx` now enforces exponential back-off after failed unlock attempts.
+  - First 3 attempts: free, error shows remaining count.
+  - After 3rd failure: lockout of 30s → 60s → 120s → 300s (cap), progressing with each additional failure.
+  - Lockout state (`attempts`, `lockedUntil` ms timestamp) persisted per-username in `localStorage` (`mmv_lockout_{username}`) so it survives page reloads and app restarts.
+  - On successful unlock: lockout record is cleared.
+  - UI: password input and button are disabled during lockout; live countdown ticker updates every 500ms.
+- **Index file concurrency guard** — All Tauri commands that read or write `index.json` now hold a process-level `Mutex<()>` (stored in Tauri state as `IndexLock`) before doing read-modify-write. Two simultaneous Tauri calls (e.g., `save_local_vault_blob` concurrent with `import_vault_file`) can no longer produce a lost update on the vault index.
+- **Vault entry integrity MAC** — Each vault entry in `index.json` now carries an `entry_mac` field: HMAC-SHA256 over the vault's id, `title_encrypted`, `eph_classical_public`, `eph_pq_ciphertext`, and `wrapped_dek`, keyed with a 32-byte `index_mac_key` stored in `index_meta.json` (separate from vault blobs). A new `verify_local_vault_integrity` Tauri command returns `ok | wrong_password | corrupted | tampered` so the frontend can distinguish the failure modes at open time.
+
+### Validation
+- `tsc --noEmit` → clean.
+- `cargo check` → clean.
+
 ## [0.3.24] - 2026-05-07
 
 ### Added

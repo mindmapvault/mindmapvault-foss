@@ -23,6 +23,37 @@ interface LocalProfile {
   created_at: string;
 }
 
+// ── Unlock lockout helpers ────────────────────────────────────────────────────
+// After LOCKOUT_THRESHOLD consecutive failures, exponential back-off is applied.
+// State is persisted in localStorage so it survives page reloads.
+const LOCKOUT_THRESHOLD = 3; // failures before first lockout
+
+function lockoutStorageKey(uname: string) {
+  return `mmv_lockout_${uname}`;
+}
+
+function getLockoutState(uname: string): { attempts: number; lockedUntil: number } {
+  try {
+    const raw = localStorage.getItem(lockoutStorageKey(uname));
+    if (raw) return JSON.parse(raw) as { attempts: number; lockedUntil: number };
+  } catch { /* ignore */ }
+  return { attempts: 0, lockedUntil: 0 };
+}
+
+function saveLockoutState(uname: string, attempts: number, lockedUntil: number) {
+  localStorage.setItem(lockoutStorageKey(uname), JSON.stringify({ attempts, lockedUntil }));
+}
+
+function clearLockoutState(uname: string) {
+  localStorage.removeItem(lockoutStorageKey(uname));
+}
+
+/** Lockout duration in seconds for a given consecutive-failure count. Capped at 5 min. */
+function lockoutDurationSeconds(attempts: number): number {
+  return Math.min(30 * Math.pow(2, attempts - LOCKOUT_THRESHOLD), 300);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
   return tauriInvoke<T>(cmd, args);
@@ -50,6 +81,9 @@ export function LocalUnlockPage() {
   const [profiles, setProfiles] = useState<string[]>([]);
   const [selectedUsername, setSelectedUsername] = useState('');
   const [legalDocument, setLegalDocument] = useState<LegalDocument | null>(null);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutUntil, setLockoutUntil] = useState(0);       // ms timestamp
+  const [lockoutCountdown, setLockoutCountdown] = useState(0); // seconds remaining
   const appVersion = `v${String(packageJson.version ?? 'dev')}`;
 
   /** Switch to a different user: activates them in Rust config and loads their profile. */
@@ -62,6 +96,9 @@ export function LocalUnlockPage() {
       setSelectedUsername(uname);
       setProfile(p);
       setUsername(p.username);
+      const ls = getLockoutState(uname);
+      setFailedAttempts(ls.attempts);
+      setLockoutUntil(ls.lockedUntil);
       setStep('unlock');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to switch user');
@@ -84,6 +121,9 @@ export function LocalUnlockPage() {
           setSelectedUsername(list[0]);
           setProfile(p);
           setUsername(p.username);
+          const ls = getLockoutState(p.username);
+          setFailedAttempts(ls.attempts);
+          setLockoutUntil(ls.lockedUntil);
           setStep('unlock');
         } else {
           setStep('empty');
@@ -94,6 +134,19 @@ export function LocalUnlockPage() {
       }
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Countdown ticker — updates every 500ms while a lockout is active.
+  useEffect(() => {
+    if (lockoutUntil <= 0) { setLockoutCountdown(0); return; }
+    const tick = () => {
+      const remaining = Math.ceil((lockoutUntil - Date.now()) / 1000);
+      if (remaining <= 0) { setLockoutCountdown(0); setLockoutUntil(0); return; }
+      setLockoutCountdown(remaining);
+    };
+    tick();
+    const id = setInterval(tick, 500);
+    return () => clearInterval(id);
+  }, [lockoutUntil]);
 
   const handlePickFolder = async () => {
     setError('');
@@ -120,7 +173,7 @@ export function LocalUnlockPage() {
     setWorking(true);
     try {
       // Derive keys
-      const salt = randomBytes(16);
+      const salt = randomBytes(32);
       const saltB64 = toBase64(salt);
       const masterKey = await deriveMasterKey(password, saltB64, DEFAULT_ARGON2_PARAMS);
 
@@ -175,6 +228,12 @@ export function LocalUnlockPage() {
     if (!profile) return;
     if (!password) { setError('Password is required'); return; }
 
+    // Reject immediately if a lockout is in effect.
+    if (lockoutUntil > Date.now()) {
+      setError('');  // countdown UI handles the message
+      return;
+    }
+
     setWorking(true);
     try {
       const masterKey = await deriveMasterKey(
@@ -198,9 +257,29 @@ export function LocalUnlockPage() {
       setSessionKeys(sessionKeys);
       setTokens('', '', profile.username);
 
+      // Success — clear any lockout record for this user.
+      clearLockoutState(profile.username);
+      setFailedAttempts(0);
+      setLockoutUntil(0);
+
       navigate('/vaults');
     } catch {
-      setError('Wrong password — could not decrypt keys');
+      const newAttempts = failedAttempts + 1;
+      setFailedAttempts(newAttempts);
+
+      if (newAttempts >= LOCKOUT_THRESHOLD) {
+        const durationSec = lockoutDurationSeconds(newAttempts);
+        const until = Date.now() + durationSec * 1000;
+        setLockoutUntil(until);
+        saveLockoutState(profile.username, newAttempts, until);
+        setError('');  // countdown UI handles the message
+      } else {
+        const remaining = LOCKOUT_THRESHOLD - newAttempts;
+        saveLockoutState(profile.username, newAttempts, 0);
+        setError(
+          `Wrong password — ${remaining} attempt${remaining === 1 ? '' : 's'} remaining before lockout.`,
+        );
+      }
     } finally {
       setWorking(false);
     }
@@ -306,16 +385,22 @@ export function LocalUnlockPage() {
               autoFocus
               className="w-full px-4 py-3 rounded-lg border border-[var(--border)] bg-[var(--card)]
                          text-[var(--fg)] focus:border-[var(--accent)] outline-none"
-              disabled={working}
+              disabled={working || lockoutCountdown > 0}
             />
-            {error && <p className="text-sm text-red-400">{error}</p>}
+            {lockoutCountdown > 0 ? (
+              <p className="text-sm text-orange-400">
+                Too many failed attempts — wait <strong>{lockoutCountdown}s</strong> before trying again.
+              </p>
+            ) : error ? (
+              <p className="text-sm text-red-400">{error}</p>
+            ) : null}
             <button
               onClick={handleUnlock}
-              disabled={working || !password}
+              disabled={working || !password || lockoutCountdown > 0}
               className="w-full py-3 rounded-lg bg-[var(--accent)] text-white font-medium
                          hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50"
             >
-              {working ? 'Deriving keys…' : 'Unlock'}
+              {working ? 'Deriving keys…' : lockoutCountdown > 0 ? `Locked (${lockoutCountdown}s)` : 'Unlock'}
             </button>
             <button
               type="button"

@@ -8,6 +8,7 @@ use local_store::{
     save_local_vault, save_local_vault_blob, set_active_user, set_local_storage_dir,
     update_local_vault_meta,
 };
+use local_store::apply_local_password_rotation;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
     Manager,
@@ -74,6 +75,8 @@ pub fn run() {
             // Import / Export
             export_vault_file,
             import_vault_file,
+            // Password rotation
+            apply_local_password_rotation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running MindMapVault desktop");

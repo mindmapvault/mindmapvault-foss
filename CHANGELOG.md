@@ -14,6 +14,28 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Validation
 
+## [0.3.24] - 2026-05-07
+
+### Added
+- **Security / Feature** — Local password change (key rotation) for desktop mode. Users can now change their unlock password from the Vaults page via the new "Change password" button (local mode only). The rotation:
+  - Verifies the current password by attempting AES-GCM decryption of the stored private keys.
+  - Derives a new master key with a freshly generated 16-byte Argon2id salt (Argon2id params kept at 64 MiB / 3 iter / p=4).
+  - Re-wraps both classical and post-quantum private keys under the new wrap key (`importAesKey(newMasterKey)`).
+  - Re-encrypts all vault titles and notes with the new HKDF-derived title key.
+  - Increments `key_version` in the profile for auditability.
+  - Vault blobs (the mind-map trees) are NOT touched — they are KEM-protected and independent of the master key.
+- **Reliability** — Crash-safe two-phase rotation commit in `desktop/src-tauri/src/local_store.rs`:
+  - Both the new profile and new vault index are written to `*.rotation-new` temp files before any real file is renamed.
+  - The profile is renamed first (committing the new password). The vault index is renamed second.
+  - A crash between the two renames is detected and healed by `recover_interrupted_rotation()`, called automatically from `migrate_if_needed()` on every startup.
+- `frontend_app/src/crypto/keyRotation.ts` — new standalone crypto module exposing `buildPasswordRotationBundle`. No server contact required.
+- `frontend_app/src/pages/ChangePasswordPage.tsx` — new page with progress states, per-field validation, and a distinct error message for wrong-password failures.
+- `apply_local_password_rotation` Tauri command registered in `desktop/src-tauri/src/lib.rs`.
+
+### Validation
+- 8 vitest unit tests added in `frontend_app/src/crypto/__tests__/keyRotation.test.ts`. All pass.
+- Tests cover: incremented key_version, new salt, private-key recovery with new password, title re-encryption with new key, old key rejection, note re-encryption, null note passthrough.
+
 ## [0.3.23] - 2026-05-04
 
 ### Changed

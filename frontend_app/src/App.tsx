@@ -9,6 +9,7 @@ import { useThemeStore } from './store/theme';
 const EditorPage = lazy(() => import('./pages/EditorPage').then((module) => ({ default: module.EditorPage })));
 const LocalUnlockPage = lazy(() => import('./pages/LocalUnlockPage').then((module) => ({ default: module.LocalUnlockPage })));
 const VaultsPage = lazy(() => import('./pages/VaultsPage').then((module) => ({ default: module.VaultsPage })));
+const ChangePasswordPage = lazy(() => import('./pages/ChangePasswordPage').then((module) => ({ default: module.ChangePasswordPage })));
 
 function darken(hex: string, amount = 25): string {
   const n = parseInt(hex.replace('#', ''), 16);
@@ -85,6 +86,7 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route path="/vaults" element={<VaultsPage />} />
             <Route path="/vaults/:id" element={<EditorPage />} />
+            <Route path="/change-password" element={isDesktop ? <ChangePasswordPage /> : <Navigate to="/vaults" replace />} />
           </Route>
 
           <Route path="*" element={<Navigate to={defaultRoute} replace />} />

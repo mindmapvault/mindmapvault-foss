@@ -243,6 +243,54 @@ fn profile_path(app: &AppHandle) -> Result<PathBuf, LocalStoreError> {
 /// 3. `storage_dir_override` is trimmed of its username suffix so it points at
 ///    the root dir instead of the per-user sub-directory.
 fn migrate_if_needed(app: &AppHandle) -> Result<(), LocalStoreError> {
+    /// Recovers from a crash that interrupted a password rotation.
+    ///
+    /// Three cases handled:
+    /// - Both `*.rotation-new` temps exist → rotation never committed (crash before first rename).
+    ///   Both temps are cleaned up; original files are untouched.
+    /// - Only `index.json.rotation-new` exists → profile was renamed (new password committed) but
+    ///   vault-index rename did not complete. Apply the pending vault index now.
+    /// - Only `{username}.json.rotation-new` exists → crash before profile rename. Clean it up.
+    fn recover_interrupted_rotation(app: &AppHandle) {
+        let cfg = match read_config(app) {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        let username = cfg.active_username.as_deref().unwrap_or("default");
+
+        let prof_path = match profile_path_for(app, username) {
+            Ok(p) => p,
+            Err(_) => return,
+        };
+        let prof_new = PathBuf::from(format!("{}.rotation-new", prof_path.to_string_lossy()));
+
+        // Try to build the vault-index path without side-effects (don't create dirs).
+        let vaults_dir = match local_dir(app) {
+            Ok(d) => d.join("vaults"),
+            Err(_) => return,
+        };
+        let idx_path = vaults_dir.join("index.json");
+        let idx_new = PathBuf::from(format!("{}.rotation-new", idx_path.to_string_lossy()));
+
+        match (prof_new.exists(), idx_new.exists()) {
+            (true, true) => {
+                // Both temps exist — rotation never committed. Discard both.
+                let _ = fs::remove_file(&prof_new);
+                let _ = fs::remove_file(&idx_new);
+            }
+            (false, true) => {
+                // Profile already renamed (new password committed) but vault-index rename failed.
+                // Apply the pending vault index; ignore errors (will retry on next launch).
+                let _ = fs::rename(&idx_new, &idx_path);
+            }
+            (true, false) => {
+                // Only profile temp exists — crash before any rename. Clean up.
+                let _ = fs::remove_file(&prof_new);
+            }
+            (false, false) => { /* nothing pending */ }
+        }
+    }
+
     let config_base = app
         .path()
         .app_config_dir()
@@ -292,6 +340,8 @@ fn migrate_if_needed(app: &AppHandle) -> Result<(), LocalStoreError> {
         }
         write_config(app, &new_cfg)?;
     }
+
+    recover_interrupted_rotation(app);
 
     Ok(())
 }
@@ -858,4 +908,89 @@ pub fn get_local_storage_summary(app: AppHandle) -> Result<LocalStorageSummary, 
         total_bytes,
         free_tier_bytes: 50 * 1024 * 1024,
     })
+}
+
+// ── Password rotation ─────────────────────────────────────────────────────────
+
+/// A single vault's re-encrypted title/note fields produced by the JS rotation helper.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RotatedVaultEntry {
+    pub id: String,
+    pub title_encrypted: String,
+    /// `None` → preserve existing value; `Some("")` → clear; `Some(ct)` → set.
+    pub vault_note_encrypted: Option<String>,
+}
+
+/// Atomically applies a password rotation produced by the JS crypto layer.
+///
+/// Safety guarantees:
+/// - Both the new profile and the new vault index are written to `*.rotation-new`
+///   temp files before any real file is touched.
+/// - The profile is renamed first (committing the new password). If this rename
+///   fails nothing is changed.
+/// - The vault-index is renamed second. If this rename fails, the
+///   `index.json.rotation-new` file is intentionally left in place so that
+///   `recover_interrupted_rotation` can apply it on next startup.
+#[tauri::command]
+pub fn apply_local_password_rotation(
+    app: AppHandle,
+    new_profile: LocalProfile,
+    updated_vaults: Vec<RotatedVaultEntry>,
+) -> Result<(), LocalStoreError> {
+    // Rotation must be for the currently active user.
+    let cfg = read_config(&app)?;
+    let active = cfg.active_username.as_deref().unwrap_or("default");
+    if new_profile.username != active {
+        return Err(LocalStoreError::InvalidUsername(new_profile.username.clone()));
+    }
+    validate_username(&new_profile.username)?;
+
+    // Build new vault index by patching in the re-encrypted title/note fields.
+    let mut index = read_index(&app)?;
+    for entry in &updated_vaults {
+        if let Some(v) = index.vaults.iter_mut().find(|v| v.id == entry.id) {
+            v.title_encrypted = entry.title_encrypted.clone();
+            // `None` = don't touch; `Some("")` = clear note; `Some(ct)` = update.
+            if let Some(ref note) = entry.vault_note_encrypted {
+                v.vault_note_encrypted = if note.is_empty() { None } else { Some(note.clone()) };
+            }
+        }
+    }
+
+    // Paths for the two real files.
+    let prof_path = profile_path_for(&app, &new_profile.username)?;
+    let idx_path = index_path(&app)?;
+
+    // Temp paths — never picked up by list_local_profiles (not *.json).
+    let prof_new = PathBuf::from(format!("{}.rotation-new", prof_path.to_string_lossy()));
+    let idx_new = PathBuf::from(format!("{}.rotation-new", idx_path.to_string_lossy()));
+
+    // Write both new values to temp files first.
+    let prof_data = serde_json::to_vec_pretty(&new_profile)?;
+    if let Err(e) = fs::write(&prof_new, &prof_data) {
+        let _ = fs::remove_file(&prof_new);
+        return Err(e.into());
+    }
+
+    let idx_data = serde_json::to_vec_pretty(&index)?;
+    if let Err(e) = fs::write(&idx_new, &idx_data) {
+        let _ = fs::remove_file(&prof_new);
+        let _ = fs::remove_file(&idx_new);
+        return Err(e.into());
+    }
+
+    // Commit 1: rename the new profile (new password is now active).
+    if let Err(e) = fs::rename(&prof_new, &prof_path) {
+        let _ = fs::remove_file(&prof_new);
+        let _ = fs::remove_file(&idx_new);
+        return Err(e.into());
+    }
+
+    // Commit 2: rename the new vault index.
+    // If this fails the *.rotation-new file is left so recovery can apply it.
+    if let Err(e) = fs::rename(&idx_new, &idx_path) {
+        return Err(e.into());
+    }
+
+    Ok(())
 }

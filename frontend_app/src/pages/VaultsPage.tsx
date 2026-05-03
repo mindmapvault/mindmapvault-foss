@@ -1130,6 +1130,15 @@ export function VaultsPage() {
             <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end sm:gap-3">
               <span className="hidden text-sm text-slate-400 sm:inline">{username}</span>
               <ThemePanel />
+              {isLocalMode && (
+                <button
+                  onClick={() => navigate('/change-password')}
+                  title="Change your local password"
+                  className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-300 transition hover:border-slate-500 hover:text-white sm:py-1.5"
+                >
+                  Change password
+                </button>
+              )}
               <button
                 onClick={logout}
                 title={isLocalMode ? 'Lock this local profile' : 'Log out'}

@@ -8,38 +8,18 @@ import type {
 } from '../types';
 import { api, ApiError } from './client';
 
+function offlineOnly(path: string): never {
+  throw new ApiError(501, `Server API disabled in FOSS offline mode: ${path}`, 'offline_only');
+}
+
 async function uploadPresigned(url: string, body: Uint8Array, headers: Record<string, string> = {}): Promise<string | null> {
-  const payload = body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer;
-  if (url.startsWith('/')) {
-    const contentType = headers['Content-Type'] ?? headers['content-type'] ?? 'application/octet-stream';
-    const response = await api.postBytes<{ version_id: string }>(url, payload, contentType, headers);
-    return response.version_id ?? null;
-  }
-
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers,
-    body: payload,
-  });
-
-  if (!res.ok) {
-    throw new ApiError(res.status, `Upload failed: ${res.status} ${res.statusText}`);
-  }
-
-  return res.headers.get('x-amz-version-id') ?? res.headers.get('X-Amz-Version-Id');
+  void body;
+  void headers;
+  return Promise.reject(offlineOnly(url));
 }
 
 async function downloadUrl(url: string): Promise<Uint8Array> {
-  if (url.startsWith('/api/')) {
-    return api.getBytes(url);
-  }
-
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new ApiError(res.status, `Download failed: ${res.status} ${res.statusText}`);
-  }
-
-  return new Uint8Array(await res.arrayBuffer());
+  return Promise.reject(offlineOnly(url));
 }
 
 export const encryptedVaultApi = {

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "contractName": "mindmapvault-offline-frontend-contract",
+  "lastUpdated": "2026-05-03",
+  "offlineCoreCapabilities": [
+    "create-edit-delete-mindmaps",
+    "encrypted-local-vault-storage",
+    "encrypted-title-and-note-metadata",
+    "local-unlock-session-flow",
+    "undo-redo-history",
+    "local-search-and-filter",
+    "import-export-markdown-json-png-svg",
+    "keyboard-shortcuts-and-command-palette",
+    "tags-and-local-metadata",
+    "offline-startup-without-network",
+    "local-profile-management",
+    "local-recovery-and-version-history"
+  ],
+  "localOnlyGuarantees": [
+    "no-telemetry",
+    "no-hidden-api-calls",
+    "no-plaintext-secret-logging",
+    "client-side-key-derivation",
+    "no-required-cloud-account"
+  ],
+  "mustNotRequireServer": [
+    "auth-for-core-editing",
+    "remote-blob-upload-for-save",
+    "network-connectivity-for-open-edit-export",
+    "server-availability-for-core-editor-startup"
+  ]
+}

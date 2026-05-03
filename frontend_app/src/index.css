@@ -91,35 +91,6 @@
 .light .hover\:bg-red-900\/30:hover         { background-color: #fee2e2     !important; }
 .light .hover\:text-red-400:hover           { color: #dc2626                !important; }
 
-.light .subscription-dialog                 { background: rgba(248, 250, 252, 0.72) !important; }
-.light .subscription-dialog__panel          {
-  background: linear-gradient(180deg, #ffffff, #f8fafc) !important;
-  border-color: var(--border-light) !important;
-  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.16) !important;
-}
-.light .subscription-dialog__hero           {
-  background: radial-gradient(circle at top left, rgba(14, 165, 233, 0.12), transparent 42%), linear-gradient(180deg, #ffffff, #f8fafc) !important;
-  border-color: var(--border) !important;
-}
-.light .subscription-dialog__body           {
-  background: linear-gradient(180deg, #f8fafc, #f1f5f9) !important;
-}
-.light .subscription-dialog__pill           {
-  background: rgba(16, 185, 129, 0.08) !important;
-  border-color: rgba(16, 185, 129, 0.28) !important;
-  color: #047857 !important;
-}
-.light .subscription-dialog__close          {
-  background: #ffffff !important;
-  border-color: var(--border-light) !important;
-  color: var(--text-secondary) !important;
-}
-.light .subscription-dialog__stat,
-.light .subscription-dialog__section        {
-  background: rgba(255, 255, 255, 0.88) !important;
-  border-color: var(--border) !important;
-}
-
 .light .confirm-dialog                       { background: rgba(248, 250, 252, 0.74) !important; }
 .light .confirm-dialog__panel               {
   background: linear-gradient(180deg, #ffffff, #f8fafc) !important;

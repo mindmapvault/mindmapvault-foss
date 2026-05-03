@@ -14,6 +14,28 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Validation
 
+## [0.3.20] - 2026-05-03
+
+### Added
+- Added FOSS SaaS residue guard script: `scripts/check_foss_saas_residue.mjs`.
+- Extended frontend offline parity check to invoke FOSS residue guard automatically.
+- Added a desktop `Inspect` menu entry with `CmdOrCtrl+Shift+I` so packaged FOSS builds can open WebView devtools for network and privacy inspection.
+
+### Changed
+- Hardened FOSS API layer to offline-only behavior by removing live server HTTP request paths from:
+  - `frontend_app/src/api/client.ts`
+  - `frontend_app/src/api/encryptedVault.ts`
+- FOSS now fails checks if server/SaaS residue patterns are detected in frontend source.
+- Enabled the Tauri `devtools` feature for desktop release builds and bumped the FOSS release to `0.3.20` / `0.3.20-oss`.
+
+### Removed
+
+### Validation
+- `cargo check` in `desktop/src-tauri`
+- `node scripts/check_foss_saas_residue.mjs`
+- `node scripts/check_frontend_offline_parity.mjs`
+- `pnpm --dir frontend_app build`
+
 ## [0.3.19] - 2026-05-01
 
 ### Fixed

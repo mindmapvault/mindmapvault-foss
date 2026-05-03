@@ -1,0 +1,4 @@
+# Optional allowlist for offline parity scanner
+# One path prefix per line, relative to frontend_app/src/
+# Example:
+# features/demo/

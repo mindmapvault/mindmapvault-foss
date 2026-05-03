@@ -49,8 +49,8 @@ High-level flow:
 
 Related technical notes:
 
-- notes/LOCAL_STORAGE_AND_PROFILES.md
-- notes/PROJECT_STRUCTURE_AND_BUILD.md
+- docs/LOCAL_STORAGE_AND_PROFILES.md
+- docs/PROJECT_STRUCTURE_AND_BUILD.md
 
 ## Security Documentation
 
@@ -98,6 +98,8 @@ Repository checks:
 
 ```bash
 node scripts/version-check.js
+node scripts/check_foss_saas_residue.mjs
+node scripts/check_frontend_offline_parity.mjs
 ```
 
 Workflow-style checks on Windows:

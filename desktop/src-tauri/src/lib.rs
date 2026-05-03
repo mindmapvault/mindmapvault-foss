@@ -8,9 +8,37 @@ use local_store::{
     save_local_vault, save_local_vault_blob, set_active_user, set_local_storage_dir,
     update_local_vault_meta,
 };
+use tauri::{
+    menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
+    Manager,
+};
+
+const OPEN_WEBVIEW_DEVTOOLS_MENU_ID: &str = "open-webview-devtools";
 
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            let inspect_menu = SubmenuBuilder::new(app, "Inspect")
+                .item(
+                    &MenuItemBuilder::with_id(
+                        OPEN_WEBVIEW_DEVTOOLS_MENU_ID,
+                        "Open WebView Devtools",
+                    )
+                    .accelerator("CmdOrCtrl+Shift+I")
+                    .build(app)?,
+                )
+                .build()?;
+            let menu = MenuBuilder::new(app).item(&inspect_menu).build()?;
+            app.set_menu(menu)?;
+            Ok(())
+        })
+        .on_menu_event(|app, event| {
+            if event.id() == OPEN_WEBVIEW_DEVTOOLS_MENU_ID {
+                if let Some(main_window) = app.get_webview_window("main") {
+                    main_window.open_devtools();
+                }
+            }
+        })
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())

@@ -97,29 +97,6 @@ export interface StorageSummary {
   attachment_count?: number;
   attachment_bytes?: number;
   free_tier_bytes: number;
-  plan_tier?: 'free' | 'paid';
-  plan_limit_bytes?: number;
-}
-
-export interface SubscriptionSummaryResponse {
-  subscription_tier: 'free' | 'paid';
-  storage_limit_bytes: number;
-  plan_source: string;
-  manual_override_active: boolean;
-  stripe_subscription_status?: string;
-  subscription_current_period_end?: string;
-}
-
-export interface AccountCapabilitiesResponse {
-  plan_tier: 'free' | 'paid';
-  storage_limit_bytes: number;
-  max_attachment_size_bytes: number;
-  max_active_shares: number;
-  can_create_public_shares: boolean;
-  can_include_attachments_in_shares: boolean;
-  can_use_plaintext_collaboration: boolean;
-  can_export_large_maps: boolean;
-  can_use_admin_controls: boolean;
 }
 
 export interface UserAccountSettings {
@@ -165,7 +142,6 @@ export interface UserNotificationSettings {
   share_created: boolean;
   share_revoked: boolean;
   attachment_upload_failures: boolean;
-  billing_notices: boolean;
   security_alerts: boolean;
   admin_messages: boolean;
   collaboration_mentions: boolean;
@@ -184,7 +160,6 @@ export interface UpdateUserNotificationSettingsRequest {
   share_created?: boolean;
   share_revoked?: boolean;
   attachment_upload_failures?: boolean;
-  billing_notices?: boolean;
   security_alerts?: boolean;
   admin_messages?: boolean;
   collaboration_mentions?: boolean;

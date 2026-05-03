@@ -71,8 +71,5 @@ RELEASE_PROCESS.md
 /scripts/*.tmp
 /scripts/*.orig
 
-# Notes to the project
-/notes
-
 # Local copilot instructions
 .github/copilot-instructions.md

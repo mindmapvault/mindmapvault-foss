@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Linux build dependencies
         run: |
@@ -29,17 +29,17 @@ jobs:
             librsvg2-dev \
             patchelf
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: '10.17.1'
-
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '24'
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
+
+      - name: Setup pnpm (Corepack)
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.17.1 --activate
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -71,25 +71,14 @@ jobs:
           CHECKSUM_PATH='${{ steps.linux_paths.outputs.appimage_checksum_path }}'
           sha256sum "$APPIMAGE_PATH" > "$CHECKSUM_PATH"
 
-      - name: Upload Linux AppImage to release
-        uses: actions/upload-release-asset@v1
+      - name: Upload Linux artifacts to release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ steps.linux_paths.outputs.appimage_path }}
-          asset_name: MindMapVault-Linux.AppImage
-          asset_content_type: application/octet-stream
-
-      - name: Upload Linux checksum to release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ steps.linux_paths.outputs.appimage_checksum_path }}
-          asset_name: MindMapVault-Linux.AppImage.sha256
-          asset_content_type: text/plain
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload '${{ github.event.release.tag_name }}' \
+            '${{ steps.linux_paths.outputs.appimage_path }}#MindMapVault-Linux.AppImage' \
+            '${{ steps.linux_paths.outputs.appimage_checksum_path }}#MindMapVault-Linux.AppImage.sha256' \
+            --clobber
 
 
   desktop-windows:
@@ -98,19 +87,20 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: '10.17.1'
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '24'
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
+
+      - name: Setup pnpm (Corepack)
+        shell: powershell
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.17.1 --activate
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -144,22 +134,12 @@ jobs:
           $hash = (Get-FileHash -Path $exePath -Algorithm SHA256).Hash.ToLower()
           "$hash  $(Split-Path -Path $exePath -Leaf)" | Out-File -FilePath $checksumPath -Encoding ascii
 
-      - name: Upload Windows EXE to release
-        uses: actions/upload-release-asset@v1
+      - name: Upload Windows artifacts to release
+        shell: powershell
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ steps.win_paths.outputs.exe_path }}
-          asset_name: MindMapVault-Windows.exe
-          asset_content_type: application/octet-stream
-
-      - name: Upload Windows checksum to release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ steps.win_paths.outputs.exe_checksum_path }}
-          asset_name: MindMapVault-Windows.exe.sha256
-          asset_content_type: text/plain
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload '${{ github.event.release.tag_name }}' `
+            '${{ steps.win_paths.outputs.exe_path }}#MindMapVault-Windows.exe' `
+            '${{ steps.win_paths.outputs.exe_checksum_path }}#MindMapVault-Windows.exe.sha256' `
+            --clobber

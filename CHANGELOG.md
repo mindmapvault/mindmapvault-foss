@@ -9,6 +9,11 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ### Added
 
 ### Changed
+- **CI / Release Automation** — Updated `.github/workflows/desktop-build.yml` to modern action/runtime setup for desktop release builds:
+  - Upgraded `actions/checkout` to `v5` and `actions/setup-node` to `v5`.
+  - Replaced `pnpm/action-setup` with Corepack (`corepack prepare pnpm@10.17.1 --activate`) to reduce Node runtime deprecation noise.
+  - Replaced deprecated `actions/upload-release-asset@v1` uploads with `gh release upload ... --clobber` for Linux and Windows artifacts.
+  - Kept `$GITHUB_OUTPUT` usage for step outputs (no deprecated `set-output` command usage).
 
 ### Removed
 
@@ -19,6 +24,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ### Changed
 - **Desktop UX / Branding** — Updated local unlock screen messaging to make product scope explicit: `MindMapVault FOSS` and `Local-only desktop edition (no cloud)`.
 - **Desktop Badge Reliability** — Replaced the remote Tauri badge image URL with a local inline SVG in `DesktopTauriBadge.tsx`, removing CSP-blocked external image fetches and ensuring the badge icon renders offline.
+- **Desktop Badge UX** — Restored the official Tauri logo in the login badge using a bundled local asset (`frontend_app/public/tauri-logo.png`) to keep CSP compatibility while preserving expected branding.
 - **Desktop Packaging Labeling** — Updated desktop product/window naming in `desktop/src-tauri/tauri.conf.json` to clearly identify the app as the FOSS local-only edition in app/install surfaces.
 - **CSP Compatibility** — Expanded `connect-src` in `desktop/src-tauri/tauri.conf.json` to include `http://tauri.localhost` and `https://tauri.localhost`, preventing blocked WebView/devtools metadata requests while preserving restrictive CSP defaults.
 - **WASM Runtime Compatibility** — Updated desktop CSP `script-src` to allow WebAssembly compilation used by local crypto paths (`'wasm-unsafe-eval'` and `'unsafe-eval'`), resolving local profile creation failures caused by blocked `WebAssembly.compile()`.

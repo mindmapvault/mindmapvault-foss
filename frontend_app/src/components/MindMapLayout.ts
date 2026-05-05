@@ -20,6 +20,7 @@ import {
   TOP_META_STRIP_H,
   DATE_BADGE_OFFSET_H,
   CHECKBOX_SIZE,
+  ICON_SIZE,
   PROGRESS_PIE_SIZE,
 } from './MindMapConstants';
 import { getVisibleNodeTextLines } from '../utils/nodeAttachments';
@@ -44,7 +45,7 @@ export const measureText = (text: string, fontSize = 14): number => {
 export const measureNodeSize = (
   text: string,
   linkId: string | null,
-  _iconCount: number,
+  iconCount: number,
   hasCheckbox: boolean,
   urlCount: number,
   hasProgress: boolean,
@@ -58,6 +59,7 @@ export const measureNodeSize = (
   const maxW = Math.max(...lines.map((l) => measureText(l || ' ')), linkW, urlW);
   const extraLeft =
     (hasCheckbox ? CHECKBOX_SIZE + 6 : 0) +
+    (iconCount > 0 ? (ICON_SIZE + 4) * iconCount + 2 : 0) +
     (hasProgress ? PROGRESS_PIE_SIZE + 6 : 0);
   const w = Math.max(MIN_W, maxW + NODE_PAD_X * 2 + extraLeft);
   const baseH = Math.max(NODE_MIN_H, lines.length * NODE_LINE_H + NODE_PAD_Y * 2);
@@ -92,7 +94,7 @@ export const layoutTree = (
   // First pass: compute subtree heights (bottom-up)
   const computeHeight = (node: MindMapTreeNode): number => {
     const linkId = node.link?.id || null;
-    const iconCount = 0;
+    const iconCount = Array.isArray(node.icons) ? node.icons.length : 0;
     const hasCheckbox = node.checked != null;
     const urlCount = Array.isArray(node.urls) ? node.urls.length : 0;
     const hasProgress = node.progress != null;

@@ -80,7 +80,7 @@ interface DragState {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export function DesktopMindMapEditor({
-  initialTree, externalNodeAttachments, title, onSave, onTitleChange, saving, saveMsg, error, onBack,
+  initialTree, initialShowShortcuts, disableAutoPanToSelection, externalNodeAttachments, title, onSave, onTitleChange, saving, saveMsg, error, onBack,
   onExportMarkdown, titleChanged, onRenameTitle, renamingTitle,
   versionLabel, versionTooltip,
   onTreeChange, onSelectionChange, onNodeFileDrop, onOpenNodeAttachment,
@@ -133,9 +133,10 @@ export function DesktopMindMapEditor({
   });
   const isPanning = useRef(false);
   const lastPan = useRef({ x: 0, y: 0 });
+  const skipNextAutoPan = useRef(false);
 
   // ── UI toggles ─────────────────────────────────────────────────────────────
-  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(() => Boolean(initialShowShortcuts));
   const [shortcutsPos, setShortcutsPos] = useState<{ x: number; y: number } | null>(null);
   const scDragRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -337,6 +338,7 @@ export function DesktopMindMapEditor({
     setZoom(nextZoom);
     setFocusMode(Boolean(savedView?.focus_mode));
     setFocusAnchorId(nextFocusAnchor);
+    skipNextAutoPan.current = true;
     setIsDirty(false);
   }, [initialTree]);
 
@@ -1086,6 +1088,11 @@ export function DesktopMindMapEditor({
 
   // ── Auto-pan to selected node ─────────────────────────────────────────────
   useLayoutEffect(() => {
+    if (disableAutoPanToSelection) return;
+    if (skipNextAutoPan.current) {
+      skipNextAutoPan.current = false;
+      return;
+    }
     const box = layout[selectedId];
     if (!box || !containerRef.current) return;
     const { width, height } = containerRef.current.getBoundingClientRect();
@@ -1100,7 +1107,7 @@ export function DesktopMindMapEditor({
     if (top < 60 + margin) dy = (60 + margin) - top;
     else if (bottom > height - margin) dy = (height - margin) - bottom;
     if (dx !== 0 || dy !== 0) setPan({ x: pan.x + dx, y: pan.y + dy });
-  }, [selectedId, layout]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [disableAutoPanToSelection, selectedId, layout]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Save handler ──────────────────────────────────────────────────────────
   const handleSave = useCallback(() => {
@@ -1417,6 +1424,30 @@ export function DesktopMindMapEditor({
     lastPan.current = { x: e.clientX, y: e.clientY };
     setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
   }, [zoom, layout, rectSel, pan, multiSelect]);
+
+  const onTouchStartSvg = useCallback((e: React.TouchEvent<SVGSVGElement>) => {
+    if (e.touches.length !== 1) return;
+    if ((e.target as SVGElement).closest('[data-node]')) return;
+    const touch = e.touches[0];
+    isPanning.current = true;
+    lastPan.current = { x: touch.clientX, y: touch.clientY };
+    setContextMenu(null);
+    setMultiSelect(new Set());
+  }, []);
+
+  const onTouchMoveSvg = useCallback((e: React.TouchEvent<SVGSVGElement>) => {
+    if (!isPanning.current || e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - lastPan.current.x;
+    const dy = touch.clientY - lastPan.current.y;
+    lastPan.current = { x: touch.clientX, y: touch.clientY };
+    setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
+  }, []);
+
+  const onTouchEndSvg = useCallback(() => {
+    isPanning.current = false;
+    if (svgRef.current) svgRef.current.style.cursor = '';
+  }, []);
 
   const getNodeIdAtClientPoint = useCallback((clientX: number, clientY: number): string | null => {
     const rect = svgRef.current?.getBoundingClientRect();
@@ -2172,6 +2203,7 @@ export function DesktopMindMapEditor({
       {/* ── Canvas ──────────────────────────────────────────────────── */}
       <div className="mm-canvas-wrap">
         <svg ref={svgRef} className="mm-canvas" onWheel={onWheel} onMouseDown={onMouseDownSvg} onMouseMove={onMouseMoveSvg} onMouseUp={onMouseUpSvg} onMouseLeave={onMouseUpSvg}
+          onTouchStart={onTouchStartSvg} onTouchMove={onTouchMoveSvg} onTouchEnd={onTouchEndSvg} onTouchCancel={onTouchEndSvg}
           onDragOver={onDragOverSvg} onDragLeave={onDragLeaveSvg} onDrop={(e) => { void onDropSvg(e); }}
           onClick={() => { setShowColorPicker(false); setContextMenu(null); }}>
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>

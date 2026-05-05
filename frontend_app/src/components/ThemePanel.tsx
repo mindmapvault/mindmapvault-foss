@@ -30,6 +30,7 @@ export function ThemePanel() {
   const [open, setOpen] = useState(false);
   const [legalDocument, setLegalDocument] = useState<LegalDocument | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const isMobilePanel = typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches;
   const appVersion = `v${String(packageJson.version ?? 'dev')}`;
 
   const autosaveOptions: Array<{ value: AutosaveMode; label: string }> = [
@@ -41,11 +42,15 @@ export function ThemePanel() {
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    const handler = (event: Event) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
     };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('touchstart', handler);
+    };
   }, [open]);
 
   useEffect(() => {
@@ -72,7 +77,7 @@ export function ThemePanel() {
       {/* Panel */}
       {open && (
         <div
-          className="absolute right-0 top-10 z-50 max-h-[calc(100vh-6rem)] w-64 overflow-y-auto rounded-xl p-4 shadow-2xl"
+          className={`${isMobilePanel ? 'fixed right-2 top-16 left-2 w-auto' : 'absolute right-0 top-10 w-64'} z-[1400] max-h-[calc(100vh-6rem)] overflow-y-auto rounded-xl p-4 shadow-2xl`}
           style={{ background: 'var(--surface-1)', border: '1px solid var(--border)' }}
         >
           {/* Mode toggle */}

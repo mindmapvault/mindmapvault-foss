@@ -15,22 +15,23 @@ export function LegalDocumentDialog({ document, onClose }: Props) {
   const [html, setHtml] = useState('');
 
   const meta = useMemo(() => {
+    const withBase = (name: string) => `${import.meta.env.BASE_URL}${name}`;
     if (document === 'privacy') {
       return {
         title: 'MindMapVault Privacy & GDPR Notice',
-        path: '/PRIVACY.md',
+        path: withBase('PRIVACY.md'),
       };
     }
     if (document === 'terms') {
       return {
         title: 'MindMapVault Terms of Service',
-        path: '/TERMS.md',
+        path: withBase('TERMS.md'),
       };
     }
     if (document === 'credits') {
       return {
         title: 'Credits and acknowledgements',
-        path: '/CREDITS.md',
+        path: withBase('CREDITS.md'),
       };
     }
     return null;

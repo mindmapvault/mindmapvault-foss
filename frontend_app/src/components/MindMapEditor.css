@@ -840,6 +840,7 @@
   flex: 1;
   position: relative;
   overflow: hidden;
+  touch-action: none;
 }
 
 .mm-canvas {
@@ -848,6 +849,7 @@
   background: var(--mm-canvas-bg);
   cursor: grab;
   display: block;
+  touch-action: none;
 }
 .mm-canvas:active { cursor: grabbing; }
 

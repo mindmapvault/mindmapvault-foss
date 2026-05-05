@@ -2,6 +2,8 @@ import type { MindMapTree, NodeAttachmentRef } from '../types';
 
 export interface MindMapEditorProps {
   initialTree: MindMapTree | null;
+  initialShowShortcuts?: boolean;
+  disableAutoPanToSelection?: boolean;
   externalNodeAttachments?: Record<string, NodeAttachmentRef[]>;
   title: string;
   onSave: (tree: MindMapTree, title: string) => Promise<void>;

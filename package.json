@@ -5,6 +5,9 @@
   "scripts": {
     "dev:app": "pnpm --dir frontend_app dev",
     "build:app": "pnpm --dir frontend_app build",
+    "dev:demo": "pnpm --dir demo dev",
+    "build:demo": "pnpm --dir demo build",
+    "build:demo:pages": "pnpm --dir demo build:pages",
     "tauri:dev": "pnpm --dir frontend_app tauri:dev",
     "tauri:build": "pnpm --dir frontend_app tauri:build"
   }

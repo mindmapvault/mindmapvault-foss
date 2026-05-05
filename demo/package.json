@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "build:pages": "vite build --outDir ../docs/demo",
+    "build:pages": "vite build --mode pages --outDir ../docs/demo --emptyOutDir",
     "preview": "vite preview"
   },
   "dependencies": {

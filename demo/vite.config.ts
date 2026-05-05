@@ -2,9 +2,9 @@ import path from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
-  base: '/demo/',
+  base: command === 'serve' ? '/demo/' : './',
   server: {
     host: '127.0.0.1',
     port: 5275,
@@ -23,4 +23,4 @@ export default defineConfig({
     target: 'esnext',
     chunkSizeWarningLimit: 1500,
   },
-});
+}));

@@ -1,6 +1,0 @@
-import{c}from"./createLucideIcon-DCb717Ky.js";import"./index-DkW46PW4.js";/**
- * @license lucide-react v1.14.0 - ISC
- *
- * This source code is licensed under the ISC license.
- * See the LICENSE file in the root directory of this source tree.
- */const e=[["path",{d:"M17.925 20.056a6 6 0 0 0-11.851.001",key:"z69sun"}],["circle",{cx:"12",cy:"11",r:"4",key:"1gt34v"}],["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}]],t=c("circle-user-round",e);export{e as __iconNode,t as default};

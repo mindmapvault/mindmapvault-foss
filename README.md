@@ -1,5 +1,7 @@
 # MindMapVault FOSS
 
+> **Quick download:** Prebuilt Windows and Linux desktop artifacts are published in the repository Releases section.
+
 MindMapVault FOSS is a local-first, privacy-focused desktop mind-mapping application.
 
 All core functionality works offline, all data stays on the device, and the repository contains no cloud code, no telemetry, and no external service dependencies.
@@ -61,6 +63,30 @@ Read these together:
 
 ## Getting Started
 
+One-command setup (Windows PowerShell):
+
+```powershell
+.\scripts\setup-desktop.ps1
+```
+
+One-command setup (Linux/macOS/WSL shell):
+
+```bash
+bash scripts/setup-desktop.sh
+```
+
+Optional modes:
+
+```powershell
+.\scripts\setup-desktop.ps1 -Mode dev
+.\scripts\setup-desktop.ps1 -Mode build
+```
+
+```bash
+bash scripts/setup-desktop.sh dev
+bash scripts/setup-desktop.sh build
+```
+
 Prerequisites:
 
 - Node.js 20+
@@ -68,16 +94,31 @@ Prerequisites:
 - Rust stable toolchain
 - platform prerequisites required by Tauri
 
-Install dependencies:
+Check prerequisites in one go:
 
-```bash
-pnpm install
+```powershell
+node -v
+pnpm -v
+rustc -V
+cargo -V
 ```
 
-Build frontend:
+Install dependencies (recommended for first run):
+
+```bash
+pnpm --dir frontend_app install
+```
+
+Build frontend (sanity check):
 
 ```bash
 pnpm --dir frontend_app build
+```
+
+Validate Tauri toolchain:
+
+```bash
+pnpm --dir frontend_app tauri info
 ```
 
 Run desktop app (development):
@@ -91,6 +132,24 @@ Build desktop artifacts:
 ```bash
 pnpm --dir frontend_app tauri:build
 ```
+
+Windows setup notes for non-power users:
+
+- Run commands from the repository root folder (the folder containing frontend_app and desktop).
+- If install fails with EACCES in node_modules (often around fsevents on Windows), clean and reinstall:
+
+```powershell
+Remove-Item -Recurse -Force node_modules
+pnpm --dir frontend_app install
+```
+
+- If pnpm warns that build scripts were ignored, run:
+
+```powershell
+pnpm approve-builds
+```
+
+Then retry the previous install/build command.
 
 ## Validation
 

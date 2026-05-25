@@ -30,29 +30,89 @@ This document explains how the repository is organized and how to build the desk
 
 ## Build Commands
 
-Install dependencies:
+One-command setup (Windows PowerShell):
 
-```bash
-pnpm install
+```powershell
+.\scripts\setup-desktop.ps1
 ```
 
-Build frontend:
+One-command setup (Linux/macOS/WSL shell):
+
+```bash
+bash scripts/setup-desktop.sh
+```
+
+Optional modes:
+
+```powershell
+.\scripts\setup-desktop.ps1 -Mode dev
+.\scripts\setup-desktop.ps1 -Mode build
+```
+
+```bash
+bash scripts/setup-desktop.sh dev
+bash scripts/setup-desktop.sh build
+```
+
+These scripts check prerequisites, install dependencies (with one automatic clean reinstall retry), build the frontend, and validate Tauri.
+
+Run these from the repository root.
+
+1. Check toolchain:
+
+```powershell
+node -v
+pnpm -v
+rustc -V
+cargo -V
+```
+
+2. Install dependencies:
+
+```bash
+pnpm --dir frontend_app install
+```
+
+3. Build frontend:
 
 ```bash
 pnpm --dir frontend_app build
 ```
 
-Run desktop app in development:
+4. Validate Tauri environment:
 
 ```bash
-pnpm run tauri:dev
+pnpm --dir frontend_app tauri info
 ```
 
-Build desktop bundles:
+5. Run desktop app in development:
 
 ```bash
-pnpm run tauri:build
+pnpm --dir frontend_app tauri:dev
 ```
+
+6. Build desktop bundles:
+
+```bash
+pnpm --dir frontend_app tauri:build
+```
+
+## Common Windows Recovery Steps
+
+If dependency install fails with an EACCES error under node_modules:
+
+```powershell
+Remove-Item -Recurse -Force node_modules
+pnpm --dir frontend_app install
+```
+
+If pnpm reports ignored build scripts (for example esbuild), run:
+
+```powershell
+pnpm approve-builds
+```
+
+Then retry the failed command.
 
 ## Desktop Outputs
 

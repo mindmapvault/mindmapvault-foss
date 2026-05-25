@@ -6,6 +6,15 @@ MindMapVault FOSS is a local-first, privacy-focused desktop mind-mapping applica
 
 All core functionality works offline, all data stays on the device, and the repository contains no cloud code, no telemetry, and no external service dependencies.
 
+## UI Preview
+
+[![MindMapVault product preview](docs/assets/hero-preview.png)](https://www.mindmapvault.com/)
+
+
+## Demo
+
+Interactive demo: https://mindmapvault.github.io/mindmapvault-foss/demo/
+
 ## Why This Project
 
 MindMapVault FOSS exists as an auditable desktop implementation with a clear privacy posture.

@@ -22,5 +22,10 @@ export default defineConfig(({ command }) => ({
   build: {
     target: 'esnext',
     chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        inlineDynamicImports: true,
+      },
+    },
   },
 }));

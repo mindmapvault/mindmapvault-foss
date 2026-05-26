@@ -78,6 +78,24 @@
   border-color: var(--accent);
 }
 
+.demo-github-link {
+  text-decoration: none;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border-muted));
+}
+
+.demo-github-link:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.demo-github-stars {
+  display: block;
+  height: 1.05rem;
+  width: auto;
+  border-radius: 999px;
+}
+
 .demo-theme-toggle {
   display: inline-flex;
   align-items: center;

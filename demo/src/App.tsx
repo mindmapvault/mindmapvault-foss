@@ -420,6 +420,25 @@ export default function App() {
           <p>Interactive canvas only. No account, no backend, all draft state in this browser.</p>
         </div>
         <div className="demo-actions">
+          <a
+            className="demo-reset demo-github-link"
+            href="https://github.com/mindmapvault/mindmapvault-foss"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Open MindMapVault FOSS on GitHub"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 2C6.48 2 2 6.58 2 12.23c0 4.52 2.87 8.35 6.84 9.71.5.1.68-.22.68-.49 0-.24-.01-1.04-.01-1.89-2.78.62-3.37-1.21-3.37-1.21-.45-1.19-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.05 1.53 1.05.9 1.57 2.35 1.12 2.92.86.09-.66.35-1.12.63-1.38-2.22-.26-4.55-1.14-4.55-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.31.1-2.72 0 0 .84-.27 2.75 1.05A9.32 9.32 0 0 1 12 6.92c.85 0 1.71.12 2.51.36 1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.46.1 2.72.64.72 1.03 1.63 1.03 2.75 0 3.93-2.33 4.8-4.56 5.05.36.32.67.95.67 1.93 0 1.39-.01 2.51-.01 2.85 0 .27.18.59.69.49A10.27 10.27 0 0 0 22 12.23C22 6.58 17.52 2 12 2z" />
+            </svg>
+            <span className="demo-btn-label">GitHub</span>
+            <img
+              className="demo-github-stars"
+              src="https://img.shields.io/github/stars/mindmapvault/mindmapvault-foss?style=flat&label=stars&color=7C3AED&labelColor=1f2937"
+              alt="MindMapVault FOSS GitHub stars"
+              loading="lazy"
+              decoding="async"
+            />
+          </a>
           <button type="button" onClick={() => setMode(mode === 'dark' ? 'light' : 'dark')} className="demo-reset demo-theme-toggle">
             {mode === 'dark' ? (
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">

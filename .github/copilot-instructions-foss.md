@@ -12,6 +12,32 @@ MindMapVault FOSS is:
 
 Copilot should generate code and suggestions that respect this scope.
 
+## Connector Capability Key Naming (Canonical)
+
+Copilot must use one canonical naming set for connector capability keys across all MindMapVault repos.
+
+Feature keys for `features.hasFeature(feature)`:
+
+- `realtime-collaboration`
+- `cloud-version-history`
+- `public-share-links`
+- `billing-upgrade`
+- `admin-controls`
+
+Billing keys for `billing.isFeatureEnabled(feature)`:
+
+- `large-exports`
+- `advanced-attachments`
+- `team-collaboration`
+- `admin-controls`
+
+Rules:
+
+- Do not invent aliases or alternate spellings for these keys.
+- Unsupported capabilities must return `false`, not throw.
+- UI gating in shared surfaces must use connector capability keys, not product-name checks.
+- Any key rename must be done in one coordinated change across FOSS, Server, SaaS, and docs.
+
 ## Core Principles for Copilot
 1. Local‑only behavior
 Copilot must not suggest:

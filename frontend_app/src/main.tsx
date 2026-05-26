@@ -2,6 +2,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App';
+import { ConnectorProvider } from './app-core/connectors/provider';
+import { createConnectorRegistry } from './platform/bootstrap';
+
+const connectorRegistry = createConnectorRegistry();
 
 // Apply persisted theme synchronously before first render to avoid flash.
 (function applyStoredTheme() {
@@ -23,6 +27,8 @@ import App from './App';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ConnectorProvider registry={connectorRegistry}>
+      <App />
+    </ConnectorProvider>
   </StrictMode>,
 );

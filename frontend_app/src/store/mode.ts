@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type AppMode = 'local' | null;
+export type AppMode = 'local';
 
 interface ModeState {
-  /** null = not yet chosen (show mode selection page) */
+  /** FOSS is local-only by product contract. */
   mode: AppMode;
   setMode: (mode: AppMode) => void;
   clearMode: () => void;
@@ -14,7 +14,7 @@ export const useModeStore = create<ModeState>()(
   persist(
     (set) => ({
       mode: 'local',
-      setMode: (mode) => set({ mode }),
+      setMode: () => set({ mode: 'local' }),
       clearMode: () => set({ mode: 'local' }),
     }),
     { name: 'mindmapvault-mode' },

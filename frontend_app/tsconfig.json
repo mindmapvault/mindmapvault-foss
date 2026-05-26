@@ -6,6 +6,10 @@
     "module": "ESNext",
     "skipLibCheck": true,
     "moduleResolution": "bundler",
+    "paths": {
+      "@mindmapvault/connectors": ["../packages/connectors/src/index.ts"],
+      "@mindmapvault/connectors/*": ["../packages/connectors/src/*"]
+    },
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,

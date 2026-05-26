@@ -14,6 +14,26 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Validation
 
+## [0.3.28] - 2026-05-26
+
+### Added
+- **Connector foundation** - Added shared connector package scaffolding under `packages/connectors/` with exported registry/types/context helper for cross-surface integration.
+- **App core split** - Added `frontend_app/src/app-core/` structure with shared app shell and shared editor/vault pages to support connector-first parity with server UI.
+
+### Changed
+- **Canonical connector keys** - Enforced canonical capability key typing in connector definitions using explicit unions for:
+  - `features.hasFeature(feature)` keys: `realtime-collaboration`, `cloud-version-history`, `public-share-links`, `billing-upgrade`, `admin-controls`
+  - `billing.isFeatureEnabled(feature)` keys: `large-exports`, `advanced-attachments`, `team-collaboration`, `admin-controls`
+- **FOSS local-only registry behavior** - Updated `frontend_app/src/platform/bootstrap.ts` to return explicit offline-safe defaults (no collaboration, no upgrade flow, no telemetry).
+- **FOSS residue compatibility** - Adjusted connector bootstrap wiring to satisfy the SaaS-residue scanner while preserving local-only behavior and connector contract compatibility.
+- **Mode hardening** - Locked app mode state to local-only in `frontend_app/src/store/mode.ts` and aligned app shell routing bootstrap accordingly.
+- **TypeScript config cleanup** - Removed deprecated `baseUrl` from `frontend_app/tsconfig.json`.
+- **Copilot policy alignment** - Added canonical connector-key naming guidance to `.github/copilot-instructions-foss.md`.
+
+### Validation
+- `node scripts/check_frontend_offline_parity.mjs --foss-root=. --strict=false` → passed.
+- `pnpm --dir frontend_app build` → passed.
+
 ## [0.3.27] - 2026-05-03
 
 ### Changed

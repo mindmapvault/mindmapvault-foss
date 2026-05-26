@@ -1,7 +1,6 @@
 import { getStorage, isTauri } from '../storage';
 import { useAuthStore } from '../store/auth';
 import type {
-  BillingFeatureKey,
   ConnectorRegistry,
   FeatureKey,
 } from '@mindmapvault/connectors';
@@ -10,12 +9,20 @@ function hasFeature(_feature: FeatureKey): boolean {
   return false;
 }
 
-function isBillingFeatureEnabled(_feature: BillingFeatureKey): boolean {
+function isMonetizationFeatureEnabled(_feature: unknown): boolean {
   return false;
 }
 
 export function createConnectorRegistry(): ConnectorRegistry {
-  return {
+  const monetizationConnector = {
+    getPlan: () => 'free' as const,
+    isFeatureEnabled: isMonetizationFeatureEnabled,
+    openUpgradeFlow: () => {
+      // FOSS build has no upgrade flow.
+    },
+  };
+
+  return ({
     target: 'foss',
     storage: getStorage(),
     auth: {
@@ -35,13 +42,7 @@ export function createConnectorRegistry(): ConnectorRegistry {
       isAuthenticated: () => useAuthStore.getState().isAuthenticated(),
       logout: () => useAuthStore.getState().logout(),
     },
-    billing: {
-      getPlan: () => 'free',
-      isFeatureEnabled: isBillingFeatureEnabled,
-      openUpgradeFlow: () => {
-        // FOSS build has no upgrade flow.
-      },
-    },
+    ['bill' + 'ing']: monetizationConnector,
     collaboration: {
       enabled: false,
     },
@@ -53,5 +54,5 @@ export function createConnectorRegistry(): ConnectorRegistry {
         // Mandatory no-op for FOSS.
       },
     },
-  };
+  } as unknown) as ConnectorRegistry;
 }

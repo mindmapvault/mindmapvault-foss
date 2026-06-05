@@ -14,6 +14,7 @@ export interface MindMapEditorProps {
   onBack?: () => void;
   onShowHistory?: () => void;
   onExportMarkdown?: (tree: MindMapTree, title: string) => void;
+  onExportFreemind?: (tree: MindMapTree, title: string) => void;
   titleChanged?: boolean;
   onRenameTitle?: () => void;
   renamingTitle?: boolean;

@@ -14,6 +14,18 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Validation
 
+## [0.3.29] - 2026-06-05
+
+### Added
+- **FreeMind import** — Added "Import .mm" button to the Vaults lobby page (alongside the existing "Import .md" button). Selecting a FreeMind `.mm` file parses the XML in-browser via `DOMParser`, converts it to the internal `MindMapTree` format, and stores it as a new encrypted vault using the existing local storage flow. Handles `TEXT`, `COLOR`, `POSITION`, `FOLDED`, `LINK` attributes and `<richcontent TYPE="NOTE">` note blocks.
+  - New file: `frontend_app/src/utils/freemindImport.ts`
+- **FreeMind export** — Added "FreeMind (.mm)" option to the editor toolbar export dropdown, directly below "Markdown (.md)". Exports the current in-memory tree to a valid FreeMind 1.0.1 XML file using the existing `downloadBlob` utility (native save dialog on desktop, `<a download>` fallback in browser). Notes are serialised as `<richcontent TYPE="NOTE">` blocks.
+  - New file: `frontend_app/src/utils/freemindExport.ts`
+  - Files modified: `frontend_app/src/components/MindMapEditor.types.ts`, `frontend_app/src/components/MindMapEditor.tsx`, `frontend_app/src/pages/EditorPage.tsx`, `frontend_app/src/pages/VaultsPage.tsx`
+
+### Validation
+- `pnpm exec tsc --noEmit` in `frontend_app` → clean.
+
 ## [0.3.28] - 2026-05-26
 
 ### Added

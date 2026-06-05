@@ -25,6 +25,7 @@ import type {
 } from '../types';
 import { getPlanErrorPrompt, type PlanErrorPrompt } from '../utils/planErrors';
 import { obsidianMarkdownToTree } from '../utils/markdownImport';
+import { freemindToTree } from '../utils/freemindImport';
 import {
   getVaultPreviewStats,
   getVaultPreviewTheme,
@@ -529,6 +530,10 @@ export function VaultsPage() {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState('');
   const mdImportRef = useRef<HTMLInputElement>(null);
+
+  const [mmImporting, setMmImporting] = useState(false);
+  const [mmImportError, setMmImportError] = useState('');
+  const mmImportRef = useRef<HTMLInputElement>(null);
 
   const [historyVaultId, setHistoryVaultId] = useState<string | null>(null);
   const [storagePathInfo, setStoragePathInfo] = useState<LocalStorageDirInfo | null>(null);
@@ -1047,6 +1052,44 @@ export function VaultsPage() {
     }
   };
 
+  const handleImportFreemind = async (file: File) => {
+    if (!sessionKeys) return;
+    setMmImporting(true);
+    setMmImportError('');
+    try {
+      const text = await file.text();
+      const vaultTitle = file.name.replace(/\.mm$/i, '') || 'Imported vault';
+      const parsedRoot = freemindToTree(text, vaultTitle);
+
+      const importedTree: MindMapTree = { version: 'tree', root: parsedRoot };
+
+      const titleEnc = await encryptTitle(vaultTitle, sessionKeys.masterKey);
+      const { ephClassicalPublic, ephPqCiphertext, wrappedDek, dek } = await hybridEncap(
+        sessionKeys.classicalPubKey,
+        sessionKeys.pqPubKey,
+      );
+      const encBlob = await encryptTree(importedTree, dek);
+
+      const created = await storage.createVault({
+        title_encrypted: titleEnc,
+        eph_classical_public: toBase64(ephClassicalPublic),
+        eph_pq_ciphertext: toBase64(ephPqCiphertext),
+        wrapped_dek: toBase64(wrappedDek),
+      });
+
+      await storage.uploadBlob(created.id, encBlob);
+      const createdDetail = await storage.getVault(created.id);
+      void saveTreeVaultPreview(created.id, createdDetail.updated_at, importedTree);
+
+      navigate(`/vaults/${created.id}`);
+    } catch (err) {
+      setMmImportError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setMmImporting(false);
+      if (mmImportRef.current) mmImportRef.current.value = '';
+    }
+  };
+
   const handleDelete = async (id: string) => {
     setDeletingVaultId(id);
     try {
@@ -1190,6 +1233,16 @@ export function VaultsPage() {
                   if (file) void handleImportMarkdown(file);
                 }}
               />
+              <input
+                ref={mmImportRef}
+                type="file"
+                accept=".mm"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleImportFreemind(file);
+                }}
+              />
               <button
                 onClick={() => mdImportRef.current?.click()}
                 disabled={!hasKeys || importing}
@@ -1200,6 +1253,17 @@ export function VaultsPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
                 {importing ? 'Importing…' : 'Import .md'}
+              </button>
+              <button
+                onClick={() => mmImportRef.current?.click()}
+                disabled={!hasKeys || mmImporting}
+                title="Import a FreeMind .mm file as a new vault"
+                className="flex items-center gap-2 rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                {mmImporting ? 'Importing…' : 'Import .mm'}
               </button>
               <button
                 onClick={() => setShowCreate(true)}
@@ -1217,6 +1281,11 @@ export function VaultsPage() {
           {importError && (
             <div className="mb-4 rounded-lg border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-400">
               Import failed: {importError}
+            </div>
+          )}
+          {mmImportError && (
+            <div className="mb-4 rounded-lg border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-400">
+              FreeMind import failed: {mmImportError}
             </div>
           )}
 

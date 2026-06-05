@@ -81,7 +81,7 @@ interface DragState {
 // ── Component ─────────────────────────────────────────────────────────────────
 export function DesktopMindMapEditor({
   initialTree, initialShowShortcuts, disableAutoPanToSelection, externalNodeAttachments, title, onSave, onTitleChange, saving, saveMsg, error, onBack,
-  onExportMarkdown, titleChanged, onRenameTitle, renamingTitle,
+  onExportMarkdown, onExportFreemind, titleChanged, onRenameTitle, renamingTitle,
   versionLabel, versionTooltip,
   onTreeChange, onSelectionChange, onNodeFileDrop, onOpenNodeAttachment,
   onFetchNodeAttachmentContent,
@@ -2172,6 +2172,11 @@ export function DesktopMindMapEditor({
                   {onExportMarkdown && (
                     <button className="mm-context-item" onClick={() => { onExportMarkdown({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
                       Markdown (.md)
+                    </button>
+                  )}
+                  {onExportFreemind && (
+                    <button className="mm-context-item" onClick={() => { onExportFreemind({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
+                      FreeMind (.mm)
                     </button>
                   )}
                   <button className="mm-context-item" onClick={() => { exportPng(); setShowExportMenu(false); }}>

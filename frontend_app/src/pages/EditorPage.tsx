@@ -23,6 +23,7 @@ import type { AttachmentMetadata, MapShareOwnerSummary, MindMapTree, NodeAttachm
 import { getPlanErrorPrompt, type PlanErrorPrompt } from '../utils/planErrors';
 import { createEncryptedFilePreview } from '../utils/filePreview';
 import { treeToMarkdown } from '../utils/markdownExport';
+import { treeToFreemind } from '../utils/freemindExport';
 import { downloadBlob } from '../utils/download';
 import {
   createCloudTreeVaultPreview,
@@ -506,6 +507,12 @@ export function EditorPage() {
     const blob = new Blob([md], { type: 'text/markdown' });
     void downloadBlob(blob, `${buildExportFileBaseName(currentTitle)}.md`);
   }, [buildExportFileBaseName]);
+
+  const handleExportFreemind = useCallback((tree: MindMapTree, currentTitle: string) => {
+    const xml = treeToFreemind(tree.root);
+    const blob = new Blob([xml], { type: 'application/xml' });
+    void downloadBlob(blob, `${currentTitle}.mm`);
+  }, []);
 
   const handleUploadFiles = useCallback(async (files: FileList) => {
     if (!id || !sessionKeys || isLocalMode) return;
@@ -1013,6 +1020,7 @@ export function EditorPage() {
         onBack={() => navigate('/vaults')}
         onShowHistory={() => { if (!isLocalMode) setShowHistory(true); }}
         onExportMarkdown={handleExportMarkdown}
+        onExportFreemind={handleExportFreemind}
         versionLabel={versionLabel}
         versionTooltip={versionTooltip}
         onTreeChange={setCurrentTree}

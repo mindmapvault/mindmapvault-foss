@@ -8,6 +8,9 @@
     "dev:demo": "pnpm --dir demo dev",
     "build:demo": "pnpm --dir demo build",
     "build:demo:pages": "pnpm --dir demo build:pages",
+    "dev:mobile-demo": "pnpm --dir mobile-demo dev",
+    "build:mobile-demo": "pnpm --dir mobile-demo build",
+    "build:mobile-demo:pages": "pnpm --dir mobile-demo build:pages",
     "tauri:dev": "pnpm --dir frontend_app tauri:dev",
     "tauri:build": "pnpm --dir frontend_app tauri:build"
   }

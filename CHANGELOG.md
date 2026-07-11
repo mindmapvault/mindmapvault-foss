@@ -7,12 +7,17 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ## [Unreleased]
 
 ### Added
+- **Clickable vault preview (card view)** — the preview image in card view is now a clickable button that navigates directly into the vault. Shows a subtle hover opacity to signal interactivity.
 
 ### Changed
+- **Vault card re-render fix** — eliminated a cascade where editing any single vault's settings (color, note, labels, max versions) caused every vault card to re-render and re-fetch preview images. Root cause: `useEffect` hooks held direct references to the `maps` state array; any draft mutation produced a new array reference, re-firing all effects. Fixed by deriving a stable string key (`mapMetaKey`) that only changes when vault identity or server-persisted `updated_at` changes, and reading the current maps array via a `useRef` (latest-ref pattern) inside effects.
+- **Vault preview panel cleanup** — removed nested frame/shell divs that surrounded the preview screenshot in card view, resulting in a single clean rounded container instead of three stacked bordered rectangles.
+- **Table view tooltip fix** — the label/note hover tooltip in table view now renders via a React portal at `document.body` with `position: fixed`, ensuring it always appears above the search bar and any other page elements. Previously the tooltip was clipped by the table wrapper's `overflow: hidden` and appeared behind the search input.
 
 ### Removed
 
 ### Validation
+- `pnpm exec tsc --noEmit` in `frontend_app` → clean.
 
 ## [0.3.29] - 2026-06-05
 

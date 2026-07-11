@@ -1,0 +1,9 @@
+/* MindMapVault Mobile Demo — full-viewport shell */
+
+.mmd-shell {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-primary);
+}

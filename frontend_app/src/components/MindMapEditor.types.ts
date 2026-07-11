@@ -13,6 +13,8 @@ export interface MindMapEditorProps {
   error: string;
   onBack?: () => void;
   onShowHistory?: () => void;
+  onDownloadEncrypted?: (fileBaseName?: string) => void;
+  onDownloadJson?: (tree: MindMapTree, title: string) => void;
   onExportMarkdown?: (tree: MindMapTree, title: string) => void;
   onExportFreemind?: (tree: MindMapTree, title: string) => void;
   titleChanged?: boolean;

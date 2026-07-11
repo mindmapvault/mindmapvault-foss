@@ -89,6 +89,23 @@ export function DesktopMindMapEditor({
   onLoadNodeAttachmentPreview,
 }: MindMapEditorProps) {
   const autosaveMode = useThemeStore((s) => s.autosaveMode);
+  const themeMode = useThemeStore((s) => s.mode);
+  const toggleThemeMode = useThemeStore((s) => s.toggleMode);
+
+  // ── Mobile detection ───────────────────────────────────────────────────────
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  const [mobilePropsOpen, setMobilePropsOpen] = useState(false);
+  const [mobileDeleteConfirm, setMobileDeleteConfirm] = useState(false);
+  const [mobileEditTextOpen, setMobileEditTextOpen] = useState(false);
+  const [mobileEditTextValue, setMobileEditTextValue] = useState('');
 
   // ── Core state ─────────────────────────────────────────────────────────────
   const [root, setRoot] = useState<MindMapTreeNode>(() =>
@@ -2060,8 +2077,39 @@ export function DesktopMindMapEditor({
 
   return (
     <div className="mm-root" ref={containerRef}>
+      {/* ── Mobile top bar ──────────────────────────────────────────────── */}
+      {isMobile && (
+        <div className="mm-mobile-topbar">
+          <div className="mm-mobile-topbar-title">
+            <span>{title || 'Untitled'}</span>
+            {versionLabel && <span className="mm-mobile-topbar-version" title={versionTooltip}>{versionLabel}</span>}
+          </div>
+          <div className="mm-mobile-topbar-actions">
+            <button
+              className={`mm-btn mm-save-btn${isDirty ? ' mm-save-btn--dirty' : ''}${saving ? ' mm-save-btn--saving' : ''}${error ? ' mm-save-btn--err' : ''}${saveMsg ? ' mm-save-btn--ok' : ''}`}
+              onClick={handleSave}
+              disabled={saving || (!isDirty && !error)}
+              title={saving ? 'Saving…' : error ? error : isDirty ? 'Unsaved changes' : 'All saved'}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+            </button>
+            <button className="mm-btn" onClick={toggleThemeMode} title={themeMode === 'dark' ? 'Light mode' : 'Dark mode'}>
+              {themeMode === 'dark' ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Toolbar ─────────────────────────────────────────────────────── */}
-      <div className="mm-toolbar">
+      {!isMobile && <div className="mm-toolbar">
         <div className="mm-toolbar-left">
           {onBack && (
             <button className="mm-btn" onClick={onBack} title="Back to vaults" style={{ padding: '0 8px', flexShrink: 0 }}>
@@ -2140,7 +2188,7 @@ export function DesktopMindMapEditor({
             )}
           </button>
           <button className="mm-btn" onClick={() => setShowDateDialog(true)} title="Dates (D)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
-          <button className={`mm-btn${showTagDialog ? ' mm-btn--active' : ''}`} onClick={() => setShowTagDialog((v) => !v)} title="Labels (T)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5l8.5 8.5a2 2 0 010 2.83l-5.17 5.17a2 2 0 01-2.83 0L3 10V5a2 2 0 012-2z"/></svg></button>
+          <button className={`mm-btn${showTagDialog ? ' mm-btn--active' : ''}`} onClick={() => setShowTagDialog((v) => !v)} title="Tags (T)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5l8.5 8.5a2 2 0 010 2.83l-5.17 5.17a2 2 0 01-2.83 0L3 10V5a2 2 0 012-2z"/></svg></button>
           <div className="mm-toolbar-sep" />
           <button className="mm-btn" onClick={() => setZoom((z) => Math.min(3, z + 0.15))} title="Zoom in (+)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 8v6m-3-3h6"/></svg></button>
           <button className="mm-btn" onClick={() => setZoom((z) => Math.max(0.3, z - 0.15))} title="Zoom out (-)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M8 11h6"/></svg></button>
@@ -2191,7 +2239,7 @@ export function DesktopMindMapEditor({
           )}
           <ThemePanel />
         </div>
-      </div>
+      </div>}
 
       {/* ── Search bar ──────────────────────────────────────────────────── */}
       {searchOpen && (
@@ -2260,11 +2308,178 @@ export function DesktopMindMapEditor({
       </div>
 
       {/* ── Status bar ──────────────────────────────────────────────── */}
-      <div className="mm-statusbar">
-        <span>{flattenTree(root).length} node{flattenTree(root).length !== 1 ? 's' : ''}{multiSelect.size > 0 ? ` · ${multiSelect.size} selected` : ''}</span>
-        <span>{selNode ? `Selected: ${selNode.text.split('\n')[0]}` : ''}</span>
-        <span className="mm-statusbar-hint">Tab=child · Enter=sibling · F2=rename · F6=attach file · Space=fold · C=check · P=progress · I=icon · D=date · Ctrl+F=search</span>
-      </div>
+      {!isMobile && (
+        <div className="mm-statusbar">
+          <span>{flattenTree(root).length} node{flattenTree(root).length !== 1 ? 's' : ''}{multiSelect.size > 0 ? ` · ${multiSelect.size} selected` : ''}</span>
+          <span>{selNode ? `Selected: ${selNode.text.split('\n')[0]}` : ''}</span>
+          <span className="mm-statusbar-hint">Tab=child · Enter=sibling · F2=rename · F6=attach file · Space=fold · C=check · P=progress · I=icon · D=date · Ctrl+F=search</span>
+        </div>
+      )}
+
+      {/* ── Mobile bottom bar ───────────────────────────────────────── */}
+      {isMobile && (
+        <div className="mm-mobile-bottombar">
+          {onBack && (
+            <button className="mm-mobile-btn" onClick={onBack} title="Back to vaults">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/></svg>
+              <span>Back</span>
+            </button>
+          )}
+          <button className="mm-mobile-btn" onClick={() => addChild(selectedId)} title="Add child node">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
+            <span>Add</span>
+          </button>
+          {mobileDeleteConfirm ? (
+            <>
+              <button className="mm-mobile-btn mm-mobile-btn--danger" onClick={() => { hasBulk ? bulkDelete() : deleteNode(selectedId); setMobileDeleteConfirm(false); }} title="Confirm delete">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+                <span>Confirm</span>
+              </button>
+              <button className="mm-mobile-btn" onClick={() => setMobileDeleteConfirm(false)} title="Cancel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <span>Cancel</span>
+              </button>
+            </>
+          ) : (
+            <button className="mm-mobile-btn mm-mobile-btn--danger" onClick={() => setMobileDeleteConfirm(true)} disabled={selectedId === 'root' && !hasBulk} title="Delete node">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              <span>Delete</span>
+            </button>
+          )}
+          <button className="mm-mobile-btn" onClick={fitView} title="Fit all nodes in view">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/></svg>
+            <span>Fit</span>
+          </button>
+          <button className={`mm-mobile-btn${mobilePropsOpen ? ' mm-mobile-btn--active' : ''}`} onClick={() => setMobilePropsOpen((v) => !v)} title="Node properties">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="11" y2="18"/><circle cx="17" cy="18" r="3"/><line x1="19.12" y1="20.12" x2="21" y2="22"/></svg>
+            <span>Props</span>
+          </button>
+        </div>
+      )}
+
+      {/* ── Mobile props sheet ──────────────────────────────────────── */}
+      {isMobile && mobilePropsOpen && (
+        <div className="mm-mobile-props" role="dialog" aria-label="Node properties">
+          <div className="mm-mobile-props-header">
+            <span className="mm-mobile-props-title">{selNode ? selNode.text.split('\n')[0].slice(0, 32) || 'Node' : 'Node'}</span>
+            <button className="mm-btn-icon" onClick={() => setMobilePropsOpen(false)} title="Close">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <button
+            className="mm-mobile-edit-text-btn"
+            onClick={() => {
+              setMobileEditTextValue(selNode?.text ?? '');
+              setMobileEditTextOpen(true);
+              setMobilePropsOpen(false);
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+            Edit text
+          </button>
+          <div className="mm-mobile-props-section">
+            <span className="mm-mobile-props-label">COLOR</span>
+            <div className="mm-mobile-props-colors">
+              <button
+                className={`mm-mobile-color-swatch${(selNode?.color ?? null) === null ? ' mm-mobile-color-swatch--active' : ''}`}
+                onClick={() => { setNodeColor(selectedId, null); }}
+                title="Default color"
+              />
+              {NODE_COLORS.map((c) => (
+                <button
+                  key={c ?? 'default'}
+                  className={`mm-mobile-color-swatch${(selNode?.color ?? null) === c ? ' mm-mobile-color-swatch--active' : ''}`}
+                  style={{ background: c ?? undefined }}
+                  onClick={() => { setNodeColor(selectedId, c); }}
+                  title={c ?? 'Default'}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="mm-mobile-props-actions">
+            <button className="mm-mobile-props-btn" onClick={() => { openNotes(selectedId); setNotesOpen(true); setMobilePropsOpen(false); }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+              Notes
+            </button>
+            <button className="mm-mobile-props-btn" onClick={() => { setShowTagDialog((v) => !v); setMobilePropsOpen(false); }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5l8.5 8.5a2 2 0 010 2.83l-5.17 5.17a2 2 0 01-2.83 0L3 10V5a2 2 0 012-2z"/></svg>
+              Labels
+            </button>
+          </div>
+          <div className="mm-mobile-progress-presets">
+            <button
+              className={`mm-mobile-progress-btn${(selNode?.progress ?? null) === null ? ' mm-mobile-progress-btn--active' : ''}`}
+              onClick={() => setNodeProgress(selectedId, null)}
+            >✕</button>
+            {PROGRESS_PRESETS.map((pct) => (
+              <button
+                key={pct}
+                className={`mm-mobile-progress-btn${selNode?.progress === pct ? ' mm-mobile-progress-btn--active' : ''}`}
+                onClick={() => setNodeProgress(selectedId, pct)}
+              >{pct}%</button>
+            ))}
+          </div>
+          <div className="mm-mobile-props-actions">
+            <button className="mm-mobile-props-btn" onClick={() => { setShowDateDialog(true); setMobilePropsOpen(false); }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              Date
+            </button>
+            <button
+              className={`mm-mobile-props-btn${selNode?.checked != null ? ' mm-mobile-props-btn--active' : ''}`}
+              onClick={() => { selNode?.checked != null ? toggleCheckbox(selectedId) : addCheckbox(selectedId); }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+              {selNode?.checked === true ? 'Checked' : selNode?.checked === false ? 'Unchecked' : 'Checkbox'}
+            </button>
+            <button className="mm-mobile-props-btn" onClick={() => { setShowIconPicker(true); setMobilePropsOpen(false); }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+              Icons
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Mobile text edit sheet ──────────────────────────────────── */}
+      {isMobile && mobileEditTextOpen && (
+        <div className="mm-mobile-text-edit" role="dialog" aria-label="Edit node text">
+          <div className="mm-mobile-props-header">
+            <span className="mm-mobile-props-title">Edit text</span>
+            <button className="mm-btn-icon" onClick={() => setMobileEditTextOpen(false)} title="Cancel">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <textarea
+            className="mm-mobile-text-edit-area"
+            value={mobileEditTextValue}
+            onChange={(e) => setMobileEditTextValue(e.target.value)}
+            placeholder="Node text…"
+            autoFocus
+            rows={4}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { setMobileEditTextOpen(false); e.stopPropagation(); }
+            }}
+          />
+          <div className="mm-mobile-text-edit-actions">
+            <button className="mm-mobile-props-btn" onClick={() => setMobileEditTextOpen(false)}>
+              Cancel
+            </button>
+            <button
+              className="mm-mobile-props-btn mm-mobile-props-btn--accent"
+              onClick={() => {
+                const trimmed = mobileEditTextValue.trim();
+                if (trimmed && selNode) {
+                  const newRoot = cloneTree(root);
+                  const found = findNode(newRoot, selectedId);
+                  if (found) { found.node.text = trimmed; mutate(newRoot); }
+                }
+                setMobileEditTextOpen(false);
+              }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Context menu ────────────────────────────────────────────── */}
       {contextMenu && (() => {

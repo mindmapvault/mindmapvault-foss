@@ -23,6 +23,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import type { JSX } from 'react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { MindMapTree, MindMapTreeNode, NodeAttachmentRef, UrlEntry } from '../types';

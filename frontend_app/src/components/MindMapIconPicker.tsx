@@ -27,7 +27,7 @@ function MindMapIconPickerInner({ open, currentIcons, onSelect, onClose, showToa
   const gridRef = useRef<HTMLDivElement>(null);
   const [focusIdx, setFocusIdx] = useState(-1);
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
-  const tooltipTimer = useRef<ReturnType<typeof setTimeout>>();
+  const tooltipTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     if (open && searchRef.current) {

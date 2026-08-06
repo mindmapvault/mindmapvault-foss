@@ -81,6 +81,77 @@ jobs:
             --clobber
 
 
+  desktop-macos:
+    name: Desktop Build (macOS)
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Setup pnpm (Corepack)
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.17.1 --activate
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build desktop app (universal DMG)
+        run: pnpm --dir frontend_app tauri:build --target universal-apple-darwin
+
+      - name: Find macOS artifacts
+        id: mac_paths
+        run: |
+          DMG_PATH=$(find desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg -maxdepth 1 -name '*.dmg' | head -n 1)
+          if [ -z "$DMG_PATH" ]; then
+            echo "DMG artifact not found" >&2
+            exit 1
+          fi
+          CHECKSUM_PATH="${DMG_PATH}.sha256"
+          echo "dmg_path=$DMG_PATH" >> $GITHUB_OUTPUT
+          echo "dmg_checksum_path=$CHECKSUM_PATH" >> $GITHUB_OUTPUT
+
+      # The DMG bundler deletes bundle/macos/*.app once the DMG is built, so
+      # assert against the lipo'd binary that tauri produced instead.
+      - name: Verify universal binary slices
+        run: |
+          APP_BIN=desktop/src-tauri/target/universal-apple-darwin/release/MindMapVault-foss
+          lipo -archs "$APP_BIN"
+          lipo -archs "$APP_BIN" | grep -q arm64
+          lipo -archs "$APP_BIN" | grep -q x86_64
+          codesign -dv "$APP_BIN" 2>&1 | grep -q 'Signature=adhoc'
+
+      - name: Generate SHA256 checksums (macOS)
+        run: |
+          DMG_PATH='${{ steps.mac_paths.outputs.dmg_path }}'
+          CHECKSUM_PATH='${{ steps.mac_paths.outputs.dmg_checksum_path }}'
+          shasum -a 256 "$DMG_PATH" | awk '{print $1 "  " "'"$(basename "$DMG_PATH")"'"}' > "$CHECKSUM_PATH"
+
+      - name: Upload macOS artifacts to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload '${{ github.event.release.tag_name }}' \
+            '${{ steps.mac_paths.outputs.dmg_path }}#MindMapVault-macOS.dmg' \
+            '${{ steps.mac_paths.outputs.dmg_checksum_path }}#MindMapVault-macOS.dmg.sha256' \
+            --clobber
+
   desktop-windows:
     name: Desktop Build (Windows)
     runs-on: windows-latest

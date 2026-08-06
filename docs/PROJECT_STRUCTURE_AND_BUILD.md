@@ -118,8 +118,9 @@ Then retry the failed command.
 
 - Windows: EXE and NSIS installer
 - Linux: AppImage
+- macOS: DMG (release builds are universal: arm64 + x86_64, macOS 10.15+)
 
-Both outputs are native desktop packages of the same WebView-based app.
+All outputs are native desktop packages of the same WebView-based app.
 
 ## WSL Note For Linux Builds
 

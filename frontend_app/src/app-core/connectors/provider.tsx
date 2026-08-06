@@ -1,4 +1,5 @@
 import { createContext, createElement, useContext } from 'react';
+import type { JSX } from 'react';
 import { createConnectorContextApi } from '@mindmapvault/connectors';
 import type { ConnectorRegistry } from '@mindmapvault/connectors';
 

@@ -142,6 +142,29 @@ Build desktop artifacts:
 pnpm --dir frontend_app tauri:build
 ```
 
+macOS packaging output:
+
+- `desktop/src-tauri/target/release/bundle/dmg/*.dmg` (host architecture only)
+
+macOS notes:
+
+- Requires macOS 10.15 or later. Apple Silicon (M1 and newer) is supported natively — no Rosetta needed.
+- To produce a single DMG that runs on both Apple Silicon and Intel Macs, build a universal binary:
+
+  ```bash
+  rustup target add aarch64-apple-darwin x86_64-apple-darwin
+  pnpm --dir frontend_app tauri:build --target universal-apple-darwin
+  ```
+
+  Output: `desktop/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg`
+
+- Released DMGs are not signed with an Apple Developer ID or notarized. On first launch macOS
+  will block the app. Remove the quarantine flag after dragging it to Applications:
+
+  ```bash
+  xattr -dr com.apple.quarantine "/Applications/MindMapVault FOSS Local-Only.app"
+  ```
+
 Windows setup notes for non-power users:
 
 - Run commands from the repository root folder (the folder containing frontend_app and desktop).

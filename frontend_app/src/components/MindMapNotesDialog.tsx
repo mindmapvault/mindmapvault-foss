@@ -17,8 +17,8 @@ interface MindMapNotesDialogProps {
   notesUploadBusy: boolean;
   notesText: string;
   notesPreviewHtml: string;
-  notesRef: RefObject<HTMLTextAreaElement>;
-  notesAttachmentInputRef: RefObject<HTMLInputElement>;
+  notesRef: RefObject<HTMLTextAreaElement | null>;
+  notesAttachmentInputRef: RefObject<HTMLInputElement | null>;
   onClose: () => void;
   onDragOver: (e: DragEvent<HTMLDivElement>) => void;
   onDragLeave: (e: DragEvent<HTMLDivElement>) => void;

@@ -2,3 +2,6 @@ packages:
   - frontend_app
   - demo
   - mobile-demo
+
+ignoredBuiltDependencies:
+  - esbuild

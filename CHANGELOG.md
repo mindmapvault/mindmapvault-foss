@@ -7,17 +7,55 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Removed
+
+## [0.3.30] - 2026-08-06
+
+### Added
+- **macOS desktop support (universal binary)** — the desktop app now builds and ships for macOS alongside Windows and Linux.
+  - Added `dmg` to `bundle.targets` and a `bundle.macOS` block in `desktop/src-tauri/tauri.conf.json` with `minimumSystemVersion: "10.15"` (Tauri v2's supported floor).
+  - Added a `desktop-macos` job to `.github/workflows/desktop-build.yml` running on `macos-14`, building `--target universal-apple-darwin` so a single DMG runs natively on both Apple Silicon and Intel Macs. Both Rust targets (`aarch64-apple-darwin`, `x86_64-apple-darwin`) are installed via `dtolnay/rust-toolchain`.
+  - Added a "Verify universal binary slices" CI step asserting via `lipo` that both `arm64` and `x86_64` slices are present, plus a `codesign` assertion that the binary carries an ad-hoc signature (Apple Silicon refuses to execute unsigned arm64 binaries at the kernel level).
+  - Documented macOS build output, the universal build command, and the Gatekeeper quarantine workaround in `README.md` and `docs/PROJECT_STRUCTURE_AND_BUILD.md`.
 - **Clickable vault preview (card view)** — the preview image in card view is now a clickable button that navigates directly into the vault. Shows a subtle hover opacity to signal interactivity.
 
 ### Changed
+- **React 19 upgrade** — moved `react` and `react-dom` from 18.3.1 to 19.2.8 across `frontend_app`, `demo`, and `mobile-demo`, with `@types/react` 19.2.18 and `@types/react-dom` 19.2.4. Required source changes for React 19's type breakages:
+  - The global `JSX` namespace was removed; added `import type { JSX } from 'react'` in `frontend_app/src/components/MindMapEditor.tsx` and `frontend_app/src/app-core/connectors/provider.tsx`.
+  - `useRef` now requires an initial argument — `frontend_app/src/components/MindMapIconPicker.tsx`.
+  - `useRef<T>(null)` now returns `RefObject<T | null>`; widened the `notesRef` and `notesAttachmentInputRef` prop types in `frontend_app/src/components/MindMapNotesDialog.tsx`.
+- **React Router 7 upgrade** — `react-router-dom` 6.30.3 → 7.18.2. No source changes required; only unchanged APIs are in use (`BrowserRouter`, `Routes`, `Route`, `Navigate`, `Outlet`, `useNavigate`, `useParams`, `useSearchParams`).
+- **Vite React plugin** — `@vitejs/plugin-react` 4.7.0 → 5.2.0. Deliberately held at 5.x: v6 hard-requires `vite: ^8.0.0`, which would force the build stack through two additional majors.
+- **React ecosystem dependencies** — `@xyflow/react` 12.10.2 → 12.11.2, `lucide-react` 1.14.0 → 1.28.0, `zustand` 5.0.12 → 5.0.14.
+- **Tauri upgrade (JS)** — `@tauri-apps/api` 2.11.0 → 2.11.1, `@tauri-apps/cli` 2.11.0 → 2.11.4, `plugin-fs` 2.4.1 → 2.5.1, `plugin-dialog` 2.4.2 → 2.7.2, `plugin-shell` 2.3.2 → 2.3.5.
+- **Tauri upgrade (Rust)** — `tauri` 2.11.0 → 2.11.5, `tauri-build` 2.6.0 → 2.6.3, `tauri-plugin-fs` 2.5.0 → 2.5.1, `tauri-plugin-dialog` 2.7.0 → 2.7.2, `wry` 0.55.0 → 0.55.1, `tao` 0.35.0 → 0.35.3.
 - **Vault card re-render fix** — eliminated a cascade where editing any single vault's settings (color, note, labels, max versions) caused every vault card to re-render and re-fetch preview images. Root cause: `useEffect` hooks held direct references to the `maps` state array; any draft mutation produced a new array reference, re-firing all effects. Fixed by deriving a stable string key (`mapMetaKey`) that only changes when vault identity or server-persisted `updated_at` changes, and reading the current maps array via a `useRef` (latest-ref pattern) inside effects.
 - **Vault preview panel cleanup** — removed nested frame/shell divs that surrounded the preview screenshot in card view, resulting in a single clean rounded container instead of three stacked bordered rectangles.
 - **Table view tooltip fix** — the label/note hover tooltip in table view now renders via a React portal at `document.body` with `position: fixed`, ensuring it always appears above the search bar and any other page elements. Previously the tooltip was clipped by the table wrapper's `overflow: hidden` and appeared behind the search input.
 
+### Fixed
+- **macOS release checksums used a Linux-only tool** — the macOS CI job called `sha256sum`, which does not exist on macOS runners. Replaced with `shasum -a 256`, and normalised the output to a basename-only entry matching the Windows job instead of embedding the full runner path.
+- **macOS DMG artifact lookup pointed at the wrong directory** — the job searched `target/release/bundle` at `-maxdepth 1`, but Tauri writes the DMG to `bundle/dmg/`. The lookup would have failed with "DMG artifact not found" on the first release run. The same incorrect path was documented in `README.md` and has been corrected.
+
 ### Removed
 
 ### Validation
-- `pnpm exec tsc --noEmit` in `frontend_app` → clean.
+- `pnpm exec tsc --noEmit` in `frontend_app`, `demo`, and `mobile-demo` → clean.
+- `pnpm --dir frontend_app test` (vitest) → 8/8 passing.
+- `pnpm build:app`, `pnpm build:demo`, `pnpm build:mobile-demo` → all pass.
+- `cargo check` in `desktop/src-tauri` → clean.
+- `pnpm install --frozen-lockfile` → passes (lockfile in sync for CI).
+- Universal macOS build verified end to end on Apple Silicon:
+  - `lipo -archs` → `x86_64 arm64`.
+  - `LC_BUILD_VERSION` per slice → x86_64 `minos 10.15`, arm64 `minos 11.0` (linker auto-bumps the arm64 slice, so the 10.15 floor costs nothing on Apple Silicon while retaining Intel reach).
+  - `codesign -dv` → `Signature=adhoc` (linker-signed).
+  - Built DMG mounted and inspected: contained app is universal, `CFBundleIdentifier=com.mindmapvault.desktop`, `LSMinimumSystemVersion=10.15`.
+
+### Known Limitations
+- macOS DMGs are **not** signed with an Apple Developer ID and are **not** notarized. Gatekeeper will block the app on first launch after download; users must run `xattr -dr com.apple.quarantine` on the installed app (documented in `README.md`). Resolving this requires a paid Apple Developer account and CI signing secrets.
 
 ## [0.3.29] - 2026-06-05
 

@@ -31,16 +31,19 @@ function stripFrontmatter(md: string): string {
   return trimmed;
 }
 
-/** Measure the indentation depth of a list item line (tab = 2 spaces) */
+/** Measure the indentation depth of a list item line (tab = 4 spaces, div by 2) */
 function listDepth(line: string): number {
   let spaces = 0;
   for (const char of line) {
     if (char === ' ') spaces++;
-    else if (char === '\t') spaces += 2;
+    else if (char === '\t') spaces += 4;
     else break;
   }
   return Math.floor(spaces / 2);
 }
+
+/** Markdown supports h1–h6; list items occupy virtual levels above this. */
+const HEADING_MAX_LEVEL = 6;
 
 /** Heading level 1-6 → returns [level, text] or null */
 function matchHeading(line: string): [number, string] | null {
@@ -49,18 +52,31 @@ function matchHeading(line: string): [number, string] | null {
   return [m[1].length, m[2].trim()];
 }
 
-/** List item line → returns [indentDepth, text] or null */
-function matchListItem(line: string): [number, string] | null {
+/**
+ * List item line → returns [indentDepth, text, checked] or null.
+ * Detects GitHub-flavoured / Obsidian task-list syntax: - [ ] and - [x].
+ */
+function matchListItem(line: string): [number, string, boolean | null] | null {
   const m = line.match(/^(\s*)[-*+]\s+(.*)/);
   if (!m) return null;
-  return [listDepth(m[1]), m[2].trim()];
+  const rawText = m[2];
+  const cbMatch = rawText.match(/^\[([xX ])\]\s+(.*)/);
+  if (cbMatch) {
+    return [listDepth(m[1]), cbMatch[2].trim(), cbMatch[1].toLowerCase() === 'x'];
+  }
+  return [listDepth(m[1]), rawText.trim(), null];
 }
 
-/** Ordered list item → returns [indentDepth, text] or null */
-function matchOrderedListItem(line: string): [number, string] | null {
+/** Ordered list item → returns [indentDepth, text, checked] or null */
+function matchOrderedListItem(line: string): [number, string, boolean | null] | null {
   const m = line.match(/^(\s*)\d+[.)]\s+(.*)/);
   if (!m) return null;
-  return [listDepth(m[1]), m[2].trim()];
+  const rawText = m[2];
+  const cbMatch = rawText.match(/^\[([xX ])\]\s+(.*)/);
+  if (cbMatch) {
+    return [listDepth(m[1]), cbMatch[2].trim(), cbMatch[1].toLowerCase() === 'x'];
+  }
+  return [listDepth(m[1]), rawText.trim(), null];
 }
 
 /** Remove Obsidian-style wiki links: [[target|alias]] → alias or target */
@@ -68,28 +84,50 @@ function unwikiLink(text: string): string {
   return text.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, target, alias) => alias ?? target);
 }
 
-/** Remove common markdown formatting for a cleaner node label */
+/**
+ * Clean a line of text for use as a mind map node label.
+ * Handles standard markdown plus Obsidian-specific syntax:
+ *   - Wiki links [[page|alias]]
+ *   - Images ![alt](url) → alt text
+ *   - Highlights ==text==
+ *   - Obsidian tags #tag (stripped)
+ *   - HTML comments <!-- ... --> (stripped)
+ *   - Bold, italic, strikethrough, inline code, bare links
+ */
 function cleanText(text: string): string {
   return unwikiLink(text)
-    .replace(/\*\*([^*]+)\*\*/g, '$1')   // bold
-    .replace(/\*([^*]+)\*/g, '$1')        // italic
-    .replace(/~~([^~]+)~~/g, '$1')        // strikethrough
-    .replace(/`([^`]+)`/g, '$1')          // inline code
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // [text](url)
-    .replace(/^#+\s*/, '')               // leading hashes
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')       // images → alt text
+    .replace(/\*\*([^*]+)\*\*/g, '$1')               // bold
+    .replace(/\*([^*]+)\*/g, '$1')                   // italic
+    .replace(/~~([^~]+)~~/g, '$1')                   // strikethrough
+    .replace(/==([^=]+)==/g, '$1')                   // Obsidian highlight
+    .replace(/`([^`]+)`/g, '$1')                     // inline code
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')         // [text](url)
+    .replace(/(^|\s)#[a-zA-Z]\w*/g, '$1')            // Obsidian tags
+    .replace(/<!--[\s\S]*?-->/g, '')                 // HTML comments
+    .replace(/^#+\s*/, '')                           // leading hashes
+    .replace(/ {2,}/g, ' ')                          // collapse gaps left by stripped syntax
     .trim();
 }
 
 /**
  * Converts an Obsidian-compatible markdown string into a MindMapTreeNode tree.
  *
+ * Compatible with the most popular Obsidian mind mapping plugins:
+ *  - Obsidian Mind Map (Markmap-based, by lynchjames)
+ *  - Markmap for Obsidian
+ *  - Mindmap NextGen
+ *
  * Strategy:
  *  - The vault title becomes the root node text.
- *  - H1 headings under the title become top-level children.
- *  - H2+ headings become nested children based on heading level.
+ *  - H1 headings become top-level children; H2+ nest by heading level.
  *  - List items (-, *, +, 1.) become leaf nodes under the current heading context.
+ *  - Task-list items (- [ ] / - [x]) set the node's checked field.
+ *  - Nested lists use 2-space or 4-space (tab) indentation; both are supported.
  *  - Blockquote lines (>) are collected as notes on the previous node.
- *  - Blank lines and horizontal rules are ignored.
+ *  - Obsidian callouts (> [!type] Title) have the [!type] marker stripped.
+ *  - HTML comment lines (<!-- markmap: {...} --> etc.) are skipped.
+ *  - Blank lines, horizontal rules, and YAML/TOML frontmatter are ignored.
  */
 export function obsidianMarkdownToTree(md: string, title: string): MindMapTreeNode {
   const cleaned = stripFrontmatter(md);
@@ -116,7 +154,11 @@ export function obsidianMarkdownToTree(md: string, title: string): MindMapTreeNo
     const line = rawLine.trimEnd();
 
     if (!line.trim() || /^(---|[*_]{3,}|\+{3,})$/.test(line.trim())) {
-      // blank or horizontal rule — skip
+      continue;
+    }
+
+    // Skip HTML comment lines (markmap config directives, etc.)
+    if (/^\s*<!--/.test(line)) {
       continue;
     }
 
@@ -133,27 +175,32 @@ export function obsidianMarkdownToTree(md: string, title: string): MindMapTreeNo
 
     const listItem = matchListItem(line) ?? matchOrderedListItem(line);
     if (listItem) {
-      const [depth, itemText] = listItem;
-      // Lists live at a virtual level above the heading levels.
-      // Depth 0 → attach to current top of stack (under last heading).
-      // Depth N → attach to the (N-1)th depth list parent.
-      const baseLevel = stack.length > 0 ? stack[stack.length - 1].level : 0;
-      const itemLevel = baseLevel + 7 + depth;
+      const [depth, itemText, checked] = listItem;
+      // Lists live at virtual levels above the heading levels (7+). The base is
+      // the enclosing *heading* level, not the top of the stack — reading the
+      // top would make each sibling item a child of the previous one, turning a
+      // flat list into a descending chain.
+      const headingBase = stack.reduce((acc, e) => (e.level <= HEADING_MAX_LEVEL ? e.level : acc), 0);
+      const itemLevel = headingBase + HEADING_MAX_LEVEL + 1 + depth;
       const parent = getParentForLevel(itemLevel);
       const node = makeNode(cleanText(itemText));
+      if (checked !== null) node.checked = checked;
       parent.children.push(node);
       stack.push({ node, level: itemLevel });
       lastNode = node;
       continue;
     }
 
-    // Blockquote → append to lastNode's notes
+    // Blockquote → append to lastNode's notes.
+    // Obsidian callouts (> [!note] Title) have the callout type stripped.
     const bqMatch = line.match(/^>\s?(.*)/);
     if (bqMatch) {
-      const noteText = bqMatch[1];
-      lastNode.notes = lastNode.notes
-        ? lastNode.notes + '\n' + noteText
-        : noteText;
+      const noteText = bqMatch[1].replace(/^\[![^\]]+\]\s*/, '');
+      if (noteText.trim()) {
+        lastNode.notes = lastNode.notes
+          ? lastNode.notes + '\n' + noteText
+          : noteText;
+      }
       continue;
     }
 

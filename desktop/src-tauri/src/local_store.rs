@@ -40,6 +40,8 @@ pub enum LocalStoreError {
     NotFound(String),
     #[error("Invalid username: {0}")]
     InvalidUsername(String),
+    #[error("Invalid input: {0}")]
+    Invalid(String),
 }
 
 impl serde::Serialize for LocalStoreError {
@@ -821,6 +823,28 @@ pub fn verify_local_vault_integrity(
 }
 
 // ── File import / export ─────────────────────────────────────────────────────
+
+/// Writes raw bytes to a path the user chose in the native save dialog.
+///
+/// The JS `fs` plugin is deliberately scoped to the app's own directories
+/// (`fs:allow-app-write-recursive` → `$APPDATA/**` and friends), so a
+/// `writeFile` to somewhere like `~/Downloads` is rejected as a forbidden
+/// path. Exports therefore have to be written from Rust, which is not subject
+/// to the webview ACL. Keeping the scope tight and routing this one operation
+/// through an explicit command is preferable to granting the webview standing
+/// write access to the user's home directory.
+///
+/// `data_base64` rather than `Vec<u8>` because command arguments are
+/// JSON-encoded: a byte array would inflate roughly 4× on the way across the
+/// IPC boundary, base64 only 4/3×.
+#[tauri::command]
+pub fn save_export_file(dest_path: String, data_base64: String) -> Result<(), LocalStoreError> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_base64.as_bytes())
+        .map_err(|e| LocalStoreError::Invalid(format!("invalid base64 payload: {e}")))?;
+    write_bytes_atomic(&PathBuf::from(dest_path), &bytes)
+}
 
 /// Exports a vault (metadata + blob) to a single .cmvault file.
 /// The file format is: 4-byte JSON length (LE) ‖ JSON metadata ‖ blob bytes.

@@ -1,0 +1,11 @@
+# Keep host build output out of the Linux container build — macOS node_modules
+# and Rust target dirs are not usable there and make the context huge.
+node_modules
+**/node_modules
+desktop/src-tauri/target
+frontend_app/dist
+demo/dist
+mobile-demo/dist
+dist-linux
+.git
+.pnpm-store

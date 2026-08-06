@@ -24,6 +24,8 @@ import { getPlanErrorPrompt, type PlanErrorPrompt } from '../utils/planErrors';
 import { createEncryptedFilePreview } from '../utils/filePreview';
 import { treeToMarkdown } from '../utils/markdownExport';
 import { treeToFreemind } from '../utils/freemindExport';
+import { treeToFreeplane } from '../utils/freeplaneExport';
+import { treeToWisemapping } from '../utils/wisemappingExport';
 import { downloadBlob } from '../utils/download';
 import {
   createCloudTreeVaultPreview,
@@ -512,6 +514,25 @@ export function EditorPage() {
     const xml = treeToFreemind(tree.root);
     const blob = new Blob([xml], { type: 'application/xml' });
     void downloadBlob(blob, `${currentTitle}.mm`);
+  }, []);
+
+  const handleExportFreeplane = useCallback((tree: MindMapTree, currentTitle: string) => {
+    const xml = treeToFreeplane(tree.root);
+    const blob = new Blob([xml], { type: 'application/xml' });
+    void downloadBlob(blob, `${currentTitle}.mm`);
+  }, []);
+
+  const handleExportWisemapping = useCallback((tree: MindMapTree, currentTitle: string) => {
+    const xml = treeToWisemapping(tree.root);
+    const blob = new Blob([xml], { type: 'application/xml' });
+    void downloadBlob(blob, `${currentTitle}.wxml`);
+  }, []);
+
+  // XMind export pulls in the zip encoder — load it only when actually used.
+  const handleExportXmind = useCallback(async (tree: MindMapTree, currentTitle: string) => {
+    const { treeToXmind } = await import('../utils/xmindExport');
+    const blob = treeToXmind(tree.root, currentTitle);
+    void downloadBlob(blob, `${currentTitle}.xmind`);
   }, []);
 
   const handleUploadFiles = useCallback(async (files: FileList) => {
@@ -1021,6 +1042,9 @@ export function EditorPage() {
         onShowHistory={() => { if (!isLocalMode) setShowHistory(true); }}
         onExportMarkdown={handleExportMarkdown}
         onExportFreemind={handleExportFreemind}
+        onExportFreeplane={handleExportFreeplane}
+        onExportWisemapping={handleExportWisemapping}
+        onExportXmind={handleExportXmind}
         versionLabel={versionLabel}
         versionTooltip={versionTooltip}
         onTreeChange={setCurrentTree}

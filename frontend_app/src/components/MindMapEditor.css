@@ -66,16 +66,24 @@
 /* ── Toolbar ─────────────────────────────────────────────────────────────── */
 .mm-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 12px;
-  height: 52px;
-  min-height: 52px;
   background: var(--mm-toolbar-bg);
   border-bottom: 1px solid var(--mm-toolbar-border);
-  gap: 8px;
   flex-shrink: 0;
   z-index: 10;
+}
+
+/* Vault identity — always visible, takes natural width */
+.mm-toolbar-nav {
+  display: flex;
+  align-items: center;
+  padding: 0 8px 0 12px;
+  height: 44px;
+  min-height: 44px;
+  gap: 8px;
+  flex: 0 0 auto;
+  border-right: 1px solid var(--mm-toolbar-border);
 }
 
 .mm-toolbar-left {
@@ -89,16 +97,22 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
   min-width: 0;
   justify-content: center;
 }
 
+/* Action icons — sit on the same row as nav when there is space;
+   automatically wrap to a full-width second row when there is not.
+   box-shadow creates a top separator only when right is on its own wrapped row. */
 .mm-toolbar-right {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
+  flex: 1 1 500px;
   gap: 4px;
-  flex-shrink: 0;
+  padding: 5px 8px;
+  min-height: 44px;
+  box-shadow: inset 0 1px 0 var(--mm-toolbar-border);
 }
 
 .mm-title-input {
@@ -1348,6 +1362,13 @@
   object-fit: cover;
 }
 
+.mm-notes-attachment-audio-icon {
+  width: 28px;
+  height: 28px;
+  stroke: #f87171;
+  opacity: 0.8;
+}
+
 .mm-notes-attachment-meta {
   display: flex;
   flex-direction: column;
@@ -1473,6 +1494,28 @@
   height: min(70vh, 760px);
   border: 0;
   background: #fff;
+}
+
+.mm-attachment-preview-audio-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  width: 100%;
+  padding: 32px 20px;
+  box-sizing: border-box;
+}
+
+.mm-attachment-preview-audio-icon {
+  width: 72px;
+  height: 72px;
+  opacity: 0.3;
+}
+
+.mm-attachment-preview-audio {
+  width: 100%;
+  max-width: 440px;
 }
 
 .mm-attachment-preview-placeholder {
@@ -1800,22 +1843,21 @@
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .mm-toolbar {
-    height: auto;
-    min-height: 0;
-    padding: 8px;
-    align-items: stretch;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .mm-toolbar-left,
-  .mm-toolbar-right {
-    width: 100%;
+  .mm-toolbar-nav {
+    flex: 1 0 100%;       /* always own row on mobile */
+    border-right: none;
+    padding: 0 8px;
+    height: 40px;
+    min-height: 40px;
   }
   .mm-toolbar-right {
+    flex: 1 0 100%;       /* always own row on mobile */
     overflow-x: auto;
-    padding-bottom: 2px;
+    padding-bottom: 4px;
     scrollbar-width: thin;
+  }
+  .mm-toolbar-right .mm-btn {
+    flex-shrink: 0;
   }
   .mm-toolbar-right .mm-btn {
     flex-shrink: 0;

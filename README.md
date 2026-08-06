@@ -165,6 +165,32 @@ macOS notes:
   xattr -dr com.apple.quarantine "/Applications/MindMapVault FOSS Local-Only.app"
   ```
 
+Linux packaging output:
+
+- `desktop/src-tauri/target/release/bundle/appimage/*.AppImage`
+
+Linux notes:
+
+- Requires the GTK/WebKit development headers on the build host:
+
+  ```bash
+  sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+    libayatana-appindicator3-dev librsvg2-dev patchelf
+  ```
+
+- **Tauri cannot cross-compile to Linux** from macOS or Windows — the build links
+  against webkit2gtk and GTK, which only exist on Linux. To produce an AppImage
+  from a non-Linux workstation, build inside a container (requires Docker or a
+  compatible runtime):
+
+  ```bash
+  pnpm run build:linux
+  ```
+
+  This mirrors the `desktop-linux` CI job and writes the AppImage to `dist-linux/`.
+  It targets `linux/amd64` to match the released artifacts; on Apple Silicon that
+  runs under emulation, so expect it to be noticeably slower than a native build.
+
 Windows setup notes for non-power users:
 
 - Run commands from the repository root folder (the folder containing frontend_app and desktop).

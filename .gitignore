@@ -75,3 +75,5 @@ RELEASE_PROCESS.md
 
 # Local copilot instructions
 .github/copilot-instructions.md
+# Linux container build output
+/dist-linux

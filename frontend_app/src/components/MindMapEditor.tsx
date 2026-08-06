@@ -82,7 +82,7 @@ interface DragState {
 // ── Component ─────────────────────────────────────────────────────────────────
 export function DesktopMindMapEditor({
   initialTree, initialShowShortcuts, disableAutoPanToSelection, externalNodeAttachments, title, onSave, onTitleChange, saving, saveMsg, error, onBack,
-  onExportMarkdown, onExportFreemind, titleChanged, onRenameTitle, renamingTitle,
+  onExportMarkdown, onExportFreemind, onExportFreeplane, onExportWisemapping, onExportXmind, titleChanged, onRenameTitle, renamingTitle,
   versionLabel, versionTooltip,
   onTreeChange, onSelectionChange, onNodeFileDrop, onOpenNodeAttachment,
   onFetchNodeAttachmentContent,
@@ -131,7 +131,7 @@ export function DesktopMindMapEditor({
   const [attachmentPreviewOpen, setAttachmentPreviewOpen] = useState(false);
   const [attachmentPreviewTitle, setAttachmentPreviewTitle] = useState('');
   const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState<string | null>(null);
-  const [attachmentPreviewType, setAttachmentPreviewType] = useState<'image' | 'pdf' | 'unsupported'>('unsupported');
+  const [attachmentPreviewType, setAttachmentPreviewType] = useState<'image' | 'pdf' | 'audio' | 'unsupported'>('unsupported');
   const [attachmentPreviewContentType, setAttachmentPreviewContentType] = useState<string>('');
   const [attachmentPreviewBusy, setAttachmentPreviewBusy] = useState(false);
 
@@ -407,8 +407,9 @@ export function DesktopMindMapEditor({
     const contentType = (attachment.content_type || '').toLowerCase();
     const isImage = contentType.startsWith('image/');
     const isPdf = contentType === 'application/pdf' || attachment.name.toLowerCase().endsWith('.pdf');
+    const isAudio = contentType.startsWith('audio/') || /\.(webm|m4a|mp3|ogg|wav|aac|flac|opus)$/i.test(attachment.name);
 
-    if (!isImage && !isPdf) {
+    if (!isImage && !isPdf && !isAudio) {
       await onOpenNodeAttachment?.(attachment);
       return;
     }
@@ -421,7 +422,7 @@ export function DesktopMindMapEditor({
     setAttachmentPreviewBusy(true);
     setAttachmentPreviewOpen(true);
     setAttachmentPreviewTitle(attachment.name || 'Attachment preview');
-    setAttachmentPreviewType(isPdf ? 'pdf' : 'image');
+    setAttachmentPreviewType(isPdf ? 'pdf' : isAudio ? 'audio' : 'image');
     setAttachmentPreviewContentType(attachment.content_type || 'application/octet-stream');
 
     const content = await onFetchNodeAttachmentContent(attachment);
@@ -455,7 +456,11 @@ export function DesktopMindMapEditor({
   const layout = useMemo(() => layoutTree(root), [root]);
 
   const loadAttachmentPreview = useCallback(async (attachment: NodeAttachmentRef) => {
-    if (!attachment.preview_attachment_id || !onLoadNodeAttachmentPreview) return;
+    const isImage = (attachment.content_type ?? '').startsWith('image/');
+    // Images can be previewed from their own attachment_id; non-images need a
+    // separately generated preview_attachment_id.
+    if (!isImage && !attachment.preview_attachment_id) return;
+    if (!onLoadNodeAttachmentPreview) return;
     if (attachmentPreviewUrlsRef.current[attachment.attachment_id]) return;
     if (attachmentPreviewPending.current.has(attachment.attachment_id)) return;
     if (attachmentPreviewFailed.current.has(attachment.attachment_id)) return;
@@ -479,7 +484,8 @@ export function DesktopMindMapEditor({
   useEffect(() => {
     if (!onLoadNodeAttachmentPreview) return;
     for (const attachment of attachmentById.values()) {
-      if (!attachment.preview_attachment_id) continue;
+      const isImage = (attachment.content_type ?? '').startsWith('image/');
+      if (!isImage && !attachment.preview_attachment_id) continue;
       void loadAttachmentPreview(attachment);
     }
   }, [attachmentById, loadAttachmentPreview, onLoadNodeAttachmentPreview]);
@@ -1151,9 +1157,18 @@ export function DesktopMindMapEditor({
       .replace(/[\\/:*?"<>|]+/g, '-')
       .replace(/\s+/g, ' ')
       .trim();
-    const versionMatch = (versionLabel ?? '').match(/v\s*(\d+)/i);
+    // Only a real sequential version label ("v12") becomes a filename token.
+    // Anchored deliberately: local mode has no server-side version history and
+    // falls back to a date label ("v 6. 8. 2026"), which an unanchored match
+    // would read as version 6 — stamping the day of the month onto every
+    // export as "-v6".
+    const versionMatch = (versionLabel ?? '').trim().match(/^v\s*(\d+)$/i);
     const versionToken = versionMatch ? `v${versionMatch[1]}` : null;
-    return versionToken ? `${safeTitle}-${versionToken}` : safeTitle;
+    // Don't append the version token when the title already ends with it
+    // (e.g. title "guide-v3" + versionLabel "v3" → "guide-v3", not "guide-v3-v3")
+    const alreadyEndsWithVersion =
+      versionToken != null && new RegExp(`[-_ ]${versionToken}$`, 'i').test(safeTitle);
+    return (versionToken && !alreadyEndsWithVersion) ? `${safeTitle}-${versionToken}` : safeTitle;
   }, [title, versionLabel]);
 
   // ── PNG export ────────────────────────────────────────────────────────────
@@ -1167,14 +1182,11 @@ export function DesktopMindMapEditor({
       const canvas = await renderSvgToCanvas(svg, versionLabel, exportDate.toISOString());
       const pngBlob: Blob | null = await new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
       if (pngBlob) {
-        try {
-          await downloadBlob(pngBlob, `${buildExportFileBaseName()}.png`);
-          return;
-        } catch (err) {
-          // fall through to data URL fallback
-        }
+        await downloadBlob(pngBlob, `${buildExportFileBaseName()}.png`);
+        return;
       }
-      // Fallback: data URL path
+      // canvas.toBlob can yield null (e.g. OOM on very large maps) — the data
+      // URL path is a genuinely different encode, not a retry of the same call.
       const dataUrl = canvas.toDataURL('image/png');
       await downloadDataUrl(dataUrl, `${buildExportFileBaseName()}.png`);
     } catch (err) {
@@ -1367,10 +1379,20 @@ export function DesktopMindMapEditor({
   //  ZOOM / PAN / DRAG-AND-DROP
   // ══════════════════════════════════════════════════════════════════════════
 
-  const onWheel = useCallback((e: React.WheelEvent) => {
+  // React attaches wheel handlers passively, so e.preventDefault() there is a
+  // no-op and ctrl+wheel zoom also scrolls/zooms the page. Bind natively with
+  // { passive: false } instead.
+  const onWheelNative = useCallback((e: WheelEvent) => {
     if (e.ctrlKey || e.metaKey) { e.preventDefault(); setZoom((z) => Math.min(3, Math.max(0.3, z - e.deltaY * 0.001))); }
     else setPan((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
   }, []);
+
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', onWheelNative, { passive: false });
+    return () => el.removeEventListener('wheel', onWheelNative);
+  }, [onWheelNative]);
 
   const onMouseDownSvg = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
     if ((e.target as SVGElement).closest('[data-node]')) return;
@@ -2111,39 +2133,41 @@ export function DesktopMindMapEditor({
 
       {/* ── Toolbar ─────────────────────────────────────────────────────── */}
       {!isMobile && <div className="mm-toolbar">
-        <div className="mm-toolbar-left">
-          {onBack && (
-            <button className="mm-btn" onClick={onBack} title="Back to vaults" style={{ padding: '0 8px', flexShrink: 0 }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/></svg>
-            </button>
-          )}
-          <button
-            className={`mm-btn mm-save-btn${isDirty ? ' mm-save-btn--dirty' : ''}${saving ? ' mm-save-btn--saving' : ''}${error ? ' mm-save-btn--err' : ''}${saveMsg ? ' mm-save-btn--ok' : ''}`}
-            onClick={handleSave}
-            disabled={saving || (!isDirty && !error)}
-            title={saving ? 'Saving…' : error ? error : isDirty ? 'Unsaved changes — click to save (Ctrl+S)' : 'All changes saved'}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
-              <polyline points="17 21 17 13 7 13 7 21" />
-              <polyline points="7 3 7 8 15 8" />
-            </svg>
-          </button>
-        </div>
-        <div className="mm-toolbar-center">
-          <input ref={titleInputRef} className="mm-title-input" value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Untitled" style={{ textAlign: 'center' }} />
-          {versionLabel && (
-            <span
-              style={{ fontSize: 11, color: 'var(--mm-statusbar-text, #94a3b8)', flexShrink: 0, whiteSpace: 'nowrap', cursor: versionTooltip ? 'help' : 'default' }}
-              title={versionTooltip}
+        <div className="mm-toolbar-nav">
+          <div className="mm-toolbar-left">
+            {onBack && (
+              <button className="mm-btn" onClick={onBack} title="Back to vaults" style={{ padding: '0 8px', flexShrink: 0 }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/></svg>
+              </button>
+            )}
+            <button
+              className={`mm-btn mm-save-btn${isDirty ? ' mm-save-btn--dirty' : ''}${saving ? ' mm-save-btn--saving' : ''}${error ? ' mm-save-btn--err' : ''}${saveMsg ? ' mm-save-btn--ok' : ''}`}
+              onClick={handleSave}
+              disabled={saving || (!isDirty && !error)}
+              title={saving ? 'Saving…' : error ? error : isDirty ? 'Unsaved changes — click to save (Ctrl+S)' : 'All changes saved'}
             >
-              {versionLabel}
-            </span>
-          )}
-          {onRenameTitle && titleChanged && (
-            <button className="mm-btn" onClick={onRenameTitle} disabled={renamingTitle} title="Rename vault (title only)"
-              style={{ padding: '0 8px', flexShrink: 0, color: 'var(--accent)', border: '1px solid var(--accent)' }}>{renamingTitle ? '…' : 'Rename'}</button>
-          )}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+            </button>
+          </div>
+          <div className="mm-toolbar-center">
+            <input ref={titleInputRef} className="mm-title-input" value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Untitled" style={{ textAlign: 'center' }} />
+            {versionLabel && (
+              <span
+                style={{ fontSize: 11, color: 'var(--mm-statusbar-text, #94a3b8)', flexShrink: 0, whiteSpace: 'nowrap', cursor: versionTooltip ? 'help' : 'default' }}
+                title={versionTooltip}
+              >
+                {versionLabel}
+              </span>
+            )}
+            {onRenameTitle && titleChanged && (
+              <button className="mm-btn" onClick={onRenameTitle} disabled={renamingTitle} title="Rename vault (title only)"
+                style={{ padding: '0 8px', flexShrink: 0, color: 'var(--accent)', border: '1px solid var(--accent)' }}>{renamingTitle ? '…' : 'Rename'}</button>
+            )}
+          </div>
         </div>
         <div className="mm-toolbar-right">
           <input
@@ -2228,6 +2252,21 @@ export function DesktopMindMapEditor({
                       FreeMind (.mm)
                     </button>
                   )}
+                  {onExportFreeplane && (
+                    <button className="mm-context-item" onClick={() => { onExportFreeplane({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
+                      FreePlane (.mm)
+                    </button>
+                  )}
+                  {onExportWisemapping && (
+                    <button className="mm-context-item" onClick={() => { onExportWisemapping({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
+                      WiseMapping (.wxml)
+                    </button>
+                  )}
+                  {onExportXmind && (
+                    <button className="mm-context-item" onClick={() => { onExportXmind({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
+                      XMind (.xmind)
+                    </button>
+                  )}
                   <button className="mm-context-item" onClick={() => { exportPng(); setShowExportMenu(false); }}>
                     PNG image
                   </button>
@@ -2238,6 +2277,17 @@ export function DesktopMindMapEditor({
               )}
             </div>
           )}
+          <button
+            className="mm-btn"
+            onClick={toggleThemeMode}
+            title={themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {themeMode === 'dark' ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            )}
+          </button>
           <ThemePanel />
         </div>
       </div>}
@@ -2256,7 +2306,7 @@ export function DesktopMindMapEditor({
 
       {/* ── Canvas ──────────────────────────────────────────────────── */}
       <div className="mm-canvas-wrap">
-        <svg ref={svgRef} className="mm-canvas" onWheel={onWheel} onMouseDown={onMouseDownSvg} onMouseMove={onMouseMoveSvg} onMouseUp={onMouseUpSvg} onMouseLeave={onMouseUpSvg}
+        <svg ref={svgRef} className="mm-canvas" onMouseDown={onMouseDownSvg} onMouseMove={onMouseMoveSvg} onMouseUp={onMouseUpSvg} onMouseLeave={onMouseUpSvg}
           onTouchStart={onTouchStartSvg} onTouchMove={onTouchMoveSvg} onTouchEnd={onTouchEndSvg} onTouchCancel={onTouchEndSvg}
           onDragOver={onDragOverSvg} onDragLeave={onDragLeaveSvg} onDrop={(e) => { void onDropSvg(e); }}
           onClick={() => { setShowColorPicker(false); setContextMenu(null); }}>
@@ -2709,6 +2759,16 @@ export function DesktopMindMapEditor({
               )}
               {!attachmentPreviewBusy && attachmentPreviewType === 'pdf' && attachmentPreviewUrl && (
                 <iframe className="mm-attachment-preview-pdf" src={attachmentPreviewUrl} title={attachmentPreviewTitle || 'PDF preview'} />
+              )}
+              {!attachmentPreviewBusy && attachmentPreviewType === 'audio' && attachmentPreviewUrl && (
+                <div className="mm-attachment-preview-audio-wrap">
+                  <svg className="mm-attachment-preview-audio-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                    <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+                  </svg>
+                  <audio className="mm-attachment-preview-audio" controls src={attachmentPreviewUrl} />
+                </div>
               )}
               {!attachmentPreviewBusy && !attachmentPreviewUrl && (
                 <div className="mm-attachment-preview-placeholder">Preview is unavailable for this file.</div>

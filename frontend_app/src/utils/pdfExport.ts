@@ -77,7 +77,8 @@ function drawProjectLogoMark(
   const outerR = size * 0.46;
   const ringR = size * 0.31;
 
-  
+  ctx.save();
+  ctx.beginPath();
   ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
   ctx.fillStyle = '#7C3AED';
   ctx.fill();
@@ -164,8 +165,6 @@ function drawWatermark(
   const ry = Math.max(14 * scale, brand.y - pillH - 8 * scale);
   ctx.fillStyle = 'rgba(0,0,0,0.50)';
   fillPill(ctx, rx, ry, pillW, pillH, 6 * scale);
-  
-
   ctx.fillStyle = 'rgba(255,255,255,0.82)';
   ctx.textBaseline = 'middle';
   ctx.fillText(label, rx + padH, ry + pillH / 2);
@@ -180,8 +179,24 @@ export async function renderSvgToCanvas(
   versionLabel?: string,
   dateStr?: string,
 ): Promise<HTMLCanvasElement> {
+  const svgW = svg.clientWidth || 1200;
+  const svgH = svg.clientHeight || 800;
+
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.querySelectorAll('foreignObject').forEach((fo) => fo.remove());
+
+  // The live <svg class="mm-canvas"> is sized purely by CSS (width/height:100%)
+  // and carries no width/height/viewBox attributes. Once serialized into a
+  // standalone data: URI none of that CSS applies, so the image has no
+  // intrinsic size and rasterizes at the SVG default of 300×150 — everything
+  // beyond that box is cropped, which for a real map means the export comes
+  // out empty apart from the background and watermark drawn separately below.
+  // Stamp the measured viewport size onto the clone before serializing.
+  clone.setAttribute('width', String(svgW));
+  clone.setAttribute('height', String(svgH));
+  if (!clone.getAttribute('viewBox')) {
+    clone.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
+  }
 
   const serializer = new XMLSerializer();
   let svgStr = serializer.serializeToString(clone);
@@ -191,8 +206,6 @@ export async function renderSvgToCanvas(
 
   const { resolved, bgColor } = resolveCssVarsInSvg(svgStr);
 
-  const svgW = svg.clientWidth || 1200;
-  const svgH = svg.clientHeight || 800;
   const scale = 2;
   const canvas = document.createElement('canvas');
   canvas.width = svgW * scale;
@@ -244,17 +257,10 @@ export async function exportSvgAsPdf(
 
   const pdfBytes = buildSinglePagePdf(jpegBytes, canvas.width, canvas.height, title);
   const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
-  try {
-    await downloadBlob(blob, `${title || 'mindmap'}.pdf`);
-  } catch (err) {
-    // Last-resort fallback: create object URL and click
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title || 'mindmap'}.pdf`;
-    document.body.appendChild(a);
-    setTimeout(() => { a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); }, 50);
-  }
+  // downloadBlob already picks the right strategy per platform and surfaces
+  // failures; the caller turns a rejection into a toast. Catching here would
+  // only re-hide it behind an <a download> that does nothing on desktop.
+  await downloadBlob(blob, `${title || 'mindmap'}.pdf`);
 }
 
 /** Builds a minimal single-page A4-landscape PDF containing one JPEG image. */

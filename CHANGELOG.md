@@ -12,6 +12,48 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Removed
 
+## [0.3.31] - 2026-08-06
+
+Ports the desktop-relevant frontend work from the SaaS app into the FOSS build. Cloud-only functionality (accounts, plans, sharing, sync, PWA/offline queue, telemetry) was deliberately left behind — see "Not migrated" below.
+
+### Added
+- **FreePlane import** — `frontend_app/src/utils/freemindImport.ts` now handles FreePlane `.mm` files alongside FreeMind. Reads node text from `<richcontent TYPE="NODE">` children and from HTML-document `TEXT` attributes, falls back to `BACKGROUND_COLOR` when `COLOR` is absent, scopes the root lookup to `map > node` so FreePlane's `<hook>`/`<attribute>`/`<edge>` siblings are skipped, and reports the detected format in parse errors.
+- **FreePlane export** — new `frontend_app/src/utils/freeplaneExport.ts`; "FreePlane (.mm)" added to the editor export menu.
+- **WiseMapping import/export** — new `frontend_app/src/utils/wisemappingImport.ts` and `wisemappingExport.ts` for `.wxml`.
+- **XMind import/export** — new `frontend_app/src/utils/xmindImport.ts` and `xmindExport.ts` for `.xmind`. Import supports both XMind Zen / 2020+ (`content.json`) and XMind 8 and earlier (`content.xml`). Adds the `fflate` dependency (MIT, pure JS, no network) for ZIP handling; both modules are dynamically imported so the decoder stays out of the main bundle.
+- **Native save-dialog filters for the new formats** — `frontend_app/src/utils/download.ts` gained `.mm`, `.wxml` and `.xmind` entries, so the Tauri save dialog labels them correctly.
+- **Vault search** — filter the vault list by title, note or label, with a result count and a dedicated no-match state.
+- **Grid / table view toggle** — the vault lobby can now render as a compact table (thumbnail, name, labels, updated date, node count, actions). The choice is persisted in `localStorage` under `mmv-lobby-view`.
+- **Unified Import dropdown** — the separate "Import .md" and "Import .mm" buttons are replaced by one **Import ▾** menu listing Markdown, FreeMind, FreePlane, WiseMapping and XMind.
+- **Settings hub** — new `frontend_app/src/components/SettingsModal.tsx`, a tabbed modal (Account / What's New / Appearance) opened from the gear icon, replacing the old `ThemePanel` dropdown. Account holds the local profile, the auto-logout setting and the password-rotation form; Appearance holds theme, accent colour, autosave and the credits/version block.
+- **In-app changelog** — new `frontend_app/src/changelog.ts` drives the "What's New" tab. `APP_VERSION` must stay equal to `frontend_app/package.json`'s `version` and to `CHANGELOG[0].version`.
+- **Dark/light toggle in the editor toolbar** — previously only available on mobile.
+- **Audio attachments** — audio files attached to a node now open in an inline `<audio>` player in the attachment preview modal, and show a microphone icon in the notes attachment list instead of a generic FILE tile.
+- **Obsidian markdown import upgrades** — task-list items (`- [ ]` / `- [x]`) now set the node's `checked` field; embedded images resolve to their alt text; `==highlights==`, `#tags` and HTML comments are stripped; Obsidian callouts (`> [!note] Title`) drop the callout marker; and both 2-space and 4-space (tab) list indentation are recognised.
+
+### Changed
+- **Vault card preview is clickable** — the preview image opens the vault directly, with a hover opacity cue. The nested frame/shell wrappers around it were removed, leaving a single rounded container instead of three stacked bordered rectangles.
+- **Vault list header is icon-only** — the settings gear and lock/log-out buttons lost their text labels; "Change password" moved into the settings modal's Account tab. The `/change-password` route still works and is now a thin wrapper.
+- **Empty state has actions** — "No vaults yet" now offers "Create your first vault" and "Import an existing file" buttons.
+- **Editor toolbar wraps** — nav (back, save, title, version) and the action-icon row are now separate flex children (`.mm-toolbar-nav`), so the icons wrap onto their own row in narrow windows instead of overflowing.
+- **Password rotation extracted** — `frontend_app/src/components/PasswordRotationForm.tsx` now holds the rotation logic, shared by `ChangePasswordPage` and the settings modal.
+- **Node attachment thumbnails** — images without a separately generated `preview_attachment_id` now render a thumbnail from their own `attachment_id`. `EditorPage` already supported this in both local and remote paths; only the editor-side gate was blocking it.
+
+### Fixed
+- **PNG and PDF exports came out empty (background and watermark only)** — `renderSvgToCanvas` serialized the live `<svg class="mm-canvas">` into a `data:` URI, but that element is sized purely by CSS (`width/height: 100%`) and carries no `width`, `height` or `viewBox` attribute. In a standalone SVG image none of that CSS applies, so the image had no intrinsic size and rasterized at the SVG default of 300×150; a centred mind map sits well outside that box and was cropped away entirely. `img.onload` still fired and `drawImage` still ran, so there was no error to report — only a blank page. The clone is now stamped with the measured viewport `width`/`height` (plus a matching `viewBox` when absent) before serialization. Verified against WKWebView directly: an element at (400, 300) draws nothing without the attributes and draws correctly with them. `utils/vaultPreview.ts` was unaffected because it already emits explicit dimensions, which is why vault card previews always rendered.
+- **PNG, PDF, Markdown and mind-map file exports silently did nothing on macOS** — the save dialog appeared, but no file was ever written. `downloadBlob` wrote the chosen path with the JS `fs` plugin's `writeFile`, and the app's fs capability grants only `fs:allow-app-write-recursive`, whose scope is `$APPDATA`/`$APPLOCALDATA`/`$APPCONFIG`/`$APPCACHE`/`$APPLOG` — so a path like `~/Downloads/map.png` was rejected as forbidden. The rejection was swallowed by a `catch` that fell through to an `<a download>` blob URL, which is a no-op in WKWebView; on Windows the same fallback happens to work because WebView2 is Chromium, which is why this only showed up on macOS. Exports now write through a new `save_export_file` Tauri command (Rust is not subject to the webview ACL, so the fs scope stays tight rather than being widened to the user's home directory), and desktop failures propagate to the existing error toasts instead of being hidden. The encrypted `.cmvault` export was unaffected — it already wrote via Rust.
+- **Editing one vault re-rendered and re-fetched every other vault** — the preview and share-count effects held direct references to the `maps` state array, so any draft mutation (colour, note, labels, max versions) produced a new array reference and re-fired every effect. They now key off a derived `mapMetaKey` that only changes on vault identity or server-persisted `updated_at`, and read the current array through a ref.
+- **Local-mode previews ignored theme changes** — the cached-preview effect used `themeMode` but did not list it as a dependency, so switching theme left the previous theme's previews on screen until the next reload.
+- **Ctrl+scroll zoom also scrolled the page** — React attaches wheel handlers passively, making `preventDefault()` a no-op. The canvas now binds `wheel` natively with `{ passive: false }`.
+- **Vault previews of maps with collapsed branches** — `renderTreeSvgSync` indexed `layout[...]` for nodes omitted by `layoutTree` when their parent is folded, producing a crash or mis-drawn connectors. Both parent and child lookups are now guarded.
+- **PDF export drew a stray line and leaked canvas state** — `drawProjectLogoMark` had lost its `ctx.save()` and `ctx.beginPath()`, so the logo's outer circle joined whatever path was open and the function's `ctx.restore()` popped state pushed by its caller (3 saves against 4 restores).
+- **Table-view tooltip was clipped** — the label/note hover tooltip renders through a React portal at `document.body` with `position: fixed`, so it is no longer trapped by the table wrapper's `overflow: hidden`.
+- **Export filenames picked up the day of the month as a fake version** — local mode has no server-side version history, so the version label falls back to a formatted date (`v 6. 8. 2026`). `buildExportFileBaseName` matched that with an unanchored `/v\s*(\d+)/i`, read the leading `v 6` as version 6, and exported `MyMap` as `MyMap-v6.png`. The match is now anchored to the whole label, so only a genuine sequential label (`v12`) contributes a token and date labels contribute none. The date is still shown in the on-canvas watermark, where it belongs.
+- **Export filenames doubled the version token** — a vault titled `guide-v3` at version `v3` produced `guide-v3-v3`.
+
+### Not migrated (SaaS-only, intentionally excluded)
+Accounts and auth (`api/auth.ts`, `api/account.ts`, Login/Register/Landing/Mode/Shared/Project pages), plans and payments (`api/subscription.ts`, `SubscriptionDialog`, the plan-upgrade wording in `utils/planErrors.ts`), `api/feedback.ts` and `FeedbackWidget`, `NotificationsPanel`, `SyncedDefaultsPanel`, Cloudflare Turnstile, the PWA service worker and offline sync queue (`storage/offline.ts`, `storage/idb.ts`, `storage/server.ts`, `OfflineBanner`, `PwaInstallButton`), Cloudflare Pages deploy config, and the detective-board and onboarding-tour features. The SaaS curated lucide icon registry was also skipped — the FOSS build already ships the full dynamic icon set.
+
 ## [0.3.30] - 2026-08-06
 
 ### Added

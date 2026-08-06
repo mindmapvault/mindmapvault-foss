@@ -1,0 +1,451 @@
+import { useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
+import { VaultIcon } from './Logo';
+import { PasswordRotationForm } from './PasswordRotationForm';
+import { LegalDocumentDialog, type LegalDocument } from './LegalDocumentDialog';
+import { APP_VERSION, CHANGELOG, type ChangeKind } from '../changelog';
+import { useAuthStore } from '../store/auth';
+import { AutosaveMode, useThemeStore } from '../store/theme';
+
+export type SettingsTab = 'account' | 'changelog' | 'appearance';
+
+const PRESETS = [
+  '#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f97316',
+  '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6',
+];
+
+const autosaveOptions: Array<{ value: AutosaveMode; label: string }> = [
+  { value: 'change', label: 'After each change' },
+  { value: '30s', label: 'Every 30 seconds' },
+  { value: '5m', label: 'Every 5 minutes' },
+  { value: 'never', label: 'Never' },
+];
+
+const icons: Record<SettingsTab, ReactNode> = {
+  account: (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <circle cx="12" cy="8" r="4" />
+      <path strokeLinecap="round" d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1" />
+    </svg>
+  ),
+  changelog: (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+      <rect x="9" y="3" width="6" height="4" rx="1" />
+      <path strokeLinecap="round" d="M9 12h6M9 16h4" />
+    </svg>
+  ),
+  appearance: (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <circle cx="12" cy="12" r="9" />
+      <path strokeLinecap="round" d="M12 3a9 9 0 0 0 0 18" fill="currentColor" stroke="none" opacity="0.35" />
+    </svg>
+  ),
+};
+
+const tabTitles: Record<SettingsTab, string> = {
+  account: 'Account',
+  changelog: "What's New",
+  appearance: 'Appearance',
+};
+
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <span className="mb-2 block text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+      {children}
+    </span>
+  );
+}
+
+// ─── Account ─────────────────────────────────────────────────────────────────
+
+function AccountTab({
+  username,
+  autoLogoutMinutes,
+  setAutoLogoutMinutes,
+  onClose,
+}: {
+  username: string | null;
+  autoLogoutMinutes: number | null;
+  setAutoLogoutMinutes: (minutes: number | null) => void;
+  onClose: () => void;
+}) {
+  const navigate = useNavigate();
+
+  return (
+    <div className="space-y-6">
+      <section>
+        <SectionLabel>Local profile</SectionLabel>
+        <div className="rounded-xl p-4" style={{ background: 'var(--surface-2)' }}>
+          <p className="text-sm" style={{ color: 'var(--text-primary)' }}>
+            {username ?? 'local user'}
+          </p>
+          <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+            MindMapVault FOSS is local-only. Your vaults never leave this device, and there is no
+            account on any server.
+          </p>
+        </div>
+      </section>
+
+      <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
+        <SectionLabel>Auto-logout after inactivity</SectionLabel>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={1}
+            max={1440}
+            step={1}
+            value={autoLogoutMinutes ?? ''}
+            onChange={(e) => {
+              const value = e.target.value.trim();
+              if (!value) {
+                setAutoLogoutMinutes(null);
+                return;
+              }
+              const minutes = Math.max(1, Math.min(1440, Math.trunc(Number(value))));
+              if (Number.isFinite(minutes)) setAutoLogoutMinutes(minutes);
+            }}
+            placeholder="Never"
+            className="w-full rounded-lg px-3 py-2 text-sm"
+            style={{ background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border-light)' }}
+          />
+          <button
+            type="button"
+            onClick={() => setAutoLogoutMinutes(null)}
+            title="Disable automatic logout"
+            className="rounded-lg px-3 py-2 text-sm font-medium transition"
+            style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-light)' }}
+          >
+            Never
+          </button>
+        </div>
+        <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+          Minutes of inactivity before the session locks. Leave empty or use Never to disable.
+        </p>
+      </section>
+
+      <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
+        <SectionLabel>Change password</SectionLabel>
+        <PasswordRotationForm
+          doneAction={{
+            label: 'Done',
+            onClick: () => { onClose(); navigate('/vaults'); },
+          }}
+        />
+      </section>
+    </div>
+  );
+}
+
+// ─── Changelog / What's New ──────────────────────────────────────────────────
+
+const changeKindStyle: Record<ChangeKind, { label: string; color: string; bg: string }> = {
+  feature: { label: 'New', color: '#a78bfa', bg: 'rgba(124,58,237,0.14)' },
+  improvement: { label: 'Improved', color: '#38bdf8', bg: 'rgba(56,189,248,0.14)' },
+  fix: { label: 'Fixed', color: '#34d399', bg: 'rgba(16,185,129,0.14)' },
+};
+
+function ChangelogTab() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-2">
+        <SectionLabel>What's new</SectionLabel>
+        <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)' }}>
+          v{APP_VERSION}
+        </span>
+      </div>
+
+      {CHANGELOG.map((entry) => (
+        <section key={entry.version} className="rounded-xl p-4" style={{ background: 'var(--surface-2)' }}>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Version {entry.version}</h3>
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {new Date(entry.date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+            </span>
+          </div>
+          {entry.highlights && (
+            <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>{entry.highlights}</p>
+          )}
+          <ul className="mt-3 space-y-2.5">
+            {entry.items.map((item, i) => {
+              const k = changeKindStyle[item.kind];
+              return (
+                <li key={i} className="flex gap-2.5">
+                  <span
+                    className="mt-0.5 inline-flex h-5 w-[4.5rem] shrink-0 items-center justify-center whitespace-nowrap rounded-full px-2 text-[10px] font-semibold uppercase leading-none tracking-wide"
+                    style={{ background: k.bg, color: k.color }}
+                  >
+                    {k.label}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{item.title}</p>
+                    {item.desc && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{item.desc}</p>}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+// ─── Appearance ──────────────────────────────────────────────────────────────
+
+function AppearanceTab({
+  mode,
+  primaryColor,
+  autosaveMode,
+  toggleMode,
+  setPrimaryColor,
+  setAutosaveMode,
+  onOpenLegal,
+}: {
+  mode: 'dark' | 'light';
+  primaryColor: string;
+  autosaveMode: AutosaveMode;
+  toggleMode: () => void;
+  setPrimaryColor: (color: string) => void;
+  setAutosaveMode: (mode: AutosaveMode) => void;
+  onOpenLegal: (doc: LegalDocument) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <section>
+        <div className="flex items-center justify-between">
+          <SectionLabel>Theme</SectionLabel>
+          <button
+            onClick={toggleMode}
+            title={`Switch to ${mode === 'dark' ? 'light' : 'dark'} mode`}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition"
+            style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-light)' }}
+          >
+            {mode === 'dark' ? (
+              <>
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <circle cx="12" cy="12" r="4" />
+                  <path strokeLinecap="round" d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32 1.41-1.41" />
+                </svg>
+                Light mode
+              </>
+            ) : (
+              <>
+                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                </svg>
+                Dark mode
+              </>
+            )}
+          </button>
+        </div>
+      </section>
+
+      <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
+        <SectionLabel>Accent colour</SectionLabel>
+        <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
+          {PRESETS.map((c) => (
+            <button
+              key={c}
+              onClick={() => setPrimaryColor(c)}
+              className="h-8 w-8 rounded-lg transition-transform hover:scale-110"
+              style={{
+                backgroundColor: c,
+                outline: primaryColor.toLowerCase() === c ? `2.5px solid ${c}` : 'none',
+                outlineOffset: '2px',
+                boxShadow: primaryColor.toLowerCase() === c ? '0 0 0 1px var(--surface-1)' : 'none',
+              }}
+              title={c}
+            />
+          ))}
+        </div>
+        <div className="mt-3 flex items-center gap-3 rounded-lg px-3 py-2" style={{ background: 'var(--surface-2)' }}>
+          <label className="text-sm" style={{ color: 'var(--text-secondary)' }}>Custom</label>
+          <input
+            type="color"
+            value={primaryColor}
+            onChange={(e) => setPrimaryColor(e.target.value)}
+            className="h-7 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
+          />
+          <span className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>{primaryColor}</span>
+        </div>
+      </section>
+
+      <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
+        <SectionLabel>Autosave</SectionLabel>
+        <select
+          value={autosaveMode}
+          onChange={(e) => setAutosaveMode(e.target.value as AutosaveMode)}
+          className="w-full rounded-lg px-3 py-2 text-sm"
+          style={{ background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border-light)' }}
+        >
+          {autosaveOptions.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+          Choose whether vault edits save after each change, on an interval, or only when saved manually.
+        </p>
+      </section>
+
+      <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
+        <SectionLabel>About</SectionLabel>
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Version {APP_VERSION}</p>
+        <div className="mt-2 flex flex-wrap items-center gap-4">
+          <button
+            type="button"
+            onClick={() => onOpenLegal('credits')}
+            className="text-xs font-medium underline decoration-dotted underline-offset-2"
+            style={{ color: 'var(--accent)' }}
+          >
+            Credits and acknowledgements
+          </button>
+          <a
+            href="https://github.com/mindmapvault/mindmapvault-foss"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs font-medium"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+            </svg>
+            GitHub
+          </a>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// ─── Modal shell ─────────────────────────────────────────────────────────────
+
+interface SettingsModalProps {
+  open: boolean;
+  onClose: () => void;
+  initialTab?: SettingsTab;
+}
+
+/**
+ * Tabbed settings hub: Account, What's New, Appearance.
+ *
+ * The FOSS build is local-only, so there is no profile, plan, notification or
+ * feedback section — everything here is device-local state.
+ */
+export function SettingsModal({ open, onClose, initialTab = 'account' }: SettingsModalProps) {
+  const {
+    mode, primaryColor, autoLogoutMinutes, autosaveMode,
+    toggleMode, setPrimaryColor, setAutoLogoutMinutes, setAutosaveMode,
+  } = useThemeStore();
+  const username = useAuthStore((s) => s.username);
+
+  const [tab, setTab] = useState<SettingsTab>(initialTab);
+  const [legalDocument, setLegalDocument] = useState<LegalDocument | null>(null);
+
+  const order: SettingsTab[] = ['account', 'changelog', 'appearance'];
+
+  useEffect(() => {
+    if (open) setTab(initialTab);
+  }, [open, initialTab]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return createPortal(
+    <>
+      <div
+        className="fixed inset-0 z-[1400] flex items-center justify-center bg-slate-950/70 p-0 backdrop-blur-sm sm:p-4"
+        onClick={onClose}
+      >
+        <div
+          className="flex h-full w-full flex-col overflow-hidden rounded-none shadow-2xl sm:h-[min(82vh,46rem)] sm:max-w-4xl sm:flex-row sm:rounded-2xl"
+          style={{ background: 'var(--surface-1)', border: '1px solid var(--border)' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Sidebar */}
+          <aside
+            className="shrink-0 border-b sm:w-56 sm:border-b-0 sm:border-r"
+            style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
+          >
+            <div className="flex items-center gap-2 px-4 py-4 sm:px-5">
+              <VaultIcon size={24} />
+              <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>MindMapVault</span>
+            </div>
+            <nav className="flex gap-1 overflow-x-auto px-2 pb-2 sm:flex-col sm:px-3 sm:pb-4">
+              {order.map((id) => {
+                const active = id === tab;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setTab(id)}
+                    className="flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition"
+                    style={{
+                      background: active ? 'var(--surface-2)' : 'transparent',
+                      color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {icons[id]}
+                    {tabTitles[id]}
+                  </button>
+                );
+              })}
+            </nav>
+          </aside>
+
+          {/* Content */}
+          <div className="flex min-w-0 flex-1 flex-col">
+            <header className="flex items-center justify-between gap-3 border-b px-5 py-4" style={{ borderColor: 'var(--border)' }}>
+              <h2 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>{tabTitles[tab]}</h2>
+              <button
+                type="button"
+                onClick={onClose}
+                title="Close"
+                className="rounded-lg p-1.5 transition hover:bg-[var(--surface-2)]"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            </header>
+
+            <div className="flex-1 overflow-y-auto px-5 py-5">
+              {tab === 'account' && (
+                <AccountTab
+                  username={username}
+                  autoLogoutMinutes={autoLogoutMinutes}
+                  setAutoLogoutMinutes={setAutoLogoutMinutes}
+                  onClose={onClose}
+                />
+              )}
+              {tab === 'changelog' && <ChangelogTab />}
+              {tab === 'appearance' && (
+                <AppearanceTab
+                  mode={mode}
+                  primaryColor={primaryColor}
+                  autosaveMode={autosaveMode}
+                  toggleMode={toggleMode}
+                  setPrimaryColor={setPrimaryColor}
+                  setAutosaveMode={setAutosaveMode}
+                  onOpenLegal={setLegalDocument}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+      <LegalDocumentDialog document={legalDocument} onClose={() => setLegalDocument(null)} />
+    </>,
+    document.body,
+  );
+}
+
+export default SettingsModal;

@@ -12,6 +12,8 @@
     "build:mobile-demo": "pnpm --dir mobile-demo build",
     "build:mobile-demo:pages": "pnpm --dir mobile-demo build:pages",
     "tauri:dev": "pnpm --dir frontend_app tauri:dev",
-    "tauri:build": "pnpm --dir frontend_app tauri:build"
+    "tauri:build": "pnpm --dir frontend_app tauri:build",
+    "build:linux": "docker build -f scripts/linux-build.Dockerfile --output type=local,dest=./dist-linux .",
+    "build:linux:x64": "docker build --platform linux/amd64 -f scripts/linux-build.Dockerfile --output type=local,dest=./dist-linux ."
   }
 }

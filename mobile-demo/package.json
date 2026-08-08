@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@xyflow/react": "^12.11.2",
-    "dompurify": "^3.4.2",
+    "dompurify": "^3.4.13",
     "lucide-react": "^1.28.0",
     "marked": "^17.0.6",
     "react": "^19.2.8",
@@ -23,9 +23,9 @@
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^5.2.0",
     "autoprefixer": "^10.5.0",
-    "postcss": "^8.5.13",
+    "postcss": "^8.5.26",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.9.3",
-    "vite": "^6.4.2"
+    "vite": "^6.4.3"
   }
 }

@@ -8,6 +8,21 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
   return tauriInvoke<T>(cmd, args);
 }
 
+/**
+ * Password rotation is disabled because it destroys attachments.
+ *
+ * Attachments wrap their per-file key with the master key
+ * (`key_wrap: 'master-aes-256-gcm'` in crypto/encryptedVault.ts). Rotation
+ * derives a *new* master key and re-encrypts titles, notes and the private
+ * keys — but never re-wraps attachment keys. After a password change every
+ * attachment is wrapped with a master key that no longer exists, and cannot be
+ * decrypted again. The loss is silent and irreversible.
+ *
+ * Re-enable only once rotation re-wraps attachment keys for notes and nodes,
+ * with a test covering a vault that has attachments.
+ */
+const ROTATION_ENABLED = false;
+
 interface PasswordRotationFormProps {
   /** Rendered next to "Change password" — e.g. a Cancel button on the standalone page. */
   secondaryAction?: { label: string; onClick: () => void };
@@ -94,6 +109,22 @@ export function PasswordRotationForm({ secondaryAction, onDone, doneAction }: Pa
       setProgress('');
     }
   };
+
+  if (!ROTATION_ENABLED) {
+    return (
+      <div
+        className="rounded-lg px-3 py-2 text-sm"
+        style={{ background: 'rgba(234,179,8,0.12)', color: '#eab308' }}
+      >
+        <p className="font-medium">Changing your password is temporarily unavailable.</p>
+        <p className="mt-1" style={{ color: 'var(--text-muted)' }}>
+          Rotating the password would make existing attachments in your notes and nodes
+          impossible to decrypt. We have disabled it until that is fixed, rather than risk
+          your data. Your vaults and attachments are unaffected in the meantime.
+        </p>
+      </div>
+    );
+  }
 
   if (done) {
     return (

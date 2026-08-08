@@ -25,8 +25,8 @@ Please report vulnerabilities privately and do not open a public issue for activ
 
 Recommended process:
 
-1. Use GitHub Security Advisories for this repository when available.
-2. If private advisory reporting is unavailable, contact maintainers through private channels listed in project metadata.
+1. Preferred: open a private report through [GitHub Security Advisories](https://github.com/mindmapvault/mindmapvault-foss/security/advisories/new). Private vulnerability reporting is enabled on this repository.
+2. Alternative: email <security@mindmapvault.com>.
 3. Include reproduction steps, impact, affected versions/commits, and proposed mitigations if possible.
 
 Response targets (best effort):

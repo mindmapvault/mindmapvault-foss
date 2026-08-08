@@ -12,6 +12,17 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Removed
 
+## [0.3.33] - 2026-08-08
+
+Release-tooling fix. No application code changed — the desktop binaries built
+from this tag are identical to what 0.3.32 would have produced.
+
+### Fixed
+- **Releases published from a draft never built the desktop apps** — `.github/workflows/desktop-build.yml` triggered on `release: types: [created]`, but GitHub does not fire the release `created` event for draft releases, and the web UI saves a new release as a draft by default. Publishing the draft fires `published`/`released`, so the workflow never matched and v0.3.28 through v0.3.32 shipped with no attached artifacts. The trigger is now `types: [published]`, which fires both when a release is published directly and when a draft is published. `[created, published]` was deliberately not used — publishing a release directly fires both, which would run every build twice.
+
+### Added
+- **Manual release build** — `workflow_dispatch` with a required `tag` input, so an existing release can be (re)built and have its assets attached without cutting a new one. Two supporting changes were needed for it to work: a workflow-level `RELEASE_TAG` resolving `github.event.release.tag_name || github.event.inputs.tag`, because the three upload steps referenced a context that does not exist on a manual run; and `ref: ${{ env.RELEASE_TAG }}` on all three `actions/checkout` steps, which would otherwise check out the default branch and build the wrong commit.
+
 ## [0.3.32] - 2026-08-08
 
 ### Added

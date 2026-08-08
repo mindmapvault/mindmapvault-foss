@@ -2,13 +2,25 @@ name: desktop-build
 
 on:
   release:
-    types: [created]
+    # `published` — NOT `created`. GitHub does not fire release `created` for
+    # draft releases, and the UI saves as a draft by default, so a
+    # draft-then-publish flow silently built nothing. `published` fires both
+    # when a release is published directly and when a draft is published.
+    types: [published]
+  # Lets an existing release be (re)built without cutting a new one.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to build and attach assets to (e.g. v0.3.32)'
+        required: true
 
 permissions:
   contents: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Single source for the tag across both trigger types.
+  RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
 
 jobs:
   desktop-linux:
@@ -18,6 +30,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Install Linux build dependencies
         run: |
@@ -75,7 +89,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload '${{ github.event.release.tag_name }}' \
+          gh release upload "$RELEASE_TAG" \
             '${{ steps.linux_paths.outputs.appimage_path }}#MindMapVault-Linux.AppImage' \
             '${{ steps.linux_paths.outputs.appimage_checksum_path }}#MindMapVault-Linux.AppImage.sha256' \
             --clobber
@@ -88,6 +102,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Node
         uses: actions/setup-node@v5
@@ -147,7 +163,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload '${{ github.event.release.tag_name }}' \
+          gh release upload "$RELEASE_TAG" \
             '${{ steps.mac_paths.outputs.dmg_path }}#MindMapVault-macOS.dmg' \
             '${{ steps.mac_paths.outputs.dmg_checksum_path }}#MindMapVault-macOS.dmg.sha256' \
             --clobber
@@ -159,6 +175,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Node
         uses: actions/setup-node@v5
@@ -210,7 +228,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload '${{ github.event.release.tag_name }}' `
+          gh release upload $env:RELEASE_TAG `
             '${{ steps.win_paths.outputs.exe_path }}#MindMapVault-Windows.exe' `
             '${{ steps.win_paths.outputs.exe_checksum_path }}#MindMapVault-Windows.exe.sha256' `
             --clobber

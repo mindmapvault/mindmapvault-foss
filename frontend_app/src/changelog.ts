@@ -12,7 +12,7 @@
  * equal `CHANGELOG[0].version`.
  */
 
-export const APP_VERSION = '0.3.32';
+export const APP_VERSION = '0.3.33';
 
 /**
  * localStorage key recording the last version whose "What's New" the user saw.
@@ -36,6 +36,18 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.3.33',
+    date: '2026-08-08',
+    highlights: 'Packaging fix — downloadable apps are attached to releases again.',
+    items: [
+      {
+        kind: 'fix',
+        title: 'Release downloads were missing',
+        desc: 'Recent releases shipped without the macOS, Windows and Linux downloads. The build that produces them now runs correctly when a release is published.',
+      },
+    ],
+  },
   {
     version: '0.3.32',
     date: '2026-08-08',

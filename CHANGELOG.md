@@ -12,6 +12,34 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Removed
 
+## [0.3.32] - 2026-08-08
+
+### Added
+- **Obsidian-style note editor** — node notes are now written on a single surface with live preview: Markdown renders in place as you type, and the raw syntax is revealed only on the element the caret is inside. Replaces the previous 50/50 split of a raw textarea beside a read-only HTML preview.
+  - New `frontend_app/src/components/notes/liveMarkdown.ts` — a CodeMirror 6 `ViewPlugin` that walks the syntax tree and hides syntax markers unless a selection range overlaps the enclosing element. Handles headings, bold, italic, strikethrough, inline code, fenced code, blockquotes, links, horizontal rules, list markers, task checkboxes (clickable, editing the source) and inline images.
+  - New `frontend_app/src/components/notes/NoteEditor.tsx` — deliberately uncontrolled: the view owns the document and reports upward. Feeding the value back on each keystroke would fight the caret. Exposes a `NoteEditorHandle` (`focus` / `refresh` / `getValue` / `editSelection` / `prefixLines` / `insertBlock`).
+  - New `frontend_app/src/components/notes/markdownEditing.ts` — Enter continues lists, task lists and quotes (and clears an empty marker instead of adding another); Tab/Shift+Tab indent by two spaces; `Mod-b`, `Mod-i`, `Mod-k` wrap or unwrap the selection.
+  - Adds `@codemirror/state`, `view`, `language`, `lang-markdown` and `commands`. `markdown({ base: markdownLanguage })` is required, not the default CommonMark base — task lists and strikethrough are GFM extensions. The editor is `React.lazy`-loaded, so CodeMirror (176 KB gz) forms its own chunk and `EditorPage` stays at 42 KB gz.
+  - `attachment://` image targets resolve through a host-supplied callback to the decrypted blob URL, so images embedded in notes render inline in the editor rather than as raw link syntax.
+- **Local Linux packaging via a container** — `scripts/linux-build.Dockerfile` plus `pnpm run build:linux` (host arch) and `pnpm run build:linux:x64`, mirroring the `desktop-linux` CI job. Tauri cannot cross-compile to Linux because the build links against webkit2gtk and GTK, so an AppImage has to be produced on Linux; this makes that possible from a macOS or Windows workstation. Documented in `README.md` with the host dependency list and a warning that the x86_64 variant runs under emulation on Apple Silicon.
+
+### Changed
+- **Notes autosave** — the note commits ~600 ms after typing stops and again on close. The `Save notes` and `Cancel` buttons are gone, and Escape now closes *and* saves; previously it discarded everything since the dialog opened.
+- **Notes dialog is a writing surface, not a form** — node labels and attachments moved into a collapsed **Details** disclosure at the foot, the markdown cheat-sheet panel was dropped (the formatting is now visible as you type), and a **Write / Read** toggle replaces the permanent second pane. The text fills the dialog width instead of a 760 px centred column, and the dialog itself grew from `min(1080px, …)` to `min(1400px, …)`.
+- **Note editing goes through an imperative handle** — `notesRef` was an `HTMLTextAreaElement` used in five places for `selectionStart`/`selectionEnd` arithmetic. CodeMirror owns its selection, so `editNotesSelection`, `prefixNotesLines` and the attachment uploader now call `NoteEditorHandle` instead. This surfaced a latent bug: attachment insertion read `notesText`, which lags a render behind while typing and is stale across the async upload — it now reads the live document via `getValue()`.
+- **Removed with the split view** — `.mm-notes-split`, `.mm-notes-editor-pane`, `.mm-notes-preview-pane`, `.mm-notes-footer`, `.mm-notes-textarea`, `.mm-notes-md-help` and the `.mm-notes-node-preview*` strip.
+
+### Known Limitations
+- Live preview covers the common Markdown constructs; nested emphasis, tables and footnotes still show raw syntax.
+- Each autosave is a `mutate`, so a long note leaves several entries in the canvas undo history.
+- `MobileMindMapEditor` keeps its own plain `<textarea>` for notes and is unchanged by this work.
+
+### Validation
+- `pnpm --dir frontend_app test` → 38/38 (22 new: 19 covering the live-preview decorations and markdown editing behaviours, 3 covering the Read/Write round trip).
+- The Read/Write tests were confirmed to fail against the pre-fix code before being kept — an early revision unmounted the editor in Read mode, which re-seeded the document from the open-time text and discarded intervening edits.
+- `pnpm build:app`, `node scripts/check_foss_saas_residue.mjs`, `node scripts/check_frontend_offline_parity.mjs` → all pass.
+- macOS desktop bundle rebuilt, installed and launched.
+
 ## [0.3.31] - 2026-08-06
 
 Ports the desktop-relevant frontend work from the SaaS app into the FOSS build. Cloud-only functionality (accounts, plans, sharing, sync, PWA/offline queue, telemetry) was deliberately left behind — see "Not migrated" below.

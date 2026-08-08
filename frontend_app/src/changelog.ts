@@ -12,7 +12,7 @@
  * equal `CHANGELOG[0].version`.
  */
 
-export const APP_VERSION = '0.3.31';
+export const APP_VERSION = '0.3.32';
 
 /**
  * localStorage key recording the last version whose "What's New" the user saw.
@@ -36,6 +36,43 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.3.32',
+    date: '2026-08-08',
+    highlights: 'Notes are now written on one screen, with Markdown rendering as you type.',
+    items: [
+      {
+        kind: 'feature',
+        title: 'Live preview note editor',
+        desc: 'Formatting appears as you write it. The Markdown symbols show up only on the line you are editing, so notes stay readable while you work.',
+      },
+      {
+        kind: 'feature',
+        title: 'Clickable checkboxes in notes',
+        desc: 'Tick a task straight in the note — the text updates itself.',
+      },
+      {
+        kind: 'improvement',
+        title: 'Notes save themselves',
+        desc: 'No more Save button. Notes save shortly after you stop typing and again when you close, so closing or pressing Escape can no longer lose work.',
+      },
+      {
+        kind: 'improvement',
+        title: 'One writing surface instead of two panes',
+        desc: 'The editor fills the window. Labels and files moved into a Details section at the bottom, and a Write / Read switch replaces the old side-by-side preview.',
+      },
+      {
+        kind: 'improvement',
+        title: 'Keyboard shortcuts while writing',
+        desc: 'Ctrl/Cmd+B, +I and +K for bold, italic and links. Enter continues lists, numbered lists, checklists and quotes; Tab indents.',
+      },
+      {
+        kind: 'improvement',
+        title: 'Images show inline in notes',
+        desc: 'Pictures attached to a node now appear in the note itself rather than as link text.',
+      },
+    ],
+  },
   {
     version: '0.3.31',
     date: '2026-08-06',

@@ -34,6 +34,7 @@ import { MindMapColorPicker } from './MindMapColorPicker';
 import { MindMapDateDialog } from './MindMapDateDialog';
 import DynamicLucideIcon from './DynamicLucideIcon.tsx';
 import { MindMapNotesDialog } from './MindMapNotesDialog';
+import type { NoteEditorHandle } from './notes/NoteEditor';
 import { useUserLabels } from '../hooks/useUserLabels';
 import type { MindMapEditorProps } from './MindMapEditor.types';
 import {
@@ -125,7 +126,6 @@ export function DesktopMindMapEditor({
   const [notesText, setNotesText] = useState('');
   const [hoveredNoteNodeId, setHoveredNoteNodeId] = useState<string | null>(null);
   const [hoveringNotePopup, setHoveringNotePopup] = useState(false);
-  const [showMarkdownHelp, setShowMarkdownHelp] = useState(false);
   const [notesDropActive, setNotesDropActive] = useState(false);
   const [notesUploadBusy, setNotesUploadBusy] = useState(false);
   const [attachmentPreviewOpen, setAttachmentPreviewOpen] = useState(false);
@@ -302,6 +302,17 @@ export function DesktopMindMapEditor({
 
   const notesPreviewHtml = useMemo(() => renderNotesPreviewHtml(notesText), [notesText, renderNotesPreviewHtml]);
 
+  /**
+   * Maps a markdown image target to something the DOM can render. Notes store
+   * attachments as `attachment://<id>`; the decrypted blob URL lives in
+   * `attachmentPreviewUrls`. Anything else (http(s), data:) passes through.
+   */
+  const resolveNotesImageUrl = useCallback((url: string): string | undefined => {
+    if (!url.startsWith('attachment://')) return url;
+    const id = url.slice('attachment://'.length);
+    return attachmentPreviewUrls[id];
+  }, [attachmentPreviewUrls]);
+
   // ── Toast ──────────────────────────────────────────────────────────────────
   const [shortcutToast, setShortcutToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -321,7 +332,11 @@ export function DesktopMindMapEditor({
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
-  const notesRef = useRef<HTMLTextAreaElement>(null);
+  const notesRef = useRef<NoteEditorHandle>(null);
+  // Node whose notes are open; also the CodeMirror doc identity.
+  const [notesNodeId, setNotesNodeId] = useState<string>('root');
+  const [notesSeed, setNotesSeed] = useState('');
+  const [notesSaveState, setNotesSaveState] = useState<'saved' | 'saving'>('saved');
   const notesAttachmentInputRef = useRef<HTMLInputElement>(null);
   const nodeAttachmentInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -934,49 +949,53 @@ export function DesktopMindMapEditor({
     if (!found) return;
     const nextText = found.node.notes ?? '';
     setNotesText(nextText);
+    setNotesSeed(nextText);
+    setNotesNodeId(nodeId);
+    setNotesSaveState('saved');
     setNotesOpen(true);
   }, [root]);
 
-  const saveNotes = useCallback(() => {
+  /**
+   * Writes the note text into the tree. Notes autosave, so this is called on a
+   * debounce while typing and again on close — never from a Save button.
+   */
+  const commitNotes = useCallback((text: string, nodeId: string) => {
     const newRoot = cloneTree(root);
-    const found = findNode(newRoot, selectedId);
-    if (found) { found.node.notes = notesText; mutate(newRoot); }
+    const found = findNode(newRoot, nodeId);
+    if (!found || (found.node.notes ?? '') === text) return;
+    found.node.notes = text;
+    mutate(newRoot);
+  }, [root, mutate]);
+
+  const saveNotes = useCallback(() => {
+    commitNotes(notesText, notesNodeId);
+    setNotesSaveState('saved');
+  }, [commitNotes, notesText, notesNodeId]);
+
+  /** Flush any pending autosave, then close. */
+  const closeNotes = useCallback(() => {
+    commitNotes(notesText, notesNodeId);
+    setNotesSaveState('saved');
     setNotesOpen(false);
-  }, [root, selectedId, notesText, mutate]);
+  }, [commitNotes, notesText, notesNodeId]);
 
   const deleteNotes = useCallback(() => {
     const newRoot = cloneTree(root);
-    const found = findNode(newRoot, selectedId);
+    const found = findNode(newRoot, notesNodeId);
     if (found) { found.node.notes = ''; mutate(newRoot); }
     setNotesText('');
     setNotesOpen(false);
-  }, [root, selectedId, mutate]);
+  }, [root, notesNodeId, mutate]);
 
+  // CodeMirror owns the selection, so these delegate to the editor handle
+  // rather than doing selectionStart/End arithmetic on a textarea.
   const editNotesSelection = useCallback((writer: (selected: string) => string, fallback = '') => {
-    const input = notesRef.current;
-    if (!input) {
-      setNotesText((prev) => prev + writer(fallback));
-      return;
-    }
-    const start = input.selectionStart ?? 0;
-    const end = input.selectionEnd ?? 0;
-    const selected = notesText.slice(start, end) || fallback;
-    const replacement = writer(selected);
-    const next = `${notesText.slice(0, start)}${replacement}${notesText.slice(end)}`;
-    setNotesText(next);
-    requestAnimationFrame(() => {
-      input.focus();
-      const caret = start + replacement.length;
-      input.setSelectionRange(caret, caret);
-    });
-  }, [notesText]);
+    notesRef.current?.editSelection(writer, fallback);
+  }, []);
 
   const prefixNotesLines = useCallback((prefix: string, fallback = '') => {
-    editNotesSelection((selected) => {
-      const lines = (selected || fallback).split('\n');
-      return lines.map((line) => `${prefix}${line}`).join('\n');
-    }, fallback);
-  }, [editNotesSelection]);
+    notesRef.current?.prefixLines(prefix, fallback);
+  }, []);
 
   const insertMarkdownAction = useCallback((action: 'h1' | 'h2' | 'h3' | 'bold' | 'italic' | 'ul' | 'ol' | 'task' | 'quote' | 'code' | 'link') => {
     if (action === 'h1') { prefixNotesLines('# ', 'Heading 1'); return; }
@@ -1017,21 +1036,21 @@ export function DesktopMindMapEditor({
         }
         return `[Attachment: ${safeName}](attachment://${attachment.attachment_id})`;
       });
-      const existingSet = new Set((notesText || '').split('\n').map((line) => line.trim()));
+      // Read the live document from the editor: `notesText` lags by a render
+      // while typing, and the upload is async on top of that.
+      const currentNotes = notesRef.current?.getValue() ?? notesText;
+      const existingSet = new Set(currentNotes.split('\n').map((line) => line.trim()));
       const uniqueNewLines = markdownLines.filter((line) => !existingSet.has(line.trim()));
-      let nextNotes = notesText;
+
+      let nextNotes = currentNotes;
       if (uniqueNewLines.length > 0) {
         const payload = uniqueNewLines.join('\n');
-        const input = notesRef.current;
-        if (input) {
-          const start = input.selectionStart ?? notesText.length;
-          const end = input.selectionEnd ?? start;
-          const prefixNeedsBreak = start > 0 && notesText[start - 1] !== '\n';
-          const suffixNeedsBreak = end < notesText.length && notesText[end] !== '\n';
-          const insertion = `${prefixNeedsBreak ? '\n' : ''}${payload}${suffixNeedsBreak ? '\n' : ''}`;
-          nextNotes = `${notesText.slice(0, start)}${insertion}${notesText.slice(end)}`;
+        if (notesRef.current) {
+          // The editor inserts at the caret and handles blank-line separation.
+          notesRef.current.insertBlock(payload);
+          nextNotes = notesRef.current.getValue();
         } else {
-          nextNotes = `${notesText}${notesText.trim().length > 0 ? '\n' : ''}${payload}`;
+          nextNotes = `${currentNotes}${currentNotes.trim().length > 0 ? '\n' : ''}${payload}`;
         }
       }
 
@@ -1043,9 +1062,6 @@ export function DesktopMindMapEditor({
         mutate(newRoot);
       }
       setNotesText(nextNotes);
-      requestAnimationFrame(() => {
-        if (notesRef.current) notesRef.current.focus();
-      });
       refs.forEach((attachment) => { void loadAttachmentPreview(attachment); });
       showToast(`${refs.length} file${refs.length === 1 ? '' : 's'} added to notes`);
     } catch {
@@ -1055,6 +1071,24 @@ export function DesktopMindMapEditor({
       setNotesDropActive(false);
     }
   }, [loadAttachmentPreview, mutate, notesText, onNodeFileDrop, root, selectedId, showToast]);
+
+  // Autosave: notes commit on a pause in typing, and again on close. There is
+  // deliberately no Save button — closing or pressing Escape must never lose
+  // work, which was the main hazard of the previous dialog.
+  useEffect(() => {
+    if (!notesOpen) return;
+    const found = findNode(root, notesNodeId);
+    if (!found || (found.node.notes ?? '') === notesText) {
+      setNotesSaveState('saved');
+      return;
+    }
+    setNotesSaveState('saving');
+    const timer = setTimeout(() => {
+      commitNotes(notesText, notesNodeId);
+      setNotesSaveState('saved');
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [notesText, notesOpen, notesNodeId, commitNotes, root]);
 
   const deleteNotesAttachment = useCallback(async (attachment: NodeAttachmentRef) => {
     if (!onDeleteNodeAttachment) return;
@@ -1229,12 +1263,8 @@ export function DesktopMindMapEditor({
         showToast('Notes saved');
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
-        e.preventDefault();
-        notesRef.current?.focus();
-        showToast('Notes edit focus');
-        return;
-      }
+      // Escape and Ctrl+E are handled inside the editor's own keymap.
+      return;
     }
     if (editingId) {
       if (e.key === 'Escape') { cancelEdit(); e.preventDefault(); }
@@ -1259,7 +1289,7 @@ export function DesktopMindMapEditor({
     else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); hasBulk ? bulkDelete() : deleteNode(selectedId); showToast('Del — Delete node'); }
     else if (e.key === 'F2') { e.preventDefault(); const f = findNode(root, selectedId); if (f) startEditing(f.node); showToast('F2 — Rename'); }
     else if (e.key === 'F3') { e.preventDefault(); setNotesOpen((v) => { if (!v) openNotes(selectedId); return !v; }); showToast('F3 — Notes'); }
-    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') { e.preventDefault(); openNotes(selectedId); setTimeout(() => notesRef.current?.focus(), 20); showToast('Ctrl+E — Edit notes'); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') { e.preventDefault(); openNotes(selectedId); showToast('Ctrl+E — Edit notes'); }
     else if (e.key === 'F4') { e.preventDefault(); setShowColorPicker((v) => !v); showToast('F4 — Colour'); }
     else if (e.key === 'F5') { e.preventDefault(); setFocusMode((v) => { if (!v) setFocusAnchorId(selectedId); return !v; }); showToast(focusMode ? 'F5 — Focus off' : 'F5 — Focus on'); }
     else if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setFocusMode((v) => { if (!v) setFocusAnchorId(selectedId); return !v; }); showToast(focusMode ? 'F — Focus off' : 'F — Focus on'); }
@@ -2691,13 +2721,15 @@ export function DesktopMindMapEditor({
         attachments={notesDialogAttachments}
         attachmentPreviewUrls={attachmentPreviewUrls}
         canDeleteAttachment={Boolean(onDeleteNodeAttachment)}
-        showMarkdownHelp={showMarkdownHelp}
         notesUploadBusy={notesUploadBusy}
-        notesText={notesText}
+        nodeId={notesNodeId}
+        initialNotesText={notesSeed}
         notesPreviewHtml={notesPreviewHtml}
-        notesRef={notesRef}
+        saveState={notesSaveState}
+        editorRef={notesRef}
         notesAttachmentInputRef={notesAttachmentInputRef}
-        onClose={() => setNotesOpen(false)}
+        resolveImageUrl={resolveNotesImageUrl}
+        onClose={closeNotes}
         onDragOver={(e) => {
           if (!onNodeFileDrop) return;
           if (e.dataTransfer.types.includes('Files')) {
@@ -2723,7 +2755,6 @@ export function DesktopMindMapEditor({
         onDeleteAttachment={(attachment) => { void deleteNotesAttachment(attachment); }}
         onAddAttachmentFiles={(files) => { void uploadFilesIntoNotes(files); }}
         onInsertMarkdownAction={insertMarkdownAction}
-        onToggleMarkdownHelp={() => setShowMarkdownHelp((v) => !v)}
         onNotesTextChange={setNotesText}
         onNotesPaste={(e) => {
           const files = Array.from(e.clipboardData.items)
@@ -2735,7 +2766,6 @@ export function DesktopMindMapEditor({
             void uploadFilesIntoNotes(files);
           }
         }}
-        onSaveNotes={saveNotes}
         onDeleteNotes={deleteNotes}
       />
 

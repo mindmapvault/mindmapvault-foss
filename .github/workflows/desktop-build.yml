@@ -43,17 +43,18 @@ jobs:
             librsvg2-dev \
             patchelf
 
+      - name: Setup pnpm
+        # Must precede setup-node: `cache: 'pnpm'` resolves the store by
+        # shelling out to `pnpm store path`, so pnpm has to exist first.
+        # Version comes from `packageManager` in the root package.json.
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: '24'
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
-
-      - name: Setup pnpm (Corepack)
-        run: |
-          corepack enable
-          corepack prepare pnpm@10.17.1 --activate
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -105,17 +106,18 @@ jobs:
         with:
           ref: ${{ env.RELEASE_TAG }}
 
+      - name: Setup pnpm
+        # Must precede setup-node: `cache: 'pnpm'` resolves the store by
+        # shelling out to `pnpm store path`, so pnpm has to exist first.
+        # Version comes from `packageManager` in the root package.json.
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: '24'
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
-
-      - name: Setup pnpm (Corepack)
-        run: |
-          corepack enable
-          corepack prepare pnpm@10.17.1 --activate
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -178,18 +180,18 @@ jobs:
         with:
           ref: ${{ env.RELEASE_TAG }}
 
+      - name: Setup pnpm
+        # Must precede setup-node: `cache: 'pnpm'` resolves the store by
+        # shelling out to `pnpm store path`, so pnpm has to exist first.
+        # Version comes from `packageManager` in the root package.json.
+        uses: pnpm/action-setup@v4
+
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: '24'
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
-
-      - name: Setup pnpm (Corepack)
-        shell: powershell
-        run: |
-          corepack enable
-          corepack prepare pnpm@10.17.1 --activate
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

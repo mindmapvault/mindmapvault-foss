@@ -9,43 +9,53 @@ use local_store::{
     update_local_vault_meta, verify_local_vault_integrity,
 };
 use local_store::apply_local_password_rotation;
+#[cfg(debug_assertions)]
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder},
     Manager,
 };
 
-// DevTools are intentionally always enabled for transparency — users can
-// inspect what the app is doing in their name at any time. This is a
-// deliberate privacy-first design decision, not an oversight.
-// Risk acknowledged: session keys and decrypted key material live in the JS
-// heap and are reachable from the DevTools console. This is acceptable for
-// a local-only FOSS tool where the person opening DevTools is the same
-// person who owns the vault.
+// DevTools exposed the session's decrypted key material to anyone with access
+// to a *built* copy of the app (session keys and decrypted content live in
+// the JS heap and are reachable from the console) — closed for release
+// builds as a security fix. `debug_assertions` is false for `tauri build` /
+// `cargo build --release` and true for `tauri dev`, so this menu — and the
+// underlying devtools capability, since the `devtools` Cargo feature is no
+// longer enabled in Cargo.toml — only exist in development builds.
+#[cfg(debug_assertions)]
 const OPEN_WEBVIEW_DEVTOOLS_MENU_ID: &str = "open-webview-devtools";
 
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            let inspect_menu = SubmenuBuilder::new(app, "Inspect")
-                .item(
-                    &MenuItemBuilder::with_id(
-                        OPEN_WEBVIEW_DEVTOOLS_MENU_ID,
-                        "Open WebView Devtools",
+            #[cfg(debug_assertions)]
+            {
+                let inspect_menu = SubmenuBuilder::new(app, "Inspect")
+                    .item(
+                        &MenuItemBuilder::with_id(
+                            OPEN_WEBVIEW_DEVTOOLS_MENU_ID,
+                            "Open WebView Devtools",
+                        )
+                        .accelerator("CmdOrCtrl+Shift+I")
+                        .build(app)?,
                     )
-                    .accelerator("CmdOrCtrl+Shift+I")
-                    .build(app)?,
-                )
-                .build()?;
-            let menu = MenuBuilder::new(app).item(&inspect_menu).build()?;
-            app.set_menu(menu)?;
+                    .build()?;
+                let menu = MenuBuilder::new(app).item(&inspect_menu).build()?;
+                app.set_menu(menu)?;
+            }
+            #[cfg(not(debug_assertions))]
+            let _ = &app;
             Ok(())
         })
         .on_menu_event(|app, event| {
+            #[cfg(debug_assertions)]
             if event.id() == OPEN_WEBVIEW_DEVTOOLS_MENU_ID {
                 if let Some(main_window) = app.get_webview_window("main") {
                     main_window.open_devtools();
                 }
             }
+            #[cfg(not(debug_assertions))]
+            let _ = (&app, &event);
         })
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())

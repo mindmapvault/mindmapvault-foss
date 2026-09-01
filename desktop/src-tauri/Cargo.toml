@@ -1,6 +1,6 @@
 [package]
 name = "mindmapvault-foss-desktop"
-version = "0.3.33-oss"
+version = "0.3.34"
 edition = "2021"
 
 [[bin]]
@@ -12,7 +12,7 @@ name = "mindmapvault_foss_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
-tauri = { version = "2", features = ["devtools"] }
+tauri = { version = "2", features = [] }
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"

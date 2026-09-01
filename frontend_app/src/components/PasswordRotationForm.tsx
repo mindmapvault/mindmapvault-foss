@@ -9,19 +9,29 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 }
 
 /**
- * Password rotation is disabled because it destroys attachments.
+ * Enabled for FOSS. This component is shared with the hosted product, where
+ * an attachment's own key is wrapped directly by the master key
+ * (`key_wrap: 'master-aes-256-gcm'` in crypto/encryptedVault.ts) — rotation
+ * re-wraps the private keys and re-encrypts titles/notes, but never re-wraps
+ * that per-attachment key, so a hosted rotation would leave every attachment
+ * silently and irreversibly undecryptable. That is the failure this flag
+ * originally guarded against.
  *
- * Attachments wrap their per-file key with the master key
- * (`key_wrap: 'master-aes-256-gcm'` in crypto/encryptedVault.ts). Rotation
- * derives a *new* master key and re-encrypts titles, notes and the private
- * keys — but never re-wraps attachment keys. After a password change every
- * attachment is wrapped with a master key that no longer exists, and cannot be
- * decrypted again. The loss is silent and irreversible.
+ * It does not apply here. FOSS is local-only (`useModeStore` hardcodes
+ * `mode: 'local'`), and every call site of `encryptAttachmentForOwner` /
+ * `decryptAttachmentForOwner` in this build is unreachable — each one is
+ * gated behind an `isLocalMode` check (EditorPage's upload/download/preview/
+ * delete handlers, VaultsPage's preview loader). A local attachment is never
+ * wrapped by the master key at all: it's stored as inline base64 inside the
+ * mind-map tree JSON, protected by the vault's KEM-derived key, which
+ * `buildPasswordRotationBundle` never touches — confirmed on the Rust side
+ * too, since `apply_local_password_rotation` only rewrites the profile file
+ * and the vault title index, never a vault blob.
  *
- * Re-enable only once rotation re-wraps attachment keys for notes and nodes,
- * with a test covering a vault that has attachments.
+ * If this file is ever shared into a build that talks to a hosted backend,
+ * re-check this flag for that build rather than assuming it still holds.
  */
-const ROTATION_ENABLED = false;
+const ROTATION_ENABLED = true;
 
 interface PasswordRotationFormProps {
   /** Rendered next to "Change password" — e.g. a Cancel button on the standalone page. */

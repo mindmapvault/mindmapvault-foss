@@ -22,6 +22,7 @@ import {
   CHECKBOX_SIZE,
   ICON_SIZE,
   PROGRESS_PIE_SIZE,
+  NODE_IMAGE_PAD,
 } from './MindMapConstants';
 import { getVisibleNodeTextLines } from '../utils/nodeAttachments';
 
@@ -52,6 +53,8 @@ export const measureNodeSize = (
   hasNote = false,
   attachmentCount = 0,
   tagCount = 0,
+  imageW = 0,
+  imageH = 0,
 ): { w: number; h: number; lines: string[] } => {
   const lines = getVisibleNodeTextLines(text);
   const linkW = linkId ? measureText(linkId, 10) + 24 : 0;
@@ -61,11 +64,15 @@ export const measureNodeSize = (
     (hasCheckbox ? CHECKBOX_SIZE + 6 : 0) +
     (iconCount > 0 ? (ICON_SIZE + 4) * iconCount + 2 : 0) +
     (hasProgress ? PROGRESS_PIE_SIZE + 6 : 0);
-  const w = Math.max(MIN_W, maxW + NODE_PAD_X * 2 + extraLeft);
+  const textW = Math.max(MIN_W, maxW + NODE_PAD_X * 2 + extraLeft);
+  // The glyph's dimensions come from the node JSON, so a node with a picture
+  // measures exactly as fast as one without — no decode, no async, no reflow.
+  const imageBandH = imageH > 0 ? imageH + NODE_IMAGE_PAD : 0;
+  const w = Math.max(textW, imageW > 0 ? imageW + NODE_PAD_X * 2 : 0);
   const baseH = Math.max(NODE_MIN_H, lines.length * NODE_LINE_H + NODE_PAD_Y * 2);
   const footerLinks = (linkId ? 1 : 0) + urlCount;
   const topMetaH = (hasNote || attachmentCount > 0) ? TOP_META_STRIP_H : 0;
-  const h = baseH + topMetaH + (footerLinks > 0 ? LINK_STRIP_H * footerLinks : 0) + (tagCount > 0 ? TAG_STRIP_H : 0);
+  const h = baseH + topMetaH + imageBandH + (footerLinks > 0 ? LINK_STRIP_H * footerLinks : 0) + (tagCount > 0 ? TAG_STRIP_H : 0);
   return { w, h, lines };
 };
 
@@ -103,7 +110,9 @@ export const layoutTree = (
     const tagCount = Array.isArray(node.tags) ? node.tags.length : 0;
     const hasDate = Boolean(node.startDate || node.endDate);
     const visualTopExtra = hasDate ? DATE_BADGE_OFFSET_H : 0;
-    const { w, h } = measureNodeSize(node.text, linkId, iconCount, hasCheckbox, urlCount, hasProgress, hasNote, attachmentCount, tagCount);
+    const imageW = node.image?.thumb ? (node.image.w ?? 0) : 0;
+    const imageH = node.image?.thumb ? (node.image.h ?? 0) : 0;
+    const { w, h } = measureNodeSize(node.text, linkId, iconCount, hasCheckbox, urlCount, hasProgress, hasNote, attachmentCount, tagCount, imageW, imageH);
     const visualH = h + visualTopExtra;
 
     if (!node.children || node.children.length === 0 || node.collapsed) {

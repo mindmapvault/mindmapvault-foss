@@ -12,7 +12,6 @@ export interface MindMapEditorProps {
   saveMsg: string;
   error: string;
   onBack?: () => void;
-  onShowHistory?: () => void;
   onDownloadEncrypted?: (fileBaseName?: string) => void;
   onDownloadJson?: (tree: MindMapTree, title: string) => void;
   onExportMarkdown?: (tree: MindMapTree, title: string) => void;
@@ -27,7 +26,6 @@ export interface MindMapEditorProps {
   versionTooltip?: string;
   onTreeChange?: (tree: MindMapTree) => void;
   onSelectionChange?: (nodeId: string | null) => void;
-  onOpenSecurePanel?: (tab: 'attachments' | 'shares') => void;
   onNodeFileDrop?: (nodeId: string, files: File[]) => Promise<NodeAttachmentRef[]>;
   onOpenNodeAttachment?: (attachment: NodeAttachmentRef) => Promise<void> | void;
   onFetchNodeAttachmentContent?: (attachment: NodeAttachmentRef) => Promise<{ name: string; contentType: string; blob: Blob } | null>;

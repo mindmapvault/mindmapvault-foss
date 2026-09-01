@@ -407,6 +407,29 @@ export interface MindMapTreeNode {
   customY?: number;
   /** User-defined tags on this node (e.g. ['work', 'urgent']). */
   tags?: string[];
+  /** Picture drawn on the node itself. Optional, so older maps load unchanged. */
+  image?: NodeImage | null;
+}
+
+/**
+ * A picture shown on the node, on the canvas.
+ *
+ * The thumbnail lives here, inside the map JSON, which means it inherits the
+ * map's encryption for free and survives SVG serialization — so the PNG and PDF
+ * exports need no special handling. It also means a node still shows its
+ * picture straight from the tree, offline, even if the full-size original's
+ * click-through to full size fails. That is deliberate.
+ */
+export interface NodeImage {
+  /** WebP data URI, fits a 64×64 box at its own aspect ratio. */
+  thumb: string;
+  /** Rendered glyph dimensions. Stored so layout never decodes the image. */
+  w: number;
+  h: number;
+  /** Attachment holding the full-resolution original. */
+  attachment_id?: string | null;
+  /** Original filename — preview modal title and download name. */
+  name?: string;
 }
 
 export interface MindMapTree {

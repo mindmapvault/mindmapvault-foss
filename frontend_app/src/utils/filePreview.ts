@@ -90,6 +90,86 @@ function renderCardPreviewSvg(file: File): Uint8Array {
   return textEncoder.encode(svg);
 }
 
+// ── Node image glyphs ───────────────────────────────────────────────────────
+
+/** The box a glyph fits inside. The long side becomes this; the short side scales. */
+const GLYPH_BOX = 64;
+/** Below this the picture stops being readable, so degenerate ratios stop here. */
+const GLYPH_MIN_SIDE = 24;
+/** Beyond this the excess is cropped: a 10:1 panorama would otherwise be a sliver. */
+const GLYPH_MAX_RATIO = 3;
+/** A glyph rides in every future version of the map, so it has a hard ceiling. */
+const GLYPH_MAX_BYTES = 8 * 1024;
+const GLYPH_QUALITIES = [0.7, 0.5, 0.35];
+
+export interface NodeImageGlyph {
+  /** WebP data URI, encoded at exactly `w`×`h`. */
+  thumb: string;
+  w: number;
+  h: number;
+}
+
+async function encodeGlyph(canvas: HTMLCanvasElement, quality: number): Promise<string> {
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((value) => {
+      if (value) resolve(value);
+      else reject(new Error('Failed to encode node image'));
+    }, 'image/webp', quality);
+  });
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return `data:image/webp;base64,${btoa(binary)}`;
+}
+
+/**
+ * Builds the small picture drawn on the node itself.
+ *
+ * Unlike `createEncryptedFilePreview` this is a glyph, not a card: no
+ * background, no filename bar, and the canvas *is* the aspect ratio — the
+ * bitmap is encoded at exactly the dimensions it will be drawn at, so there is
+ * no letterbox, no crop at render time, and no `preserveAspectRatio` to reason
+ * about. `w`/`h` come back with it so layout never has to decode the image.
+ *
+ * Throws on anything that is not a decodable image; the caller keeps the plain
+ * attachment path.
+ */
+export async function createNodeImageGlyph(file: File): Promise<NodeImageGlyph> {
+  const bitmap = await createImageBitmap(file);
+  try {
+    // Clamp the ratio first, by cropping the excess from the centre. Scaling an
+    // unclamped panorama would leave a few unreadable pixels on the short side.
+    const ratio = bitmap.width / bitmap.height;
+    const clamped = Math.min(GLYPH_MAX_RATIO, Math.max(1 / GLYPH_MAX_RATIO, ratio));
+    let sw = bitmap.width;
+    let sh = bitmap.height;
+    if (ratio > clamped) sw = bitmap.height * clamped;
+    else if (ratio < clamped) sh = bitmap.width / clamped;
+    const sx = (bitmap.width - sw) / 2;
+    const sy = (bitmap.height - sh) / 2;
+
+    const scale = GLYPH_BOX / Math.max(sw, sh);
+    const w = Math.max(GLYPH_MIN_SIDE, Math.round(sw * scale));
+    const h = Math.max(GLYPH_MIN_SIDE, Math.round(sh * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas rendering is unavailable');
+    ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, w, h);
+
+    let thumb = '';
+    for (const quality of GLYPH_QUALITIES) {
+      thumb = await encodeGlyph(canvas, quality);
+      if (thumb.length <= GLYPH_MAX_BYTES) break;
+    }
+    return { thumb, w, h };
+  } finally {
+    bitmap.close();
+  }
+}
+
 export async function createEncryptedFilePreview(file: File): Promise<{
   bytes: Uint8Array;
   contentType: string;

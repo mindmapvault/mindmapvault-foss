@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, type ClipboardEvent, type DragEvent, type RefObject } from 'react';
+import { lazy, Suspense, useEffect, useState, type ClipboardEvent, type DragEvent, type RefObject } from 'react';
 import type { NodeAttachmentRef } from '../types';
 import { handleDelegatedLinkClick } from '../utils/openExternal';
 import type { NoteEditorHandle } from './notes/NoteEditor';
@@ -83,6 +83,23 @@ export function MindMapNotesDialog({
 }: MindMapNotesDialogProps) {
   const [mode, setMode] = useState<NotesViewMode>('write');
   const [detailsOpen, setDetailsOpen] = useState(false);
+
+  // Ctrl+E flips Write/Read. CodeMirror's editable is a contenteditable div, so
+  // the editor's own keymap never sees it as an input — a window listener is
+  // what actually reaches the key while the caret is in the note.
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'e') return;
+      e.preventDefault();
+      setMode((current) => {
+        if (current === 'read') requestAnimationFrame(() => editorRef.current?.refresh());
+        return current === 'write' ? 'read' : 'write';
+      });
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open, editorRef]);
 
   if (!open) return null;
 

@@ -2348,3 +2348,154 @@
 }
 
 .mm-notes-pane { flex: 1; min-height: 0; }
+
+/* ── Node image glyph ────────────────────────────────────────────────────── */
+.mm-node-image { cursor: zoom-in; }
+.mm-node-image:hover { opacity: 0.88; }
+
+/* ── Voice recording sheet ─────────────────────────────────────────────────── */
+.mm-overlay--upload-sheet {
+  z-index: 599;
+}
+
+.mm-mobile-recording-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 600;
+  background: var(--mm-node-fill, #1e293b);
+  border-top: 1px solid var(--mm-node-stroke, #334155);
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -8px 40px rgba(0,0,0,0.55);
+  padding: 8px 0 calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+.mm-mobile-recording-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mm-btn-text, #e2e8f0);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.mm-recording-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 20px 20px;
+}
+
+.mm-recording-btn {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s, box-shadow 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mm-recording-btn:active {
+  transform: scale(0.93);
+}
+
+.mm-recording-btn--start {
+  background: rgba(239, 68, 68, 0.15);
+  border: 2px solid rgba(239, 68, 68, 0.5);
+  animation: mm-recording-pulse 2s ease-in-out infinite;
+}
+
+.mm-recording-btn--start svg {
+  width: 36px;
+  height: 36px;
+  stroke: #f87171;
+}
+
+.mm-recording-btn--stop {
+  background: #ef4444;
+  border: 2px solid #dc2626;
+  box-shadow: 0 0 0 8px rgba(239,68,68,0.2);
+  animation: mm-recording-pulse-active 1s ease-in-out infinite;
+}
+
+.mm-recording-stop-square {
+  width: 22px;
+  height: 22px;
+  background: #fff;
+  border-radius: 4px;
+}
+
+@keyframes mm-recording-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.3); }
+  50% { box-shadow: 0 0 0 10px rgba(239,68,68,0); }
+}
+
+@keyframes mm-recording-pulse-active {
+  0%, 100% { box-shadow: 0 0 0 8px rgba(239,68,68,0.2); }
+  50% { box-shadow: 0 0 0 14px rgba(239,68,68,0); }
+}
+
+.mm-recording-timer {
+  font-size: 36px;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+  color: var(--mm-btn-text, #e2e8f0);
+}
+
+.mm-recording-label {
+  font-size: 14px;
+  color: var(--mm-btn-text, #e2e8f0);
+  opacity: 0.7;
+}
+
+.mm-recording-hint {
+  font-size: 11px;
+  opacity: 0.4;
+}
+
+.mm-recording-preview {
+  width: 100%;
+  max-width: 340px;
+  border-radius: 8px;
+}
+
+.mm-recording-name-row {
+  width: 100%;
+  max-width: 340px;
+}
+
+.mm-recording-name-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--mm-node-stroke, #334155);
+  background: var(--mm-canvas-bg, #0f172a);
+  color: var(--mm-btn-text, #e2e8f0);
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+}
+
+.mm-recording-name-input:focus {
+  border-color: var(--accent, #7c3aed);
+}
+
+.mm-recording-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+  max-width: 340px;
+}

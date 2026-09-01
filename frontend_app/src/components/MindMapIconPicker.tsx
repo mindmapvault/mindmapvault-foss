@@ -1,8 +1,33 @@
-import { useState, useMemo, useRef, useEffect, useCallback, memo } from 'react';
-import { iconNames } from 'lucide-react/dynamic';
-import { POPULAR_ICONS } from './MindMapConstants';
-import { DynamicLucideIcon } from './DynamicLucideIcon';
+/**
+ * MindMapIconPicker
+ *
+ * Searchable icon palette using lucide-react icons.
+ * Shows a curated grid of popular icons, with full search across all lucide icons.
+ * Supports multi-select (user can toggle multiple icons per node).
+ *
+ * Keyboard:
+ * - Arrow keys navigate the grid
+ * - Enter / Space toggle the focused icon
+ * - Escape closes the picker
+ * - Tab moves between search input and grid
+ *
+ * Accessibility:
+ * - role="grid" + role="gridcell" for the icon grid
+ * - aria-selected on each icon button
+ * - Tooltips on hover and keyboard focus
+ *
+ * Props:
+ * - open: boolean — whether the picker is visible
+ * - currentIcons: string[] — currently selected icon names
+ * - onSelect(iconName|null): toggle an icon on/off, or null to clear all
+ * - onClose(): close the picker
+ */
 
+import { useState, useMemo, useRef, useEffect, useCallback, memo } from 'react';
+import { DynamicLucideIcon } from './DynamicLucideIcon';
+import { CURATED_ICON_NAMES } from './lucideIconRegistry';
+
+/** How many columns in the grid — keep in sync with CSS grid-template-columns. */
 const GRID_COLS = 8;
 
 interface MindMapIconPickerProps {
@@ -11,14 +36,6 @@ interface MindMapIconPickerProps {
   onSelect: (iconName: string | null) => void;
   onClose: () => void;
   showToast?: (label: string) => void;
-}
-
-function kebabToPascal(name: string): string {
-  return name
-    .split('-')
-    .filter(Boolean)
-    .map((part) => part[0].toUpperCase() + part.slice(1))
-    .join('');
 }
 
 function MindMapIconPickerInner({ open, currentIcons, onSelect, onClose, showToast }: MindMapIconPickerProps) {
@@ -41,15 +58,16 @@ function MindMapIconPickerInner({ open, currentIcons, onSelect, onClose, showToa
   }, [open]);
 
   const allIconNames = useMemo(() => {
-    return iconNames.map(kebabToPascal).sort();
+    return CURATED_ICON_NAMES;
   }, []);
 
   const filteredIcons = useMemo(() => {
-    if (!search.trim()) return POPULAR_ICONS;
+    if (!search.trim()) return CURATED_ICON_NAMES;
     const q = search.toLowerCase();
-    return allIconNames.filter((name) => name.toLowerCase().includes(q)).slice(0, 120);
+    return allIconNames.filter((name) => name.toLowerCase().includes(q));
   }, [search, allIconNames]);
 
+  // +1 for the "clear" button at index 0
   const totalItems = filteredIcons.length + 1;
 
   const focusButton = useCallback((idx: number) => {
@@ -124,6 +142,7 @@ function MindMapIconPickerInner({ open, currentIcons, onSelect, onClose, showToa
 
     focusButton(next);
 
+    // Show tooltip for newly focused button
     if (gridRef.current) {
       const buttons = gridRef.current.querySelectorAll<HTMLButtonElement>('button.mm-icon-item');
       if (buttons[next]) {
@@ -162,42 +181,43 @@ function MindMapIconPickerInner({ open, currentIcons, onSelect, onClose, showToa
   if (!open) return null;
 
   return (
-    <div className='mm-icon-picker' role='dialog' aria-label='Icon picker'>
-      <div className='mm-icon-picker-header'>
-        <svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth={2}>
-          <circle cx='12' cy='12' r='10' />
-          <path d='M8 14s1.5 2 4 2 4-2 4-2' />
-          <line x1='9' y1='9' x2='9.01' y2='9' />
-          <line x1='15' y1='9' x2='15.01' y2='9' />
+    <div className="mm-icon-picker" role="dialog" aria-label="Icon picker">
+      <div className="mm-icon-picker-header">
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <circle cx="12" cy="12" r="10" />
+          <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+          <line x1="9" y1="9" x2="9.01" y2="9" />
+          <line x1="15" y1="9" x2="15.01" y2="9" />
         </svg>
         <span>Choose Icons {currentIcons.length > 0 ? `(${currentIcons.length} selected)` : ''}</span>
         <button
-          className='mm-btn mm-btn-sm'
+          className="mm-btn mm-btn-sm"
           onClick={onClose}
-          aria-label='Close icon picker'
+          aria-label="Close icon picker"
           style={{ marginLeft: 'auto', padding: '0 6px', height: 24 }}
         >
-          <svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth={2.5} strokeLinecap='round'>
-            <line x1='18' y1='6' x2='6' y2='18' /><line x1='6' y1='6' x2='18' y2='18' />
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         </button>
       </div>
       <input
         ref={searchRef}
-        className='mm-icon-search'
-        placeholder={`Search ${allIconNames.length} icons...`}
+        className="mm-icon-search"
+        placeholder={`Search ${allIconNames.length} icons…`}
         value={search}
         onChange={(e) => { setSearch(e.target.value); setFocusIdx(-1); }}
         onKeyDown={handleSearchKeyDown}
-        aria-label='Search icons'
+        aria-label="Search icons"
       />
       <div
         ref={gridRef}
-        className='mm-icon-grid'
-        role='grid'
-        aria-label='Icon grid'
+        className="mm-icon-grid"
+        role="grid"
+        aria-label="Icon grid"
         onKeyDown={handleGridKeyDown}
       >
+        {/* "None" option to remove all icons */}
         <button
           className={`mm-icon-item ${currentIcons.length === 0 ? 'active' : ''}`}
           onClick={() => onSelect(null)}
@@ -205,12 +225,12 @@ function MindMapIconPickerInner({ open, currentIcons, onSelect, onClose, showToa
           onBlur={handleButtonBlur}
           onMouseEnter={(e) => handleMouseEnter('Remove all icons', e.currentTarget)}
           onMouseLeave={hideTooltip}
-          aria-label='Remove all icons'
+          aria-label="Remove all icons"
           aria-selected={currentIcons.length === 0}
           tabIndex={focusIdx === 0 ? 0 : -1}
-          role='gridcell'
+          role="gridcell"
         >
-          <span style={{ fontSize: 14, fontWeight: 700 }}>x</span>
+          <span style={{ fontSize: 14, fontWeight: 700 }}>✕</span>
         </button>
         {filteredIcons.map((name, i) => {
           const isSelected = currentIcons.includes(name);
@@ -228,22 +248,23 @@ function MindMapIconPickerInner({ open, currentIcons, onSelect, onClose, showToa
               aria-label={humanName}
               aria-selected={isSelected}
               tabIndex={focusIdx === btnIdx ? 0 : -1}
-              role='gridcell'
+              role="gridcell"
             >
               <DynamicLucideIcon name={name} size={18} />
             </button>
           );
         })}
         {filteredIcons.length === 0 && (
-          <div className='mm-icon-empty'>No icons match "{search}"</div>
+          <div className="mm-icon-empty">No icons match "{search}"</div>
         )}
       </div>
 
+      {/* Floating tooltip */}
       {tooltip && (
         <div
-          className='mm-icon-tooltip'
+          className="mm-icon-tooltip"
           style={{ left: tooltip.x, top: tooltip.y }}
-          role='tooltip'
+          role="tooltip"
         >
           {tooltip.text}
         </div>

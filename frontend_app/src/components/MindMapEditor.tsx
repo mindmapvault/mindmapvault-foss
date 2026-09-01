@@ -49,6 +49,7 @@ import {
   LINK_STRIP_H,
   TAG_STRIP_H,
   TOP_META_STRIP_H,
+  NODE_IMAGE_PAD,
 } from './MindMapConstants';
 import {
   uid,
@@ -66,6 +67,7 @@ import { appendAttachmentMarkdownLinks, getVisibleNodeTextLines } from '../utils
 import { exportSvgAsPdf, renderSvgToCanvas } from '../utils/pdfExport';
 import { downloadBlob, downloadDataUrl } from '../utils/download';
 import { handleDelegatedLinkClick, openExternalUrl } from '../utils/openExternal';
+import { createNodeImageGlyph, type NodeImageGlyph } from '../utils/filePreview';
 import './MindMapEditor.css';
 
 // ── Drag state ────────────────────────────────────────────────────────────────
@@ -177,6 +179,13 @@ export function DesktopMindMapEditor({
   // ── Export menu ────────────────────────────────────────────────────────────
   const [showExportMenu, setShowExportMenu] = useState(false);
 
+  // ── Voice recording ────────────────────────────────────────────────────────
+  const [mobileRecordingOpen, setMobileRecordingOpen] = useState(false);
+  const [recordingState, setRecordingState] = useState<'idle' | 'recording' | 'recorded'>('idle');
+  const [recordingBlob, setRecordingBlob] = useState<Blob | null>(null);
+  const [recordingName, setRecordingName] = useState('');
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+
   // ── Tag dialog ─────────────────────────────────────────────────────────────
   const [showTagDialog, setShowTagDialog] = useState(false);
   const [tagInputValue, setTagInputValue] = useState('');
@@ -195,6 +204,7 @@ export function DesktopMindMapEditor({
   const [isDragging, setIsDragging] = useState(false);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [fileDropBusyNodeId, setFileDropBusyNodeId] = useState<string | null>(null);
+  const [nodeImageBusy, setNodeImageBusy] = useState(false);
   const dragRef = useRef<DragState | null>(null);
   const hoverPopupCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverPopupRef = useRef<HTMLDivElement>(null);
@@ -339,6 +349,13 @@ export function DesktopMindMapEditor({
   const [notesSaveState, setNotesSaveState] = useState<'saved' | 'saving'>('saved');
   const notesAttachmentInputRef = useRef<HTMLInputElement>(null);
   const nodeAttachmentInputRef = useRef<HTMLInputElement>(null);
+  const nodeImageInputRef = useRef<HTMLInputElement>(null);
+  // The picker is shared, so the node it was opened for has to outlive the
+  // click — the context menu that opened it is gone by the time a file arrives.
+  const nodeImageTargetRef = useRef<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const [isDirty, setIsDirty] = useState(false);
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1287,6 +1304,15 @@ export function DesktopMindMapEditor({
     else if (e.key === 'Insert') { e.preventDefault(); addChild(selectedId); showToast('Ins — Add child'); }
     else if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); addSibling(selectedId); showToast('Enter — Add sibling'); }
     else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); hasBulk ? bulkDelete() : deleteNode(selectedId); showToast('Del — Delete node'); }
+    // Alt+K is FreeMind's "Insert image (choose)". Matched on `code`, not
+    // `key`: on macOS Option+K produces "˚", so comparing the character would
+    // work everywhere except a Mac.
+    else if (e.altKey && e.code === 'KeyK') {
+      e.preventDefault();
+      nodeImageTargetRef.current = selectedId;
+      nodeImageInputRef.current?.click();
+      showToast('Alt+K — Add image');
+    }
     else if (e.key === 'F2') { e.preventDefault(); const f = findNode(root, selectedId); if (f) startEditing(f.node); showToast('F2 — Rename'); }
     else if (e.key === 'F3') { e.preventDefault(); setNotesOpen((v) => { if (!v) openNotes(selectedId); return !v; }); showToast('F3 — Notes'); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') { e.preventDefault(); openNotes(selectedId); showToast('Ctrl+E — Edit notes'); }
@@ -1542,6 +1568,91 @@ export function DesktopMindMapEditor({
     setDropTargetId(getNodeIdAtClientPoint(e.clientX, e.clientY));
   }, [getNodeIdAtClientPoint]);
 
+  // ── Node images ───────────────────────────────────────────────────────────
+
+  /**
+   * Puts a picture on a node.
+   *
+   * The order matters. The glyph is generated first and the original uploaded
+   * second, and only then is `node.image` written. Failing between the upload
+   * and the write leaves an attachment nothing points at — invisible and
+   * harmless. The other order would leave a node pointing at nothing.
+   */
+  const attachNodeImage = useCallback(async (nodeId: string, file: File) => {
+    let glyph: NodeImageGlyph;
+    try {
+      glyph = await createNodeImageGlyph(file);
+    } catch {
+      showToast('That file is not an image the browser can read');
+      return;
+    }
+
+    if (!onNodeFileDrop) {
+      // Local-only editors still get the picture; there is nothing to upload to
+      // and nothing to click through to.
+      const newRoot = cloneTree(root);
+      const found = findNode(newRoot, nodeId);
+      if (!found) return;
+      found.node.image = { ...glyph, name: file.name };
+      mutate(newRoot);
+      showToast('Image added to node');
+      return;
+    }
+
+    setNodeImageBusy(true);
+    try {
+      const refs = await onNodeFileDrop(nodeId, [file]);
+      const newRoot = cloneTree(root);
+      const found = findNode(newRoot, nodeId);
+      if (!found) return;
+      found.node.image = {
+        ...glyph,
+        attachment_id: refs[0]?.attachment_id ?? null,
+        name: file.name,
+      };
+      if (refs.length > 0) {
+        found.node.attachments = [...(found.node.attachments ?? []), ...refs];
+      }
+      mutate(newRoot);
+      refs.forEach((attachment) => { void loadAttachmentPreview(attachment); });
+      showToast(refs.length > 0 ? 'Image added to node' : 'Image added — the full-size copy did not upload');
+    } catch {
+      showToast('Image upload failed');
+    } finally {
+      setNodeImageBusy(false);
+    }
+  }, [loadAttachmentPreview, mutate, onNodeFileDrop, root, showToast]);
+
+  /** Removes the glyph. The original stays an ordinary attachment on the node. */
+  const removeNodeImage = useCallback((nodeId: string) => {
+    const newRoot = cloneTree(root);
+    const found = findNode(newRoot, nodeId);
+    if (!found?.node.image) return;
+    found.node.image = null;
+    mutate(newRoot);
+    showToast('Image removed from node');
+  }, [mutate, root, showToast]);
+
+  // Ctrl+V on the canvas puts a copied picture on the selected node. Ignored
+  // while a dialog or an inline editor owns the keyboard, where a paste means
+  // text.
+  useEffect(() => {
+    const handler = (e: ClipboardEvent) => {
+      if (notesOpen || editingId) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      const file = Array.from(e.clipboardData?.items ?? [])
+        .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+        .map((item) => item.getAsFile())
+        .find((value): value is File => Boolean(value));
+      if (!file) return;
+      e.preventDefault();
+      void attachNodeImage(selectedId, file);
+    };
+    window.addEventListener('paste', handler);
+    return () => window.removeEventListener('paste', handler);
+  }, [attachNodeImage, editingId, notesOpen, selectedId]);
+
   const onDragLeaveSvg = useCallback((e: React.DragEvent<SVGSVGElement>) => {
     if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
     setDropTargetId(null);
@@ -1553,6 +1664,17 @@ export function DesktopMindMapEditor({
     const nodeId = getNodeIdAtClientPoint(e.clientX, e.clientY);
     setDropTargetId(null);
     if (!nodeId) return;
+
+    // Dropping a single picture onto a node shows it on the node. It is still
+    // attached as a file, so nothing is lost either way — the difference is a
+    // glyph on the canvas instead of a link appended to the node's text.
+    const dropped = Array.from(e.dataTransfer.files);
+    const found = findNode(root, nodeId);
+    if (dropped.length === 1 && dropped[0].type.startsWith('image/') && !found?.node.image?.thumb) {
+      setSelectedId(nodeId);
+      await attachNodeImage(nodeId, dropped[0]);
+      return;
+    }
 
     setFileDropBusyNodeId(nodeId);
     try {
@@ -1571,7 +1693,7 @@ export function DesktopMindMapEditor({
     } finally {
       setFileDropBusyNodeId(null);
     }
-  }, [getNodeIdAtClientPoint, mutate, onNodeFileDrop, root, showToast]);
+  }, [attachNodeImage, getNodeIdAtClientPoint, mutate, onNodeFileDrop, root, showToast]);
 
   const attachFilesToSelectedNode = useCallback(async (files: FileList | File[] | null) => {
     if (!onNodeFileDrop || !files || files.length === 0 || selectedId === 'root') return;
@@ -1599,6 +1721,59 @@ export function DesktopMindMapEditor({
       setFileDropBusyNodeId(null);
     }
   }, [mutate, onNodeFileDrop, root, selectedId, showToast]);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recordingChunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) recordingChunksRef.current.push(e.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(recordingChunksRef.current, { type: mimeType || 'audio/webm' });
+        setRecordingBlob(blob);
+        setRecordingState('recorded');
+        stream.getTracks().forEach(t => t.stop());
+        if (recordingTimerRef.current) { clearInterval(recordingTimerRef.current); recordingTimerRef.current = null; }
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setRecordingState('recording');
+      setRecordingSeconds(0);
+      recordingTimerRef.current = setInterval(() => setRecordingSeconds(s => s + 1), 1000);
+    } catch {
+      showToast('Microphone permission denied');
+    }
+  }, [showToast]);
+
+  const stopRecording = useCallback(() => {
+    mediaRecorderRef.current?.stop();
+    if (recordingTimerRef.current) { clearInterval(recordingTimerRef.current); recordingTimerRef.current = null; }
+  }, []);
+
+  const discardRecording = useCallback(() => {
+    if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
+    if (recordingTimerRef.current) { clearInterval(recordingTimerRef.current); recordingTimerRef.current = null; }
+    setRecordingState('idle');
+    setRecordingBlob(null);
+    setRecordingName('');
+    setRecordingSeconds(0);
+  }, []);
+
+  const saveRecording = useCallback(async () => {
+    if (!recordingBlob) return;
+    const name = recordingName.trim() || `Voice note ${new Date().toLocaleString()}`;
+    const ext = recordingBlob.type.includes('webm') ? 'webm' : 'm4a';
+    const file = new File([recordingBlob], `${name}.${ext}`, { type: recordingBlob.type });
+    setMobileRecordingOpen(false);
+    setRecordingState('idle');
+    setRecordingBlob(null);
+    setRecordingName('');
+    setRecordingSeconds(0);
+    await attachFilesToSelectedNode([file]);
+  }, [attachFilesToSelectedNode, recordingBlob, recordingName]);
 
   const onMouseUpSvg = useCallback(() => {
     // Finish rectangle selection
@@ -1791,6 +1966,37 @@ export function DesktopMindMapEditor({
     return Array.from(merged.values()).sort((left, right) => right.uploaded_at.localeCompare(left.uploaded_at));
   }, [externalNodeAttachments]);
 
+  /** Opens the full-resolution original behind a node's glyph. */
+  const openNodeImage = useCallback(async (node: MindMapTreeNode) => {
+    const attachmentId = node.image?.attachment_id;
+    if (!attachmentId) {
+      showToast('This picture has no full-size copy stored');
+      return;
+    }
+    const attachment = getNodeAttachments(node.id, node.attachments)
+      .find((item) => item.attachment_id === attachmentId);
+    if (!attachment) {
+      // Expected after restoring a version whose original was deleted since.
+      // The glyph still renders; only click-through cannot work.
+      showToast('The full-size original is no longer available');
+      return;
+    }
+    await previewOrOpenAttachment(attachment);
+  }, [getNodeAttachments, previewOrOpenAttachment, showToast]);
+
+  useEffect(() => () => {
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+  }, []);
+
+  const recordingBlobUrl = useMemo(() => {
+    if (!recordingBlob) return null;
+    return URL.createObjectURL(recordingBlob);
+  }, [recordingBlob]);
+
+  useEffect(() => () => {
+    if (recordingBlobUrl) URL.revokeObjectURL(recordingBlobUrl);
+  }, [recordingBlobUrl]);
+
   const cancelHoverPopupClose = useCallback(() => {
     if (!hoverPopupCloseTimerRef.current) return;
     clearTimeout(hoverPopupCloseTimerRef.current);
@@ -1844,8 +2050,13 @@ export function DesktopMindMapEditor({
     const tagCount = (node.tags ?? []).length;
     const topTagH = tagCount > 0 ? TAG_STRIP_H : 0;
     const topMetaH = (attachments.length > 0 || Boolean(node.notes)) ? TOP_META_STRIP_H : 0;
-    const bodyTopY = box.y + topMetaH + topTagH;
-    const bodyH = box.h - footerHeight - previewHeight - topTagH - topMetaH;
+    // The picture gets a band of its own between the tag strip and the text, so
+    // the text stays centred in what is left rather than being pushed off-centre.
+    const nodeImage = node.image?.thumb ? node.image : null;
+    const imageBandH = nodeImage ? nodeImage.h + NODE_IMAGE_PAD : 0;
+    const imageY = box.y + topMetaH + topTagH + NODE_IMAGE_PAD / 2;
+    const bodyTopY = box.y + topMetaH + topTagH + imageBandH;
+    const bodyH = box.h - footerHeight - previewHeight - topTagH - topMetaH - imageBandH;
     const textX = box.x + NODE_PAD_X + leftPad;
     const lineStartY = bodyTopY + bodyH / 2 - ((lines.length - 1) * NODE_LINE_H) / 2;
 
@@ -1911,6 +2122,29 @@ export function DesktopMindMapEditor({
             stroke={ownColor ? '#ffffff22' : 'var(--mm-node-stroke)'}
             strokeWidth={0.5}
           />
+        )}
+
+        {/* An SVG <image>, deliberately not a foreignObject: the PDF export
+            strips every foreignObject before serializing, and a data: URI in an
+            <image> survives into the standalone SVG and rasterizes. The bitmap
+            was encoded at exactly these dimensions, so it maps 1:1 and there is
+            no crop-versus-letterbox question to answer. */}
+        {nodeImage && (
+          <image
+            href={nodeImage.thumb}
+            x={box.x + (box.w - nodeImage.w) / 2}
+            y={imageY}
+            width={nodeImage.w}
+            height={nodeImage.h}
+            className="mm-node-image"
+            // Inline, not in the stylesheet: the export serializes this element
+            // into a standalone SVG where no class rule follows it, and a glyph
+            // with square corners in the PDF would not match the canvas.
+            style={{ clipPath: 'inset(0 round 5px)' }}
+            onClick={(e) => { e.stopPropagation(); setSelectedId(node.id); void openNodeImage(node); }}
+          >
+            <title>{nodeImage.name ?? 'Image'}</title>
+          </image>
         )}
 
         {hasCheckbox && (
@@ -2210,6 +2444,18 @@ export function DesktopMindMapEditor({
               e.currentTarget.value = '';
             }}
           />
+          <input
+            ref={nodeImageInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.currentTarget.files?.[0];
+              const target = nodeImageTargetRef.current ?? selectedId;
+              if (file) void attachNodeImage(target, file);
+              e.currentTarget.value = '';
+            }}
+          />
           <button className="mm-btn" onClick={undo} title="Undo (F9)" disabled={historyIdx <= 0}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a6 6 0 010 12H9m-6-12l4-4m-4 4l4 4"/></svg></button>
           <button className="mm-btn" onClick={redo} title="Redo (F10)" disabled={historyIdx >= history.length - 1}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 10H11a6 6 0 000 12h4m6-12l-4-4m4 4l-4 4"/></svg></button>
           <div className="mm-toolbar-sep" />
@@ -2353,6 +2599,7 @@ export function DesktopMindMapEditor({
           </g>
         </svg>
         {fileDropBusyNodeId && <div className="mm-file-drop-badge">Encrypting dropped files…</div>}
+        {nodeImageBusy && <div className="mm-file-drop-badge" data-testid="node-image-busy">Adding the picture…</div>}
         {hoveredNoteData && (
           <div
             ref={hoverPopupRef}
@@ -2393,7 +2640,7 @@ export function DesktopMindMapEditor({
         <div className="mm-statusbar">
           <span>{flattenTree(root).length} node{flattenTree(root).length !== 1 ? 's' : ''}{multiSelect.size > 0 ? ` · ${multiSelect.size} selected` : ''}</span>
           <span>{selNode ? `Selected: ${selNode.text.split('\n')[0]}` : ''}</span>
-          <span className="mm-statusbar-hint">Tab=child · Enter=sibling · F2=rename · F6=attach file · Space=fold · C=check · P=progress · I=icon · D=date · Ctrl+F=search</span>
+          <span className="mm-statusbar-hint">Tab=child · Enter=sibling · F2=rename · F6=attach file · Alt+K=image · Space=fold · C=check · P=progress · I=icon · D=date · Ctrl+F=search</span>
         </div>
       )}
 
@@ -2517,7 +2764,76 @@ export function DesktopMindMapEditor({
               Icons
             </button>
           </div>
+          <div className="mm-mobile-props-actions">
+            <button
+              className="mm-mobile-props-btn"
+              disabled={!onNodeFileDrop || selectedId === 'root'}
+              onClick={() => { setMobilePropsOpen(false); setMobileRecordingOpen(true); }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path strokeLinecap="round" strokeLinejoin="round" d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              Voice note
+            </button>
+          </div>
         </div>
+      )}
+
+      {/* ── Voice recording sheet ────────────────────────────────── */}
+      {mobileRecordingOpen && (
+        <>
+          <div className="mm-overlay mm-overlay--upload-sheet" onClick={() => { discardRecording(); setMobileRecordingOpen(false); }} />
+          <div className="mm-mobile-recording-sheet" role="dialog" aria-modal="true" aria-label="Record audio">
+            <div className="mm-mobile-recording-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path strokeLinecap="round" strokeLinejoin="round" d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              <span>Voice Recording</span>
+              <button className="mm-btn-icon" onClick={() => { discardRecording(); setMobileRecordingOpen(false); }} style={{ marginLeft: 'auto' }} title="Close">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            {recordingState === 'idle' && (
+              <div className="mm-recording-body">
+                <button className="mm-recording-btn mm-recording-btn--start" onClick={() => void startRecording()} title="Start recording">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path strokeLinecap="round" strokeLinejoin="round" d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                </button>
+                <span className="mm-recording-label">Tap to start recording</span>
+                <span className="mm-recording-hint">Audio is encrypted before upload</span>
+              </div>
+            )}
+
+            {recordingState === 'recording' && (
+              <div className="mm-recording-body">
+                <div className="mm-recording-timer">
+                  {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:{String(recordingSeconds % 60).padStart(2, '0')}
+                </div>
+                <button className="mm-recording-btn mm-recording-btn--stop" onClick={stopRecording} title="Stop recording">
+                  <span className="mm-recording-stop-square" />
+                </button>
+                <span className="mm-recording-label">Recording… tap to stop</span>
+              </div>
+            )}
+
+            {recordingState === 'recorded' && recordingBlobUrl && (
+              <div className="mm-recording-body">
+                <audio className="mm-recording-preview" controls src={recordingBlobUrl} />
+                <div className="mm-recording-name-row">
+                  <input
+                    className="mm-recording-name-input"
+                    type="text"
+                    placeholder="Name this recording…"
+                    value={recordingName}
+                    onChange={(e) => setRecordingName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void saveRecording(); }}
+                  />
+                </div>
+                <div className="mm-recording-actions">
+                  <button className="mm-btn mm-btn--primary" onClick={() => void saveRecording()}>Save &amp; Upload</button>
+                  <button className="mm-btn" onClick={() => setRecordingState('idle')}>Re-record</button>
+                  <button className="mm-btn mm-btn--danger" onClick={() => { discardRecording(); setMobileRecordingOpen(false); }}>Discard</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {/* ── Mobile text edit sheet ──────────────────────────────────── */}
@@ -2583,6 +2899,14 @@ export function DesktopMindMapEditor({
             <div className="mm-context-divider" />
             {cmHasChildren && <button className="mm-context-item" onClick={() => { toggleCollapse(contextMenu.nodeId); setContextMenu(null); }}>{cmNode.collapsed ? 'Expand' : 'Collapse'} <kbd>Space</kbd></button>}
             <button className="mm-context-item" onClick={() => { openNotes(contextMenu.nodeId); setNotesOpen(true); setContextMenu(null); }}>Notes <kbd>F3</kbd></button>
+            <button className="mm-context-item" data-testid="context-add-image" onClick={() => {
+              nodeImageTargetRef.current = contextMenu.nodeId;
+              nodeImageInputRef.current?.click();
+              setContextMenu(null);
+            }}>{cmNode.image?.thumb ? 'Replace Image…' : 'Add Image…'} <kbd>Alt+K</kbd></button>
+            {cmNode.image?.thumb && (
+              <button className="mm-context-item" data-testid="context-remove-image" onClick={() => { removeNodeImage(contextMenu.nodeId); setContextMenu(null); }}>Remove Image</button>
+            )}
             <button className="mm-context-item" onClick={() => { setShowIconPicker(true); setContextMenu(null); }}>Icon <kbd>I</kbd></button>
             <button className="mm-context-item" onClick={() => {
               cmHasCheckbox ? toggleCheckbox(contextMenu.nodeId) : addCheckbox(contextMenu.nodeId);
@@ -2844,7 +3168,7 @@ export function DesktopMindMapEditor({
           </div>
           <div className="mm-shortcuts-grid">{[
             ['Tab', 'Add child'], ['⇧Tab', 'Add left child (root)'], ['Enter', 'Add sibling'], ['Del / ⌫', 'Delete node'], ['F2', 'Rename'], ['F3', 'Notes'],
-            ['F4', 'Colour picker'], ['F5 / F', 'Focus mode'], ['F6', 'Attach encrypted file'], ['F1', 'Shortcuts'], ['F9 / Ctrl+Z', 'Undo'], ['F10 / Ctrl+Y', 'Redo'], ['Space', 'Fold / Unfold'],
+            ['F4', 'Colour picker'], ['F5 / F', 'Focus mode'], ['F6', 'Attach encrypted file'], ['Alt+K', 'Add image to node'], ['F1', 'Shortcuts'], ['F9 / Ctrl+Z', 'Undo'], ['F10 / Ctrl+Y', 'Redo'], ['Space', 'Fold / Unfold'],
             ['↑ ↓ ← →', 'Navigate (spatial)'], ['⇧+Arrow', 'Multi-select'], ['Ctrl+Click', 'Toggle select'], ['⇧+Drag', 'Rectangle select'],
             ['Home', 'Root'], ['+ −', 'Zoom'], ['Ctrl+S', 'Save'],
             ['C', 'Checkbox'], ['P', 'Progress'], ['I', 'Icons'], ['D', 'Dates'], ['U', 'URL'], ['R', 'Reset pos'],

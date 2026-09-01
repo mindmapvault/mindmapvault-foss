@@ -1,4 +1,6 @@
 import { bezierPath, layoutTree } from '../components/MindMapLayout';
+import { NODE_IMAGE_PAD } from '../components/MindMapConstants';
+import { resolveLucideIcon, type LucideIconNode } from '../components/lucideIconRegistry';
 import type { MindMapGraph, MindMapTree, MindMapTreeNode } from '../types';
 import type { ThemeMode } from '../store/theme';
 
@@ -60,46 +62,6 @@ const THEME_PALETTE: Record<ThemeMode, {
   },
 };
 
-// ---------------------------------------------------------------------------
-// Minimal Lucide icon renderer for plain SVG output.
-// We lazy-load iconNode from lucide-react/dynamic to avoid bundling everything.
-// ---------------------------------------------------------------------------
-type LucideIconNode = [string, Record<string, string | number>][];
-let _lucideCache: Record<string, LucideIconNode> | null = null;
-
-async function getLucideNodes(): Promise<Record<string, LucideIconNode> | null> {
-  if (_lucideCache !== null) return _lucideCache;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mod = await import('lucide-react/dynamic' as string) as any;
-    // Build a kebab-name → iconNode map from the dynamic export object.
-    const result: Record<string, LucideIconNode> = {};
-    for (const [key, value] of Object.entries(mod)) {
-      if (
-        key !== 'iconNames' &&
-        key !== 'DynamicIcon' &&
-        typeof value === 'object' &&
-        value !== null &&
-        !Array.isArray(value) &&
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        Array.isArray((value as any).iconNode)
-      ) {
-        // key is PascalCase; also store as kebab
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        result[key] = (value as any).iconNode as LucideIconNode;
-        // kebab alias
-        const kebab = key.replace(/([A-Z])/g, (c, i) => (i === 0 ? c.toLowerCase() : `-${c.toLowerCase()}`));
-        result[kebab] = result[key];
-      }
-    }
-    _lucideCache = result;
-    return result;
-  } catch {
-    _lucideCache = {};
-    return _lucideCache;
-  }
-}
-
 function renderLucideIconSvg(iconNodes: LucideIconNode, x: number, y: number, size: number, color: string): string {
   const svgParts = iconNodes.map(([tag, attrs]) => {
     const attrStr = Object.entries(attrs)
@@ -108,24 +70,6 @@ function renderLucideIconSvg(iconNodes: LucideIconNode, x: number, y: number, si
     return `<${tag} ${attrStr}/>`;
   });
   return `<svg x="${x}" y="${y}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svgParts.join('')}</svg>`;
-}
-
-function kebabToPascal(kebab: string): string {
-  return kebab.split('-').map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join('');
-}
-
-function normalizeIconLookupKey(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-function toKebabIconName(name: string): string {
-  if (name.includes('-')) return name.toLowerCase();
-  return name
-    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-    .replace(/([A-Z])([A-Z][a-z])/g, '$1-$2')
-    .replace(/([a-zA-Z])(\d+)/g, '$1-$2')
-    .replace(/(\d+)([a-zA-Z])/g, '$1-$2')
-    .toLowerCase();
 }
 
 export interface VaultPreviewSummary {
@@ -268,7 +212,6 @@ function renderTreeSvgSync(
   theme: ThemeMode,
   width: number,
   height: number,
-  iconMap: Record<string, LucideIconNode>,
 ): string {
   const palette = THEME_PALETTE[theme];
   const layout = layoutTree(tree.root, 0, 0);
@@ -370,22 +313,27 @@ function renderTreeSvgSync(
       }
     }
 
+    // Node image. `layoutTree` already reserved the band for it, so this has to
+    // draw it or the preview shows a node with an unexplained gap. The data URI
+    // is inside the tree, so the preview needs no request to render it.
+    const nodeImage = node.image?.thumb ? node.image : null;
+    const imageBandH = nodeImage ? (nodeImage.h + NODE_IMAGE_PAD) * scale : 0;
+    if (nodeImage) {
+      const imageW = nodeImage.w * scale;
+      const imageH = nodeImage.h * scale;
+      parts.push(
+        `<image href="${escapeXml(nodeImage.thumb)}" x="${x + (w - imageW) / 2}" y="${y + topTagH + (NODE_IMAGE_PAD / 2) * scale}" width="${imageW}" height="${imageH}" style="clip-path:inset(0 round ${Math.max(1, 5 * scale)}px)"/>`,
+      );
+    }
+
     // Icons row: mirrors live editor's left-padded icon row.
     const iconKeys: string[] = Array.isArray(node.icons) ? node.icons : [];
     const scaledIconSize = ICON_SIZE * scale;
     if (iconKeys.length > 0) {
       let iconX = x + 4 * scale;
-      const iconY = y + topTagH + (h - topTagH - scaledIconSize) / 2;
+      const iconY = y + topTagH + imageBandH + (h - topTagH - imageBandH - scaledIconSize) / 2;
       for (const rawKey of iconKeys.slice(0, 4)) {
-        const kebabKey = toKebabIconName(rawKey);
-        const pascalKey = kebabToPascal(kebabKey);
-        const normalizedKebab = normalizeIconLookupKey(kebabKey);
-        const normalizedPascal = normalizeIconLookupKey(pascalKey);
-        const iconData =
-          iconMap[pascalKey]
-          ?? iconMap[kebabKey]
-          ?? iconMap[rawKey]
-          ?? Object.entries(iconMap).find(([key]) => normalizeIconLookupKey(key) === normalizedKebab || normalizeIconLookupKey(key) === normalizedPascal)?.[1];
+        const iconData = resolveLucideIcon(rawKey)?.iconNode;
         if (iconData) {
           parts.push(renderLucideIconSvg(iconData, iconX, iconY, scaledIconSize, textColor));
         } else {
@@ -401,7 +349,7 @@ function renderTreeSvgSync(
     // Label text — centred, accounts for icon offset.
     const iconXOffset = iconKeys.length > 0 ? (iconKeys.slice(0, 4).length * (ICON_SIZE + 2) * scale) / 2 : 0;
     parts.push(
-      `<text x="${x + w / 2 + iconXOffset / 2}" y="${y + topTagH + (h - topTagH) / 2}" text-anchor="middle" dominant-baseline="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="${fontSize}" font-weight="${fontWeight}" fill="${textColor}">${escapeXml(clampLabel(node.text, isRoot ? 22 : 18))}</text>`,
+      `<text x="${x + w / 2 + iconXOffset / 2}" y="${y + topTagH + imageBandH + (h - topTagH - imageBandH) / 2}" text-anchor="middle" dominant-baseline="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="${fontSize}" font-weight="${fontWeight}" fill="${textColor}">${escapeXml(clampLabel(node.text, isRoot ? 22 : 18))}</text>`,
     );
 
     // Note dot (amber) — top-right of node, matching live editor.
@@ -471,14 +419,13 @@ function renderTreeSvgSync(
 }
 
 // Public async version loads icon data before rendering.
-async function renderTreeSvg(
+export async function renderTreeSvg(
   tree: MindMapTree,
   theme: ThemeMode,
   width = PREVIEW_WIDTH,
   height = PREVIEW_HEIGHT,
 ): Promise<string> {
-  const iconMap = await getLucideNodes() ?? {};
-  return renderTreeSvgSync(tree, theme, width, height, iconMap);
+  return renderTreeSvgSync(tree, theme, width, height);
 }
 
 function renderGraphSvg(graph: MindMapGraph, theme: ThemeMode, width = PREVIEW_WIDTH, height = PREVIEW_HEIGHT): string {

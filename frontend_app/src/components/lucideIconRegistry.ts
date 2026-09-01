@@ -1,0 +1,338 @@
+import type { ComponentType } from 'react';
+import {
+  Activity,
+  AlertTriangle,
+  Apple,
+  Archive,
+  Award,
+  BarChart,
+  Battery,
+  Bell,
+  Bike,
+  Bookmark,
+  Brush,
+  Bug,
+  Building,
+  Calendar,
+  Camera,
+  Car,
+  Check,
+  Cigarette,
+  CircleAlert,
+  CircleHelp,
+  Clock,
+  Cloud,
+  CloudRain,
+  Coffee,
+  Copy,
+  Cpu,
+  CreditCard,
+  Crown,
+  Database,
+  DollarSign,
+  Download,
+  Droplets,
+  Eye,
+  EyeOff,
+  File,
+  FileText,
+  Fingerprint,
+  Flag,
+  Flame,
+  Flower2,
+  Folder,
+  FolderOpen,
+  Globe,
+  Hammer,
+  Headphones,
+  Heart,
+  Home,
+  Image,
+  Info,
+  Key,
+  Layers,
+  Layout,
+  Leaf,
+  Lightbulb,
+  Link,
+  Lock,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Mic,
+  Monitor,
+  Moon,
+  Music,
+  Package,
+  Palette,
+  Paperclip,
+  PauseCircle,
+  PenTool,
+  Phone,
+  PieChart,
+  Pill,
+  Plane,
+  PlayCircle,
+  Plug,
+  Printer,
+  QrCode,
+  Radio,
+  RefreshCw,
+  Rocket,
+  RotateCcw,
+  Scan,
+  Scissors,
+  Send,
+  Server,
+  Settings,
+  Shield,
+  Ship,
+  ShoppingCart,
+  Smartphone,
+  Snowflake,
+  Speaker,
+  Star,
+  Stethoscope,
+  StopCircle,
+  Sun,
+  Tablet,
+  Target,
+  ThumbsDown,
+  ThumbsUp,
+  Train,
+  TrendingDown,
+  TrendingUp,
+  Trash2,
+  TreePine,
+  Trophy,
+  Truck,
+  Unlock,
+  Upload,
+  User,
+  UserCheck,
+  Users,
+  Utensils,
+  Video,
+  Volume2,
+  Watch,
+  Wifi,
+  Wine,
+  Wrench,
+  X,
+  Zap,
+} from 'lucide-react';
+
+export type LucideIconNode = [string, Record<string, string | number>][];
+
+type IconComponent = ComponentType<{
+  size?: number | string;
+  color?: string;
+  className?: string;
+}>;
+
+type RegistryEntry = {
+  component: IconComponent;
+  iconNode: LucideIconNode;
+};
+
+function getIconNode(component: unknown): LucideIconNode {
+  const iconNode = (component as { iconNode?: LucideIconNode }).iconNode;
+  return Array.isArray(iconNode) ? iconNode : [];
+}
+
+function entry(component: IconComponent): RegistryEntry {
+  return {
+    component,
+    iconNode: getIconNode(component),
+  };
+}
+
+function toKebab(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.includes('-')) return trimmed.toLowerCase();
+
+  return trimmed
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/([A-Z])([A-Z][a-z])/g, '$1-$2')
+    .replace(/([a-zA-Z])(\d+)/g, '$1-$2')
+    .replace(/(\d+)([a-zA-Z])/g, '$1-$2')
+    .toLowerCase();
+}
+
+function normalizeLookupKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+export const CURATED_ICON_NAMES: string[] = [
+  'Star', 'Heart', 'ThumbsUp', 'ThumbsDown', 'Flag',
+  'Bookmark', 'Bell', 'Clock', 'Calendar', 'Zap',
+  'Target', 'Award', 'Trophy', 'Crown', 'Flame',
+  'Lightbulb', 'Rocket', 'Bug', 'Shield', 'Lock',
+  'Unlock', 'Eye', 'EyeOff', 'Check', 'X',
+  'AlertTriangle', 'AlertCircle', 'Info', 'HelpCircle', 'MessageCircle',
+  'Mail', 'Phone', 'MapPin', 'Home', 'Building',
+  'User', 'Users', 'UserCheck', 'Settings', 'Wrench',
+  'Hammer', 'Cpu', 'Database', 'Server', 'Cloud',
+  'Wifi', 'Globe', 'Link', 'Paperclip', 'File',
+  'FileText', 'Folder', 'FolderOpen', 'Image', 'Camera',
+  'Video', 'Music', 'PlayCircle', 'PauseCircle', 'StopCircle',
+  'BarChart', 'PieChart', 'TrendingUp', 'TrendingDown', 'Activity',
+  'DollarSign', 'CreditCard', 'ShoppingCart', 'Package', 'Truck',
+  'Plane', 'Car', 'Bike', 'Train', 'Ship',
+  'Sun', 'Moon', 'CloudRain', 'Snowflake', 'Droplets',
+  'TreePine', 'Leaf', 'Flower2', 'Apple', 'Coffee',
+  'Utensils', 'Wine', 'Cigarette', 'Pill', 'Stethoscope',
+  'Headphones', 'Speaker', 'Mic', 'Volume2', 'Radio',
+  'Monitor', 'Smartphone', 'Tablet', 'Watch', 'Battery',
+  'Plug', 'Printer', 'Scan', 'QrCode', 'Fingerprint',
+  'Key', 'Trash2', 'Archive', 'Send', 'Download',
+  'Upload', 'RefreshCw', 'RotateCcw', 'Copy', 'Scissors',
+  'PenTool', 'Brush', 'Palette', 'Layers', 'Layout',
+];
+
+const ICON_COMPONENTS: Record<string, RegistryEntry> = {
+  Activity: entry(Activity),
+  AlertTriangle: entry(AlertTriangle),
+  AlertCircle: entry(CircleAlert),
+  Apple: entry(Apple),
+  Archive: entry(Archive),
+  Award: entry(Award),
+  BarChart: entry(BarChart),
+  Battery: entry(Battery),
+  Bell: entry(Bell),
+  Bike: entry(Bike),
+  Bookmark: entry(Bookmark),
+  Brush: entry(Brush),
+  Bug: entry(Bug),
+  Building: entry(Building),
+  Calendar: entry(Calendar),
+  Camera: entry(Camera),
+  Car: entry(Car),
+  Check: entry(Check),
+  Cigarette: entry(Cigarette),
+  Clock: entry(Clock),
+  Cloud: entry(Cloud),
+  CloudRain: entry(CloudRain),
+  Coffee: entry(Coffee),
+  Copy: entry(Copy),
+  Cpu: entry(Cpu),
+  CreditCard: entry(CreditCard),
+  Crown: entry(Crown),
+  Database: entry(Database),
+  DollarSign: entry(DollarSign),
+  Download: entry(Download),
+  Droplets: entry(Droplets),
+  Eye: entry(Eye),
+  EyeOff: entry(EyeOff),
+  File: entry(File),
+  FileText: entry(FileText),
+  Fingerprint: entry(Fingerprint),
+  Flag: entry(Flag),
+  Flame: entry(Flame),
+  Flower2: entry(Flower2),
+  Folder: entry(Folder),
+  FolderOpen: entry(FolderOpen),
+  Globe: entry(Globe),
+  Hammer: entry(Hammer),
+  Headphones: entry(Headphones),
+  Heart: entry(Heart),
+  HelpCircle: entry(CircleHelp),
+  Home: entry(Home),
+  Image: entry(Image),
+  Info: entry(Info),
+  Key: entry(Key),
+  Layers: entry(Layers),
+  Layout: entry(Layout),
+  Leaf: entry(Leaf),
+  Lightbulb: entry(Lightbulb),
+  Link: entry(Link),
+  Lock: entry(Lock),
+  Mail: entry(Mail),
+  MapPin: entry(MapPin),
+  MessageCircle: entry(MessageCircle),
+  Mic: entry(Mic),
+  Monitor: entry(Monitor),
+  Moon: entry(Moon),
+  Music: entry(Music),
+  Package: entry(Package),
+  Palette: entry(Palette),
+  Paperclip: entry(Paperclip),
+  PauseCircle: entry(PauseCircle),
+  PenTool: entry(PenTool),
+  Phone: entry(Phone),
+  PieChart: entry(PieChart),
+  Pill: entry(Pill),
+  Plane: entry(Plane),
+  PlayCircle: entry(PlayCircle),
+  Plug: entry(Plug),
+  Printer: entry(Printer),
+  QrCode: entry(QrCode),
+  Radio: entry(Radio),
+  RefreshCw: entry(RefreshCw),
+  Rocket: entry(Rocket),
+  RotateCcw: entry(RotateCcw),
+  Scan: entry(Scan),
+  Scissors: entry(Scissors),
+  Send: entry(Send),
+  Server: entry(Server),
+  Settings: entry(Settings),
+  Shield: entry(Shield),
+  Ship: entry(Ship),
+  ShoppingCart: entry(ShoppingCart),
+  Smartphone: entry(Smartphone),
+  Snowflake: entry(Snowflake),
+  Speaker: entry(Speaker),
+  Star: entry(Star),
+  Stethoscope: entry(Stethoscope),
+  StopCircle: entry(StopCircle),
+  Sun: entry(Sun),
+  Tablet: entry(Tablet),
+  Target: entry(Target),
+  ThumbsDown: entry(ThumbsDown),
+  ThumbsUp: entry(ThumbsUp),
+  Train: entry(Train),
+  TrendingDown: entry(TrendingDown),
+  TrendingUp: entry(TrendingUp),
+  Trash2: entry(Trash2),
+  TreePine: entry(TreePine),
+  Trophy: entry(Trophy),
+  Truck: entry(Truck),
+  Unlock: entry(Unlock),
+  Upload: entry(Upload),
+  User: entry(User),
+  UserCheck: entry(UserCheck),
+  Users: entry(Users),
+  Utensils: entry(Utensils),
+  Video: entry(Video),
+  Volume2: entry(Volume2),
+  Watch: entry(Watch),
+  Wifi: entry(Wifi),
+  Wine: entry(Wine),
+  Wrench: entry(Wrench),
+  X: entry(X),
+  Zap: entry(Zap),
+};
+
+const ICON_ALIASES: Record<string, string | null> = {
+  bus: 'Car',
+  circlealert: 'AlertCircle',
+  flower2: 'Flower2',
+  helpcircle: 'HelpCircle',
+  morehorizontal: null,
+  morevertical: null,
+};
+
+const LOOKUP = new Map<string, RegistryEntry>();
+for (const [name, icon] of Object.entries(ICON_COMPONENTS)) {
+  LOOKUP.set(normalizeLookupKey(name), icon);
+  LOOKUP.set(normalizeLookupKey(toKebab(name)), icon);
+}
+for (const [alias, target] of Object.entries(ICON_ALIASES)) {
+  if (!target) continue;
+  const resolved = ICON_COMPONENTS[target];
+  if (resolved) LOOKUP.set(alias, resolved);
+}
+
+export function resolveLucideIcon(name: string): RegistryEntry | null {
+  return LOOKUP.get(normalizeLookupKey(name)) ?? null;
+}

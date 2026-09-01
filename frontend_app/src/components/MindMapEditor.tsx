@@ -16,6 +16,7 @@
  * • All existing features preserved
  */
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -39,7 +40,6 @@ import { useUserLabels } from '../hooks/useUserLabels';
 import type { MindMapEditorProps } from './MindMapEditor.types';
 import {
   NODE_COLORS,
-  COLOR_PALETTE,
   PROGRESS_PRESETS,
   CHECKBOX_SIZE,
   ICON_SIZE,
@@ -68,6 +68,9 @@ import { exportSvgAsPdf, renderSvgToCanvas } from '../utils/pdfExport';
 import { downloadBlob, downloadDataUrl } from '../utils/download';
 import { handleDelegatedLinkClick, openExternalUrl } from '../utils/openExternal';
 import { createNodeImageGlyph, type NodeImageGlyph } from '../utils/filePreview';
+import { useEffectiveKeyboardLayout } from '../store/ui';
+import { matchShortcut, formatShortcut, SHORTCUTS } from '../shortcuts/registry';
+import { isMac } from '../platform/isMac';
 import './MindMapEditor.css';
 
 // ── Drag state ────────────────────────────────────────────────────────────────
@@ -95,6 +98,7 @@ export function DesktopMindMapEditor({
   const autosaveMode = useThemeStore((s) => s.autosaveMode);
   const themeMode = useThemeStore((s) => s.mode);
   const toggleThemeMode = useThemeStore((s) => s.toggleMode);
+  const keyboardLayout = useEffectiveKeyboardLayout();
 
   // ── Mobile detection ───────────────────────────────────────────────────────
   const [isMobile, setIsMobile] = useState(() =>
@@ -639,15 +643,6 @@ export function DesktopMindMapEditor({
     found.node.color = color;
     mutate(newRoot);
   }, [root, mutate]);
-
-  const cycleColor = useCallback((nodeId: string) => {
-    const found = findNode(root, nodeId);
-    if (!found) return;
-    const all: (string | null)[] = [...NODE_COLORS, ...COLOR_PALETTE];
-    const cur = all.indexOf(found.node.color ?? null);
-    const next = all[(cur + 1) % all.length];
-    setNodeColor(nodeId, next);
-  }, [root, setNodeColor]);
 
   // ── Checkbox ──────────────────────────────────────────────────────────────
   const toggleCheckbox = useCallback((nodeId: string) => {
@@ -1298,57 +1293,8 @@ export function DesktopMindMapEditor({
       return;
     }
     if (!selectedId) return;
-    if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); addChild(selectedId); showToast('Tab — Add child'); }
-    else if (e.key === 'Tab' && e.shiftKey && selectedId === 'root') { e.preventDefault(); addChild('root', 'left'); showToast('⇧Tab — Add left child'); }
-    else if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); addChild(selectedId); showToast('Tab — Add child'); }
-    else if (e.key === 'Insert') { e.preventDefault(); addChild(selectedId); showToast('Ins — Add child'); }
-    else if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); addSibling(selectedId); showToast('Enter — Add sibling'); }
-    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); hasBulk ? bulkDelete() : deleteNode(selectedId); showToast('Del — Delete node'); }
-    // Alt+K is FreeMind's "Insert image (choose)". Matched on `code`, not
-    // `key`: on macOS Option+K produces "˚", so comparing the character would
-    // work everywhere except a Mac.
-    else if (e.altKey && e.code === 'KeyK') {
-      e.preventDefault();
-      nodeImageTargetRef.current = selectedId;
-      nodeImageInputRef.current?.click();
-      showToast('Alt+K — Add image');
-    }
-    else if (e.key === 'F2') { e.preventDefault(); const f = findNode(root, selectedId); if (f) startEditing(f.node); showToast('F2 — Rename'); }
-    else if (e.key === 'F3') { e.preventDefault(); setNotesOpen((v) => { if (!v) openNotes(selectedId); return !v; }); showToast('F3 — Notes'); }
-    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') { e.preventDefault(); openNotes(selectedId); showToast('Ctrl+E — Edit notes'); }
-    else if (e.key === 'F4') { e.preventDefault(); setShowColorPicker((v) => !v); showToast('F4 — Colour'); }
-    else if (e.key === 'F5') { e.preventDefault(); setFocusMode((v) => { if (!v) setFocusAnchorId(selectedId); return !v; }); showToast(focusMode ? 'F5 — Focus off' : 'F5 — Focus on'); }
-    else if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setFocusMode((v) => { if (!v) setFocusAnchorId(selectedId); return !v; }); showToast(focusMode ? 'F — Focus off' : 'F — Focus on'); }
-    else if (e.key === 'F1') { e.preventDefault(); setShowShortcuts((v) => !v); showToast('F1 — Shortcuts'); }
-    else if (e.key === 'F6') {
-      e.preventDefault();
-      nodeAttachmentInputRef.current?.click();
-      showToast('F6 — Attach encrypted file');
-    }
-    else if (e.key === 'Escape') { setShowShortcuts(false); setShowColorPicker(false); setShowIconPicker(false); setShowExportMenu(false); setContextMenu(null); setSearchOpen(false); setMultiSelect(new Set()); setShowTagDialog(false); }
-    else if (e.key === 'F9' || (e.ctrlKey && e.key === 'z' && !e.shiftKey)) { e.preventDefault(); undo(); showToast('Undo'); }
-    else if (e.key === 'F10' || (e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) { e.preventDefault(); redo(); showToast('Redo'); }
-    else if (e.key === ' ') { e.preventDefault(); hasBulk ? bulkToggleCollapse() : toggleCollapse(selectedId); showToast('Space — Fold / Unfold'); }
-    else if (e.key === 'Home') { e.preventDefault(); setSelectedId('root'); showToast('Home — Root'); }
-    else if (e.key.toLowerCase() === 'c' && !e.ctrlKey && !e.metaKey) {
-      e.preventDefault();
-      hasBulk ? bulkToggleCheckbox() : toggleCheckbox(selectedId);
-      showToast('C — Checkbox');
-    }
-    else if (e.key.toLowerCase() === 'p' && !e.ctrlKey && !e.metaKey) {
-      e.preventDefault();
-      hasBulk ? bulkCycleProgress() : cycleProgress(selectedId);
-      showToast('P — Progress');
-    }
-    else if (e.key.toLowerCase() === 'i' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setShowIconPicker((v) => !v); showToast('I — Icons'); }
-    else if (e.key.toLowerCase() === 'd' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setShowDateDialog((v) => !v); showToast('D — Dates'); }
-    else if (e.key.toLowerCase() === 'u' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setShowUrlDialog((v) => !v); showToast('U — URL'); }
-    else if (e.key.toLowerCase() === 'r' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); hasBulk ? bulkResetPosition() : resetNodePosition(selectedId); showToast('R — Reset pos'); }
-    else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'r') { e.preventDefault(); resetAllPositions(); showToast('Reset all positions'); }
-    else if (e.key.toLowerCase() === 't' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); setShowTagDialog((v) => !v); showToast('T — Labels'); }
-    else if (e.key.toLowerCase() === 'a' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); autoAlignSubtree(selectedId); showToast(selectedId === 'root' ? 'A — Auto-align all' : 'A — Auto-align subtree'); }
-    else if (e.ctrlKey && e.key === 'f') { e.preventDefault(); setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 50); }
-    else if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault();
       const box = layout[selectedId];
       if (!box) return;
@@ -1387,12 +1333,98 @@ export function DesktopMindMapEditor({
         }
         setSelectedId(bestId);
       }
+      return;
     }
-    else if (e.key === '+') { e.preventDefault(); setZoom((z) => Math.min(3, z + 0.15)); }
-    else if (e.key === '-') { e.preventDefault(); setZoom((z) => Math.max(0.3, z - 0.15)); }
-    }, [editingId, notesOpen, openNotes, saveNotes, selectedId, root, layout, addChild, addSibling, deleteNode, cancelEdit, cycleColor, cycleProgress,
-      toggleCheckbox, undo, redo, toggleCollapse, openNotes, showToast, resetNodePosition, resetAllPositions, autoAlignSubtree, showIconPicker, showColorPicker, focusMode, focusedIds,
-      hasBulk, bulkDelete, bulkToggleCheckbox, bulkCycleProgress, bulkToggleCollapse, bulkResetPosition]);
+
+    if (e.key === 'Escape') {
+      setShowShortcuts(false); setShowColorPicker(false); setShowIconPicker(false);
+      setShowExportMenu(false); setContextMenu(null); setSearchOpen(false);
+      setMultiSelect(new Set()); setShowTagDialog(false);
+      return;
+    }
+
+    // ── Registry-driven dispatch — see shortcuts/registry.ts ───────────────
+    const toast = (id: string, text: string) => showToast(`${formatShortcut(id, keyboardLayout)} — ${text}`);
+
+    const actionHandlers: Record<string, () => void> = {
+      'node.addChild': () => { addChild(selectedId); toast('node.addChild', 'Add child'); },
+      'node.addLeftChild': () => {
+        if (selectedId === 'root') { addChild('root', 'left'); toast('node.addLeftChild', 'Add left child'); }
+        else { addChild(selectedId); toast('node.addChild', 'Add child'); }
+      },
+      'node.addSibling': () => { addSibling(selectedId); toast('node.addSibling', 'Add sibling'); },
+      'node.delete': () => { hasBulk ? bulkDelete() : deleteNode(selectedId); toast('node.delete', 'Delete node'); },
+      // Registry matches Alt+K by `code`, not `key`: on macOS Option+K
+      // produces "˚", so comparing the character would break there.
+      'node.addImage': () => {
+        nodeImageTargetRef.current = selectedId;
+        nodeImageInputRef.current?.click();
+        toast('node.addImage', 'Add image');
+      },
+      'node.rename': () => {
+        const f = findNode(root, selectedId);
+        if (f) startEditing(f.node);
+        toast('node.rename', 'Rename');
+      },
+      'node.notesToggle': () => {
+        setNotesOpen((v) => { if (!v) openNotes(selectedId); return !v; });
+        toast('node.notesToggle', 'Notes');
+      },
+      'node.notesOpen': () => { openNotes(selectedId); toast('node.notesOpen', 'Edit notes'); },
+      'node.colour': () => { setShowColorPicker((v) => !v); toast('node.colour', 'Colour'); },
+      'view.focusMode': () => {
+        setFocusMode((v) => { if (!v) setFocusAnchorId(selectedId); return !v; });
+        showToast(`${formatShortcut('view.focusMode', keyboardLayout)} — ${focusMode ? 'Focus off' : 'Focus on'}`);
+      },
+      'find.shortcuts': () => { setShowShortcuts((v) => !v); toast('find.shortcuts', 'Shortcuts'); },
+      'node.attachFile': () => {
+        nodeAttachmentInputRef.current?.click();
+        toast('node.attachFile', 'Attach encrypted file');
+      },
+      'edit.undo': () => { undo(); toast('edit.undo', 'Undo'); },
+      'edit.redo': () => { redo(); toast('edit.redo', 'Redo'); },
+      'node.fold': () => {
+        hasBulk ? bulkToggleCollapse() : toggleCollapse(selectedId);
+        toast('node.fold', 'Fold / Unfold');
+      },
+      'view.root': () => { setSelectedId('root'); toast('view.root', 'Root'); },
+      'node.checkbox': () => {
+        hasBulk ? bulkToggleCheckbox() : toggleCheckbox(selectedId);
+        toast('node.checkbox', 'Checkbox');
+      },
+      'node.progress': () => {
+        hasBulk ? bulkCycleProgress() : cycleProgress(selectedId);
+        toast('node.progress', 'Progress');
+      },
+      'node.icons': () => { setShowIconPicker((v) => !v); toast('node.icons', 'Icons'); },
+      'node.dates': () => { setShowDateDialog((v) => !v); toast('node.dates', 'Dates'); },
+      'node.url': () => { setShowUrlDialog((v) => !v); toast('node.url', 'URL'); },
+      'node.resetPosition': () => {
+        hasBulk ? bulkResetPosition() : resetNodePosition(selectedId);
+        toast('node.resetPosition', 'Reset position');
+      },
+      'node.resetAllPositions': () => { resetAllPositions(); toast('node.resetAllPositions', 'Reset all positions'); },
+      'node.labels': () => { setShowTagDialog((v) => !v); toast('node.labels', 'Labels'); },
+      'node.autoAlign': () => {
+        autoAlignSubtree(selectedId);
+        showToast(`${formatShortcut('node.autoAlign', keyboardLayout)} — ${selectedId === 'root' ? 'Auto-align all' : 'Auto-align subtree'}`);
+      },
+      // No toast for search / zoom — matches the pre-registry behaviour,
+      // which never announced these (search opens visibly; zoom repeats fast).
+      'find.search': () => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 50); },
+      'view.zoomIn': () => { setZoom((z) => Math.min(3, z + 0.15)); },
+      'view.zoomOut': () => { setZoom((z) => Math.max(0.3, z - 0.15)); },
+    };
+
+    const actionId = matchShortcut(e, keyboardLayout);
+    if (!actionId) return;
+    const handler = actionHandlers[actionId];
+    if (!handler) return;
+    e.preventDefault();
+    handler();
+  }, [editingId, notesOpen, openNotes, saveNotes, selectedId, root, layout, addChild, addSibling, deleteNode, cancelEdit, cycleProgress,
+    toggleCheckbox, undo, redo, toggleCollapse, showToast, resetNodePosition, resetAllPositions, autoAlignSubtree, showIconPicker, showColorPicker, focusMode, focusedIds,
+    hasBulk, bulkDelete, bulkToggleCheckbox, bulkCycleProgress, bulkToggleCollapse, bulkResetPosition, keyboardLayout]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -1408,12 +1440,12 @@ export function DesktopMindMapEditor({
         }
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); handleSave(); showToast('Ctrl+S — Save'); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); handleSave(); showToast(`${formatShortcut('file.save', keyboardLayout)} — Save`); return; }
       navigateKeys(e);
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [navigateKeys, handleSave, notesOpen, saveNotes, showToast]);
+  }, [navigateKeys, handleSave, notesOpen, saveNotes, showToast, keyboardLayout]);
 
   // ── Autosave ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -2408,7 +2440,7 @@ export function DesktopMindMapEditor({
               className={`mm-btn mm-save-btn${isDirty ? ' mm-save-btn--dirty' : ''}${saving ? ' mm-save-btn--saving' : ''}${error ? ' mm-save-btn--err' : ''}${saveMsg ? ' mm-save-btn--ok' : ''}`}
               onClick={handleSave}
               disabled={saving || (!isDirty && !error)}
-              title={saving ? 'Saving…' : error ? error : isDirty ? 'Unsaved changes — click to save (Ctrl+S)' : 'All changes saved'}
+              title={saving ? 'Saving…' : error ? error : isDirty ? `Unsaved changes — click to save (${formatShortcut('file.save', keyboardLayout)})` : 'All changes saved'}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
@@ -2456,29 +2488,29 @@ export function DesktopMindMapEditor({
               e.currentTarget.value = '';
             }}
           />
-          <button className="mm-btn" onClick={undo} title="Undo (F9)" disabled={historyIdx <= 0}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a6 6 0 010 12H9m-6-12l4-4m-4 4l4 4"/></svg></button>
-          <button className="mm-btn" onClick={redo} title="Redo (F10)" disabled={historyIdx >= history.length - 1}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 10H11a6 6 0 000 12h4m6-12l-4-4m4 4l-4 4"/></svg></button>
+          <button className="mm-btn" onClick={undo} title={`Undo (${formatShortcut('edit.undo', keyboardLayout)})`} disabled={historyIdx <= 0}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a6 6 0 010 12H9m-6-12l4-4m-4 4l4 4"/></svg></button>
+          <button className="mm-btn" onClick={redo} title={`Redo (${formatShortcut('edit.redo', keyboardLayout)})`} disabled={historyIdx >= history.length - 1}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 10H11a6 6 0 000 12h4m6-12l-4-4m4 4l-4 4"/></svg></button>
           <div className="mm-toolbar-sep" />
-          <button className="mm-btn" onClick={() => addChild(selectedId)} title="Add child (Tab)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg></button>
-          <button className="mm-btn" onClick={() => addSibling(selectedId)} title="Add sibling (Enter)" disabled={selectedId === 'root'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 5H7m0 0v12m0-12l-3 3m3-3l3 3"/></svg></button>
-          <button className="mm-btn mm-btn--danger" onClick={() => hasBulk ? bulkDelete() : deleteNode(selectedId)} title="Delete (Del)" disabled={selectedId === 'root' && !hasBulk}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+          <button className="mm-btn" onClick={() => addChild(selectedId)} title={`Add child (${formatShortcut('node.addChild', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg></button>
+          <button className="mm-btn" onClick={() => addSibling(selectedId)} title={`Add sibling (${formatShortcut('node.addSibling', keyboardLayout)})`} disabled={selectedId === 'root'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 5H7m0 0v12m0-12l-3 3m3-3l3 3"/></svg></button>
+          <button className="mm-btn mm-btn--danger" onClick={() => hasBulk ? bulkDelete() : deleteNode(selectedId)} title={`Delete (${formatShortcut('node.delete', keyboardLayout)})`} disabled={selectedId === 'root' && !hasBulk}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
           <div className="mm-toolbar-sep" />
-          <button className="mm-btn" onClick={() => { hasBulk ? bulkToggleCheckbox() : toggleCheckbox(selectedId); }} title="Checkbox (C)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></button>
-          <button className="mm-btn" onClick={() => { hasBulk ? bulkCycleProgress() : cycleProgress(selectedId); }} title="Progress (P)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 017.07 17.07" strokeLinecap="round"/></svg></button>
+          <button className="mm-btn" onClick={() => { hasBulk ? bulkToggleCheckbox() : toggleCheckbox(selectedId); }} title={`Checkbox (${formatShortcut('node.checkbox', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></button>
+          <button className="mm-btn" onClick={() => { hasBulk ? bulkCycleProgress() : cycleProgress(selectedId); }} title={`Progress (${formatShortcut('node.progress', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 017.07 17.07" strokeLinecap="round"/></svg></button>
           <div style={{ position: 'relative' }}>
-            <button className="mm-btn mm-btn--color" onClick={() => setShowColorPicker((v) => !v)} title="Color (F4)" style={{ background: selNode?.color ?? 'transparent' }}>
+            <button className="mm-btn mm-btn--color" onClick={() => setShowColorPicker((v) => !v)} title={`Color (${formatShortcut('node.colour', keyboardLayout)})`} style={{ background: selNode?.color ?? 'transparent' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
             </button>
             <MindMapColorPicker open={showColorPicker} currentColor={selNode?.color ?? null} onSelect={(c) => { hasBulk ? bulkSetColor(c) : setNodeColor(selectedId, c); setShowColorPicker(false); }} onClose={() => setShowColorPicker(false)} showToast={showToast} />
           </div>
           <div style={{ position: 'relative' }}>
-            <button className="mm-btn" onClick={() => setShowIconPicker((v) => !v)} title="Icons (I)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></button>
+            <button className="mm-btn" onClick={() => setShowIconPicker((v) => !v)} title={`Icons (${formatShortcut('node.icons', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></button>
             <MindMapIconPicker open={showIconPicker} currentIcons={selNode?.icons ?? []} onSelect={(name: string | null) => hasBulk ? bulkSetIcon(name) : setNodeIcon(selectedId, name)} onClose={() => setShowIconPicker(false)} showToast={showToast} />
           </div>
           <button
             className={`mm-btn mm-btn--notes${selNodeAttachmentCount > 0 ? ' mm-btn--notes-has-files' : ''}`}
             onClick={() => { openNotes(selectedId); setNotesOpen(true); }}
-            title={selNodeAttachmentCount > 0 ? `Notes (F3) · ${selNodeAttachmentLabel}${selNodeAttachmentNames ? `: ${selNodeAttachmentNames}` : ''}` : 'Notes (F3)'}
+            title={selNodeAttachmentCount > 0 ? `Notes (${formatShortcut('node.notesToggle', keyboardLayout)}) · ${selNodeAttachmentLabel}${selNodeAttachmentNames ? `: ${selNodeAttachmentNames}` : ''}` : `Notes (${formatShortcut('node.notesToggle', keyboardLayout)})`}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
             {selNodeAttachmentCount > 0 && (
@@ -2488,21 +2520,21 @@ export function DesktopMindMapEditor({
               </span>
             )}
           </button>
-          <button className="mm-btn" onClick={() => setShowDateDialog(true)} title="Dates (D)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
-          <button className={`mm-btn${showTagDialog ? ' mm-btn--active' : ''}`} onClick={() => setShowTagDialog((v) => !v)} title="Tags (T)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5l8.5 8.5a2 2 0 010 2.83l-5.17 5.17a2 2 0 01-2.83 0L3 10V5a2 2 0 012-2z"/></svg></button>
+          <button className="mm-btn" onClick={() => setShowDateDialog(true)} title={`Dates (${formatShortcut('node.dates', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
+          <button className={`mm-btn${showTagDialog ? ' mm-btn--active' : ''}`} onClick={() => setShowTagDialog((v) => !v)} title={`Tags (${formatShortcut('node.labels', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5l8.5 8.5a2 2 0 010 2.83l-5.17 5.17a2 2 0 01-2.83 0L3 10V5a2 2 0 012-2z"/></svg></button>
           <div className="mm-toolbar-sep" />
-          <button className="mm-btn" onClick={() => setZoom((z) => Math.min(3, z + 0.15))} title="Zoom in (+)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 8v6m-3-3h6"/></svg></button>
-          <button className="mm-btn" onClick={() => setZoom((z) => Math.max(0.3, z - 0.15))} title="Zoom out (-)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M8 11h6"/></svg></button>
+          <button className="mm-btn" onClick={() => setZoom((z) => Math.min(3, z + 0.15))} title={`Zoom in (${formatShortcut('view.zoomIn', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 8v6m-3-3h6"/></svg></button>
+          <button className="mm-btn" onClick={() => setZoom((z) => Math.max(0.3, z - 0.15))} title={`Zoom out (${formatShortcut('view.zoomOut', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M8 11h6"/></svg></button>
           <button className="mm-btn" onClick={fitView} title="Fit view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/></svg></button>
-          <button className="mm-btn" onClick={() => autoAlignSubtree(selectedId)} title={selectedId === 'root' ? 'Auto-align all nodes (A)' : 'Auto-align subtree (A)'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M3 12h12M3 18h8"/></svg></button>
-          <button className={`mm-btn${focusMode ? ' mm-btn--active' : ''}`} onClick={() => { setFocusMode((v) => { if (!v) setFocusAnchorId(selectedId); return !v; }); }} title="Focus mode (F5)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2m8.66-17.66l-1.41 1.41M4.75 19.25l-1.41 1.41M23 12h-2M3 12H1m17.66 7.66l-1.41-1.41M4.75 4.75L3.34 3.34"/></svg></button>
-          <button className="mm-btn" onClick={() => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 50); }} title="Search (Ctrl+F)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+          <button className="mm-btn" onClick={() => autoAlignSubtree(selectedId)} title={`${selectedId === 'root' ? 'Auto-align all nodes' : 'Auto-align subtree'} (${formatShortcut('node.autoAlign', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M3 12h12M3 18h8"/></svg></button>
+          <button className={`mm-btn${focusMode ? ' mm-btn--active' : ''}`} onClick={() => { setFocusMode((v) => { if (!v) setFocusAnchorId(selectedId); return !v; }); }} title={`Focus mode (${formatShortcut('view.focusMode', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2m8.66-17.66l-1.41 1.41M4.75 19.25l-1.41 1.41M23 12h-2M3 12H1m17.66 7.66l-1.41-1.41M4.75 4.75L3.34 3.34"/></svg></button>
+          <button className="mm-btn" onClick={() => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 50); }} title={`Search (${formatShortcut('find.search', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
           <div className="mm-toolbar-sep" />
-          <button className="mm-btn" onClick={() => setShowShortcuts((v) => !v)} title="Shortcuts (F1)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg></button>
+          <button className="mm-btn" onClick={() => setShowShortcuts((v) => !v)} title={`Shortcuts (${formatShortcut('find.shortcuts', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg></button>
           <button
             className="mm-btn"
             onClick={() => nodeAttachmentInputRef.current?.click()}
-            title="Attach encrypted files to selected node (F6)"
+            title={`Attach encrypted files to selected node (${formatShortcut('node.attachFile', keyboardLayout)})`}
             disabled={!onNodeFileDrop || selectedId === 'root'}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21.44 11.05l-9.19 9.19a6 6 0 11-8.49-8.49l9.2-9.19a4 4 0 015.65 5.66l-9.2 9.19a2 2 0 11-2.82-2.82l8.48-8.48"/></svg>
@@ -2640,7 +2672,12 @@ export function DesktopMindMapEditor({
         <div className="mm-statusbar">
           <span>{flattenTree(root).length} node{flattenTree(root).length !== 1 ? 's' : ''}{multiSelect.size > 0 ? ` · ${multiSelect.size} selected` : ''}</span>
           <span>{selNode ? `Selected: ${selNode.text.split('\n')[0]}` : ''}</span>
-          <span className="mm-statusbar-hint">Tab=child · Enter=sibling · F2=rename · F6=attach file · Alt+K=image · Space=fold · C=check · P=progress · I=icon · D=date · Ctrl+F=search</span>
+          <span className="mm-statusbar-hint">{[
+            ['node.addChild', 'child'], ['node.addSibling', 'sibling'], ['node.rename', 'rename'],
+            ['node.attachFile', 'attach file'], ['node.addImage', 'image'], ['node.fold', 'fold'],
+            ['node.checkbox', 'check'], ['node.progress', 'progress'], ['node.icons', 'icon'],
+            ['node.dates', 'date'], ['find.search', 'search'],
+          ].map(([id, short]) => `${formatShortcut(id, keyboardLayout)}=${short}`).join(' · ')}</span>
         </div>
       )}
 
@@ -2892,26 +2929,26 @@ export function DesktopMindMapEditor({
           <div className="mm-context-overlay" onClick={() => setContextMenu(null)} />
           <div className="mm-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
             <div className="mm-context-header">{cmNode.text.substring(0, 30) || 'Node'}</div>
-            <button className="mm-context-item" onClick={() => { const f = findNode(root, contextMenu.nodeId); if (f) startEditing(f.node); setContextMenu(null); }}>Rename <kbd>F2</kbd></button>
-            <button className="mm-context-item" onClick={() => { addChild(contextMenu.nodeId); setContextMenu(null); }}>Add Child <kbd>Tab</kbd></button>
-            {cmIsRoot && <button className="mm-context-item" onClick={() => { addChild('root', 'left'); setContextMenu(null); }}>Add Left Child <kbd>⇧Tab</kbd></button>}
-            {!cmIsRoot && <button className="mm-context-item" onClick={() => { addSibling(contextMenu.nodeId); setContextMenu(null); }}>Add Sibling <kbd>Enter</kbd></button>}
+            <button className="mm-context-item" onClick={() => { const f = findNode(root, contextMenu.nodeId); if (f) startEditing(f.node); setContextMenu(null); }}>Rename <kbd>{formatShortcut('node.rename', keyboardLayout)}</kbd></button>
+            <button className="mm-context-item" onClick={() => { addChild(contextMenu.nodeId); setContextMenu(null); }}>Add Child <kbd>{formatShortcut('node.addChild', keyboardLayout)}</kbd></button>
+            {cmIsRoot && <button className="mm-context-item" onClick={() => { addChild('root', 'left'); setContextMenu(null); }}>Add Left Child <kbd>{formatShortcut('node.addLeftChild', keyboardLayout)}</kbd></button>}
+            {!cmIsRoot && <button className="mm-context-item" onClick={() => { addSibling(contextMenu.nodeId); setContextMenu(null); }}>Add Sibling <kbd>{formatShortcut('node.addSibling', keyboardLayout)}</kbd></button>}
             <div className="mm-context-divider" />
-            {cmHasChildren && <button className="mm-context-item" onClick={() => { toggleCollapse(contextMenu.nodeId); setContextMenu(null); }}>{cmNode.collapsed ? 'Expand' : 'Collapse'} <kbd>Space</kbd></button>}
-            <button className="mm-context-item" onClick={() => { openNotes(contextMenu.nodeId); setNotesOpen(true); setContextMenu(null); }}>Notes <kbd>F3</kbd></button>
+            {cmHasChildren && <button className="mm-context-item" onClick={() => { toggleCollapse(contextMenu.nodeId); setContextMenu(null); }}>{cmNode.collapsed ? 'Expand' : 'Collapse'} <kbd>{formatShortcut('node.fold', keyboardLayout)}</kbd></button>}
+            <button className="mm-context-item" onClick={() => { openNotes(contextMenu.nodeId); setNotesOpen(true); setContextMenu(null); }}>Notes <kbd>{formatShortcut('node.notesToggle', keyboardLayout)}</kbd></button>
             <button className="mm-context-item" data-testid="context-add-image" onClick={() => {
               nodeImageTargetRef.current = contextMenu.nodeId;
               nodeImageInputRef.current?.click();
               setContextMenu(null);
-            }}>{cmNode.image?.thumb ? 'Replace Image…' : 'Add Image…'} <kbd>Alt+K</kbd></button>
+            }}>{cmNode.image?.thumb ? 'Replace Image…' : 'Add Image…'} <kbd>{formatShortcut('node.addImage', keyboardLayout)}</kbd></button>
             {cmNode.image?.thumb && (
               <button className="mm-context-item" data-testid="context-remove-image" onClick={() => { removeNodeImage(contextMenu.nodeId); setContextMenu(null); }}>Remove Image</button>
             )}
-            <button className="mm-context-item" onClick={() => { setShowIconPicker(true); setContextMenu(null); }}>Icon <kbd>I</kbd></button>
+            <button className="mm-context-item" onClick={() => { setShowIconPicker(true); setContextMenu(null); }}>Icon <kbd>{formatShortcut('node.icons', keyboardLayout)}</kbd></button>
             <button className="mm-context-item" onClick={() => {
               cmHasCheckbox ? toggleCheckbox(contextMenu.nodeId) : addCheckbox(contextMenu.nodeId);
               setContextMenu(null);
-            }}>{cmHasCheckbox ? (cmNode.checked ? 'Uncheck' : 'Check') : 'Add Checkbox'} <kbd>C</kbd></button>
+            }}>{cmHasCheckbox ? (cmNode.checked ? 'Uncheck' : 'Check') : 'Add Checkbox'} <kbd>{formatShortcut('node.checkbox', keyboardLayout)}</kbd></button>
             {cmHasCheckbox && <button className="mm-context-item" onClick={() => { removeCheckbox(contextMenu.nodeId); setContextMenu(null); }}>Remove Checkbox</button>}
             <div className="mm-context-item mm-context-progress-row">Progress
               <div className="mm-context-progress-presets">
@@ -2923,18 +2960,18 @@ export function DesktopMindMapEditor({
                   setNodeProgress(contextMenu.nodeId, pct);
                   setContextMenu(null);
                 }}>{pct}</span>))}
-              </div><kbd>P</kbd>
+              </div><kbd>{formatShortcut('node.progress', keyboardLayout)}</kbd>
             </div>
-            <button className="mm-context-item" onClick={() => { setShowDateDialog(true); setContextMenu(null); }}>Date Planning <kbd>D</kbd></button>
-            <button className="mm-context-item" onClick={() => { setShowUrlDialog(true); setContextMenu(null); }}>Add URL <kbd>U</kbd></button>
-            <button className="mm-context-item" onClick={() => { setShowTagDialog(true); setContextMenu(null); }}>Labels <kbd>T</kbd></button>
+            <button className="mm-context-item" onClick={() => { setShowDateDialog(true); setContextMenu(null); }}>Date Planning <kbd>{formatShortcut('node.dates', keyboardLayout)}</kbd></button>
+            <button className="mm-context-item" onClick={() => { setShowUrlDialog(true); setContextMenu(null); }}>Add URL <kbd>{formatShortcut('node.url', keyboardLayout)}</kbd></button>
+            <button className="mm-context-item" onClick={() => { setShowTagDialog(true); setContextMenu(null); }}>Labels <kbd>{formatShortcut('node.labels', keyboardLayout)}</kbd></button>
             <div className="mm-context-divider" />
             {!cmIsRoot && cmCanMoveUp && <button className="mm-context-item" onClick={() => { moveNode(contextMenu.nodeId, 'up'); setContextMenu(null); }}>Move Up</button>}
             {!cmIsRoot && cmCanMoveDown && <button className="mm-context-item" onClick={() => { moveNode(contextMenu.nodeId, 'down'); setContextMenu(null); }}>Move Down</button>}
             {!cmIsRoot && <button className="mm-context-item" onClick={() => { duplicateNode(contextMenu.nodeId); setContextMenu(null); }}>Duplicate</button>}
-            <button className="mm-context-item" onClick={() => { resetNodePosition(contextMenu.nodeId); setContextMenu(null); }}>Reset Position <kbd>R</kbd></button>
-            <button className="mm-context-item" onClick={() => { autoAlignSubtree(contextMenu.nodeId); setContextMenu(null); }}>Auto-align subtree <kbd>A</kbd></button>
-            {!cmIsRoot && (<><div className="mm-context-divider" /><button className="mm-context-item mm-context-danger" onClick={() => { deleteNode(contextMenu.nodeId); setContextMenu(null); }}>Delete <kbd>Del</kbd></button></>)}
+            <button className="mm-context-item" onClick={() => { resetNodePosition(contextMenu.nodeId); setContextMenu(null); }}>Reset Position <kbd>{formatShortcut('node.resetPosition', keyboardLayout)}</kbd></button>
+            <button className="mm-context-item" onClick={() => { autoAlignSubtree(contextMenu.nodeId); setContextMenu(null); }}>Auto-align subtree <kbd>{formatShortcut('node.autoAlign', keyboardLayout)}</kbd></button>
+            {!cmIsRoot && (<><div className="mm-context-divider" /><button className="mm-context-item mm-context-danger" onClick={() => { deleteNode(contextMenu.nodeId); setContextMenu(null); }}>Delete <kbd>{formatShortcut('node.delete', keyboardLayout)}</kbd></button></>)}
           </div>
         </>);
       })()}
@@ -3166,14 +3203,29 @@ export function DesktopMindMapEditor({
           ><span>Keyboard Shortcuts</span>
             <button className="mm-btn-icon" onClick={() => setShowShortcuts(false)}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
-          <div className="mm-shortcuts-grid">{[
-            ['Tab', 'Add child'], ['⇧Tab', 'Add left child (root)'], ['Enter', 'Add sibling'], ['Del / ⌫', 'Delete node'], ['F2', 'Rename'], ['F3', 'Notes'],
-            ['F4', 'Colour picker'], ['F5 / F', 'Focus mode'], ['F6', 'Attach encrypted file'], ['Alt+K', 'Add image to node'], ['F1', 'Shortcuts'], ['F9 / Ctrl+Z', 'Undo'], ['F10 / Ctrl+Y', 'Redo'], ['Space', 'Fold / Unfold'],
-            ['↑ ↓ ← →', 'Navigate (spatial)'], ['⇧+Arrow', 'Multi-select'], ['Ctrl+Click', 'Toggle select'], ['⇧+Drag', 'Rectangle select'],
-            ['Home', 'Root'], ['+ −', 'Zoom'], ['Ctrl+S', 'Save'],
-            ['C', 'Checkbox'], ['P', 'Progress'], ['I', 'Icons'], ['D', 'Dates'], ['U', 'URL'], ['R', 'Reset pos'],
-            ['Ctrl+⇧R', 'Reset all'], ['Ctrl+F', 'Search'], ['Esc', 'Cancel / Clear'],
-          ].map(([k, v]) => (<div key={k} className="mm-shortcut-row"><kbd className="mm-kbd">{k}</kbd><span>{v}</span></div>))}</div>
+          <div className="mm-shortcuts-grid">
+            {(['Nodes', 'Format', 'View', 'Edit', 'Find', 'File'] as const).map((group) => (
+              <Fragment key={group}>
+                <div className="mm-shortcuts-group-label">{group}</div>
+                {SHORTCUTS.filter((s) => s.group === group).map((s) => (
+                  <div key={s.id} className="mm-shortcut-row">
+                    <kbd className="mm-kbd">{formatShortcut(s.id, keyboardLayout)}</kbd>
+                    <span>{s.label}</span>
+                  </div>
+                ))}
+              </Fragment>
+            ))}
+            <Fragment>
+              <div className="mm-shortcuts-group-label">Selection</div>
+              {[
+                ['↑ ↓ ← →', 'Navigate (spatial)'],
+                ['⇧+Arrow', 'Multi-select'],
+                [isMac ? '⌘+Click' : 'Ctrl+Click', 'Toggle select'],
+                ['⇧+Drag', 'Rectangle select'],
+                ['Esc', 'Cancel / Clear'],
+              ].map(([k, v]) => (<div key={k} className="mm-shortcut-row"><kbd className="mm-kbd">{k}</kbd><span>{v}</span></div>))}
+            </Fragment>
+          </div>
         </div>
       )}
 

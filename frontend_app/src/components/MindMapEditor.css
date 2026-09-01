@@ -1826,6 +1826,17 @@
   overflow-y: auto;
 }
 
+.mm-shortcuts-group-label {
+  grid-column: 1 / -1;
+  padding: 8px 14px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mm-statusbar-text);
+  opacity: 0.65;
+}
+
 .mm-shortcut-row {
   display: contents;
 }

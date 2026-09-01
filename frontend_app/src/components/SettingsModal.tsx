@@ -7,6 +7,8 @@ import { LegalDocumentDialog, type LegalDocument } from './LegalDocumentDialog';
 import { APP_VERSION, CHANGELOG, type ChangeKind } from '../changelog';
 import { useAuthStore } from '../store/auth';
 import { AutosaveMode, useThemeStore } from '../store/theme';
+import { useUiStore, useEffectiveKeyboardLayout, type KeyboardLayoutName } from '../store/ui';
+import { isMac } from '../platform/isMac';
 
 export type SettingsTab = 'account' | 'changelog' | 'appearance' | 'help';
 
@@ -205,6 +207,61 @@ function LocalStorageFolderSection({ onFolderChanged }: { onFolderChanged?: () =
         </p>
       )}
     </section>
+  );
+}
+
+// ─── Keyboard layout ──────────────────────────────────────────────────────────
+
+const LAYOUT_OPTIONS: { value: KeyboardLayoutName; title: string; blurb: string }[] = [
+  { value: 'freemind', title: 'FreeMind', blurb: 'F-key driven — Tab/Enter to add, F2 rename, F9/F10 undo/redo. The classic mind-map layout.' },
+  { value: 'mac', title: 'Mac', blurb: 'Modelled on MindNode — no function keys. ⌘Return rename, ⌘Z/⇧⌘Z undo/redo, B for colour, H for root.' },
+];
+
+function KeyboardLayoutPicker() {
+  const chosen = useUiStore((s) => s.keyboardLayout);
+  const setKeyboardLayout = useUiStore((s) => s.setKeyboardLayout);
+  const effective = useEffectiveKeyboardLayout();
+
+  return (
+    <div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {LAYOUT_OPTIONS.map((opt) => {
+          const active = effective === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setKeyboardLayout(opt.value)}
+              className="rounded-lg p-3 text-left text-sm transition"
+              style={{
+                background: active ? 'var(--accent-soft, var(--surface-2))' : 'var(--surface-2)',
+                border: `1px solid ${active ? 'var(--accent)' : 'var(--border-light)'}`,
+                color: 'var(--text-primary)',
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-medium">{opt.title}</span>
+                {active && <span className="text-xs" style={{ color: 'var(--accent)' }}>Active</span>}
+              </div>
+              <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>{opt.blurb}</p>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+        {chosen == null
+          ? `Following this device's default (${isMac ? 'Mac' : 'FreeMind'} — macOS uses Mac, everything else uses FreeMind).`
+          : 'Set explicitly — stays this way on this device regardless of the operating system default.'}
+        {chosen != null && (
+          <>
+            {' '}
+            <button type="button" onClick={() => setKeyboardLayout(null)} className="underline decoration-dotted underline-offset-2" style={{ color: 'var(--accent)' }}>
+              Reset to device default
+            </button>
+          </>
+        )}
+      </p>
+    </div>
   );
 }
 
@@ -444,6 +501,11 @@ function AppearanceTab({
         <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
           Choose whether vault edits save after each change, on an interval, or only when saved manually.
         </p>
+      </section>
+
+      <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
+        <SectionLabel>Keyboard layout</SectionLabel>
+        <KeyboardLayoutPicker />
       </section>
 
       <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>

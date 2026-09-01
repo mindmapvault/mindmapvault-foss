@@ -6,13 +6,15 @@ interface ThemePanelProps {
   initialTab?: SettingsTab;
   /** Open the What's New tab once per release. Set on one mount point only. */
   autoOpenWhatsNew?: boolean;
+  /** Called after the local storage folder is set or reset, so a vault list can refresh. */
+  onStorageFolderChanged?: () => void;
 }
 
 /**
  * Settings entry point. Renders a gear button that opens the tabbed
  * {@link SettingsModal} (Account / What's New / Appearance).
  */
-export function ThemePanel({ initialTab = 'appearance', autoOpenWhatsNew = false }: ThemePanelProps) {
+export function ThemePanel({ initialTab = 'appearance', autoOpenWhatsNew = false, onStorageFolderChanged }: ThemePanelProps) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<SettingsTab>(initialTab);
 
@@ -40,7 +42,7 @@ export function ThemePanel({ initialTab = 'appearance', autoOpenWhatsNew = false
         </svg>
       </button>
 
-      <SettingsModal open={open} onClose={() => setOpen(false)} initialTab={tab} />
+      <SettingsModal open={open} onClose={() => setOpen(false)} initialTab={tab} onStorageFolderChanged={onStorageFolderChanged} />
     </>
   );
 }

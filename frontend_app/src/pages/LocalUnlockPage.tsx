@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { aesDecrypt, aesEncrypt, importAesKey } from '../crypto/aes';
 import { DesktopTauriBadge } from '../components/DesktopTauriBadge';
+import { DynamicLucideIcon } from '../components/DynamicLucideIcon';
 import { LegalDocumentDialog, type LegalDocument } from '../components/LegalDocumentDialog';
 import { deriveMasterKey, DEFAULT_ARGON2_PARAMS } from '../crypto/kdf';
 import { generateUserKeyPairs } from '../crypto/kem';
@@ -74,6 +75,8 @@ export function LocalUnlockPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState('');
   const [storageDir, setStorageDir] = useState('');
@@ -375,18 +378,29 @@ export function LocalUnlockPage() {
                            text-[var(--fg)] opacity-70 cursor-default outline-none"
               />
             )}
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
-              autoComplete="current-password"
-              autoFocus
-              className="w-full px-4 py-3 rounded-lg border border-[var(--border)] bg-[var(--card)]
-                         text-[var(--fg)] focus:border-[var(--accent)] outline-none"
-              disabled={working || lockoutCountdown > 0}
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
+                autoComplete="current-password"
+                autoFocus
+                className="w-full px-4 py-3 pr-12 rounded-lg border border-[var(--border)] bg-[var(--card)]
+                           text-[var(--fg)] focus:border-[var(--accent)] outline-none"
+                disabled={working || lockoutCountdown > 0}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                tabIndex={-1}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--fg-muted)] hover:text-[var(--fg)]"
+              >
+                <DynamicLucideIcon name={showPassword ? 'EyeOff' : 'Eye'} size={18} />
+              </button>
+            </div>
             {lockoutCountdown > 0 ? (
               <p className="text-sm text-orange-400">
                 Too many failed attempts — wait <strong>{lockoutCountdown}s</strong> before trying again.
@@ -474,26 +488,48 @@ export function LocalUnlockPage() {
                          text-[var(--fg)] focus:border-[var(--accent)] outline-none"
               disabled={working}
             />
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-              className="w-full px-4 py-3 rounded-lg border border-[var(--border)] bg-[var(--card)]
-                         text-[var(--fg)] focus:border-[var(--accent)] outline-none"
-              disabled={working}
-            />
-            <input
-              type="password"
-              placeholder="Confirm password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              autoComplete="new-password"
-              className="w-full px-4 py-3 rounded-lg border border-[var(--border)] bg-[var(--card)]
-                         text-[var(--fg)] focus:border-[var(--accent)] outline-none"
-              disabled={working}
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                className="w-full px-4 py-3 pr-12 rounded-lg border border-[var(--border)] bg-[var(--card)]
+                           text-[var(--fg)] focus:border-[var(--accent)] outline-none"
+                disabled={working}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                tabIndex={-1}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--fg-muted)] hover:text-[var(--fg)]"
+              >
+                <DynamicLucideIcon name={showPassword ? 'EyeOff' : 'Eye'} size={18} />
+              </button>
+            </div>
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                placeholder="Confirm password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                className="w-full px-4 py-3 pr-12 rounded-lg border border-[var(--border)] bg-[var(--card)]
+                           text-[var(--fg)] focus:border-[var(--accent)] outline-none"
+                disabled={working}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((v) => !v)}
+                tabIndex={-1}
+                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--fg-muted)] hover:text-[var(--fg)]"
+              >
+                <DynamicLucideIcon name={showConfirmPassword ? 'EyeOff' : 'Eye'} size={18} />
+              </button>
+            </div>
             {error && <p className="text-sm text-red-400">{error}</p>}
             <button
               onClick={handleCreate}

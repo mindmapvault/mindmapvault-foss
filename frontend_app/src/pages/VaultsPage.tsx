@@ -40,16 +40,6 @@ import {
 import { decryptAttachmentForOwner } from '../crypto/encryptedVault';
 // packageJson intentionally omitted when not used in this view
 
-interface LocalStorageDirInfo {
-  path: string;
-  is_override: boolean;
-}
-
-async function invokeTauri<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  const { invoke } = await import('@tauri-apps/api/core');
-  return invoke<T>(cmd, args);
-}
-
 interface MapWithTitle extends MindMapListItem {
   title: string | null;
   vaultNote: string;
@@ -798,11 +788,6 @@ export function VaultsPage() {
   );
 
   const [historyVaultId, setHistoryVaultId] = useState<string | null>(null);
-  const [storagePathInfo, setStoragePathInfo] = useState<LocalStorageDirInfo | null>(null);
-  const [storagePathInput, setStoragePathInput] = useState('');
-  const [storagePathWorking, setStoragePathWorking] = useState(false);
-  const [storagePathError, setStoragePathError] = useState('');
-  const [isWslRuntime, setIsWslRuntime] = useState(false);
 
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -1144,79 +1129,6 @@ export function VaultsPage() {
     }
   }, [hasKeys, loadMaps]);
 
-  const loadLocalStoragePath = useCallback(async () => {
-    if (!isLocalMode) return;
-    try {
-      const info = await invokeTauri<LocalStorageDirInfo>('get_local_storage_dir');
-      setStoragePathInfo(info);
-      setStoragePathInput(info.path);
-      setStoragePathError('');
-    } catch (err) {
-      setStoragePathError(err instanceof Error ? err.message : String(err));
-    }
-  }, [isLocalMode]);
-
-  useEffect(() => {
-    if (isLocalMode) {
-      void loadLocalStoragePath();
-      (async () => {
-        try {
-          const wsl = await invokeTauri<boolean>('is_wsl_environment');
-          setIsWslRuntime(wsl);
-        } catch {
-          setIsWslRuntime(false);
-        }
-      })();
-    }
-  }, [isLocalMode, loadLocalStoragePath]);
-
-  const handleSaveStoragePath = async () => {
-    if (!isLocalMode || !storagePathInput.trim()) return;
-    setStoragePathWorking(true);
-    setStoragePathError('');
-    try {
-      const info = await invokeTauri<LocalStorageDirInfo>('set_local_storage_dir', {
-        path: storagePathInput.trim(),
-      });
-      setStoragePathInfo(info);
-      setStoragePathInput(info.path);
-      await loadMaps();
-    } catch (err) {
-      setStoragePathError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setStoragePathWorking(false);
-    }
-  };
-
-  const handleBrowseStoragePath = async () => {
-    if (!isLocalMode) return;
-    setStoragePathError('');
-    try {
-      const selected = await invokeTauri<string | null>('pick_local_storage_dir');
-      if (selected) {
-        setStoragePathInput(selected);
-      }
-    } catch (err) {
-      setStoragePathError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
-  const handleResetStoragePath = async () => {
-    if (!isLocalMode) return;
-    setStoragePathWorking(true);
-    setStoragePathError('');
-    try {
-      const info = await invokeTauri<LocalStorageDirInfo>('reset_local_storage_dir');
-      setStoragePathInfo(info);
-      setStoragePathInput(info.path);
-      await loadMaps();
-    } catch (err) {
-      setStoragePathError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setStoragePathWorking(false);
-    }
-  };
-
   const handleCreate = async () => {
     if (!newTitle.trim() || !sessionKeys) return;
     setCreating(true);
@@ -1488,7 +1400,7 @@ export function VaultsPage() {
             </div>
             <div className="flex shrink-0 items-center justify-end gap-2 sm:gap-3">
               <span className="hidden text-sm text-slate-400 sm:inline">{username}</span>
-              <ThemePanel initialTab="account" autoOpenWhatsNew />
+              <ThemePanel initialTab="account" autoOpenWhatsNew onStorageFolderChanged={() => void loadMaps()} />
               <button
                 onClick={logout}
                 title={isLocalMode ? 'Lock this local profile' : 'Log out'}
@@ -1512,7 +1424,15 @@ export function VaultsPage() {
 
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-xl font-semibold text-white">Your Vaults</h1>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h1 className="text-xl font-semibold text-white">Your Vaults</h1>
+              {storageSummary && (
+                <span className="text-xs text-slate-400">
+                  {fmtBytes(usedBytes)} used · {storageSummary.vaults.length} vault{storageSummary.vaults.length === 1 ? '' : 's'}
+                  {attachedFileCount > 0 ? ` · ${attachedFileCount} file${attachedFileCount === 1 ? '' : 's'} (${fmtBytes(attachedFileBytes)})` : ''}
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               {/* Hidden file inputs */}
               <input ref={mdImportRef} type="file" accept=".md" style={{ display: 'none' }}
@@ -1611,81 +1531,6 @@ export function VaultsPage() {
           {xmindImportError && (
             <div className="mb-4 rounded-lg border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-400">
               XMind import failed: {xmindImportError}
-            </div>
-          )}
-
-          {isLocalMode && (
-            <div className="mb-6 rounded-xl border border-slate-700 bg-surface-1 p-4">
-              <h2 className="text-sm font-semibold text-slate-200">Local storage folder</h2>
-              <p className="mt-1 text-xs text-slate-400">
-                Use a writable folder for offline vault files. Change this if vault creation fails due to permissions.
-              </p>
-
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <input
-                  type="text"
-                  value={storagePathInput}
-                  onChange={(e) => setStoragePathInput(e.target.value)}
-                  placeholder="/path/to/mindmapvault-local"
-                  className="flex-1 rounded-lg border border-slate-600 bg-surface px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-accent focus:outline-none"
-                  disabled={storagePathWorking}
-                />
-                <button
-                  onClick={() => { void handleBrowseStoragePath(); }}
-                  disabled={storagePathWorking || isWslRuntime}
-                  className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-300 transition hover:border-slate-500 disabled:opacity-50"
-                  title={isWslRuntime ? 'Browse dialog is disabled in WSL for stability. Paste path manually.' : 'Browse folders'}
-                >
-                  Browse...
-                </button>
-                <button
-                  onClick={() => { void handleSaveStoragePath(); }}
-                  disabled={storagePathWorking || !storagePathInput.trim()}
-                  className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition hover:bg-accent-hover disabled:opacity-50"
-                >
-                  {storagePathWorking ? 'Saving...' : 'Set folder'}
-                </button>
-                <button
-                  onClick={() => { void handleResetStoragePath(); }}
-                  disabled={storagePathWorking}
-                  className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-300 transition hover:border-slate-500 disabled:opacity-50"
-                >
-                  Use default
-                </button>
-              </div>
-
-              {storagePathInfo && (
-                <p className="mt-2 text-xs text-slate-400">
-                  Active folder: {storagePathInfo.path}
-                  {storagePathInfo.is_override ? ' (custom)' : ' (default)'}
-                </p>
-              )}
-
-              {storagePathError && (
-                <p className="mt-2 text-xs text-red-400">{storagePathError}</p>
-              )}
-
-              {isWslRuntime && (
-                <p className="mt-2 text-xs text-amber-300">
-                  WSL mode detected: folder browse popup is disabled for stability. Paste a path manually, e.g. /home/kornelko/mindmapvault-local.
-                </p>
-              )}
-            </div>
-          )}
-
-          {storageSummary && (
-            <div className="mb-6 rounded-xl border border-slate-700 bg-surface-1 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-slate-200">Total storage used</h2>
-                <span className="text-xs text-slate-400">
-                  {fmtBytes(usedBytes)} used in local offline storage
-                </span>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
-                <span>{storageSummary.vaults.length} vaults</span>
-                {attachedFileCount > 0 && <span>{attachedFileCount} attached file{attachedFileCount === 1 ? '' : 's'} using {fmtBytes(attachedFileBytes)}</span>}
-                
-              </div>
             </div>
           )}
 

@@ -8,7 +8,17 @@ import { APP_VERSION, CHANGELOG, type ChangeKind } from '../changelog';
 import { useAuthStore } from '../store/auth';
 import { AutosaveMode, useThemeStore } from '../store/theme';
 
-export type SettingsTab = 'account' | 'changelog' | 'appearance';
+export type SettingsTab = 'account' | 'changelog' | 'appearance' | 'help';
+
+interface LocalStorageDirInfo {
+  path: string;
+  is_override: boolean;
+}
+
+async function invokeTauri<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<T>(cmd, args);
+}
 
 const PRESETS = [
   '#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f97316',
@@ -42,12 +52,20 @@ const icons: Record<SettingsTab, ReactNode> = {
       <path strokeLinecap="round" d="M12 3a9 9 0 0 0 0 18" fill="currentColor" stroke="none" opacity="0.35" />
     </svg>
   ),
+  help: (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <circle cx="12" cy="12" r="9" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.5 9.5a2.5 2.5 0 1 1 3.2 2.4c-.5.2-.7.6-.7 1.1v.5" />
+      <circle cx="12" cy="17" r=".6" fill="currentColor" stroke="none" />
+    </svg>
+  ),
 };
 
 const tabTitles: Record<SettingsTab, string> = {
   account: 'Account',
   changelog: "What's New",
   appearance: 'Appearance',
+  help: 'Help',
 };
 
 function SectionLabel({ children }: { children: ReactNode }) {
@@ -58,6 +76,138 @@ function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
+// ─── Local storage folder ────────────────────────────────────────────────────
+
+function LocalStorageFolderSection({ onFolderChanged }: { onFolderChanged?: () => void }) {
+  const [pathInfo, setPathInfo] = useState<LocalStorageDirInfo | null>(null);
+  const [pathInput, setPathInput] = useState('');
+  const [working, setWorking] = useState(false);
+  const [pathError, setPathError] = useState('');
+  const [isWslRuntime, setIsWslRuntime] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const info = await invokeTauri<LocalStorageDirInfo>('get_local_storage_dir');
+        setPathInfo(info);
+        setPathInput(info.path);
+      } catch (err) {
+        setPathError(err instanceof Error ? err.message : String(err));
+      }
+      try {
+        setIsWslRuntime(await invokeTauri<boolean>('is_wsl_environment'));
+      } catch {
+        setIsWslRuntime(false);
+      }
+    })();
+  }, []);
+
+  const handleSave = async () => {
+    if (!pathInput.trim()) return;
+    setWorking(true);
+    setPathError('');
+    try {
+      const info = await invokeTauri<LocalStorageDirInfo>('set_local_storage_dir', { path: pathInput.trim() });
+      setPathInfo(info);
+      setPathInput(info.path);
+      onFolderChanged?.();
+    } catch (err) {
+      setPathError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleBrowse = async () => {
+    setPathError('');
+    try {
+      const selected = await invokeTauri<string | null>('pick_local_storage_dir');
+      if (selected) setPathInput(selected);
+    } catch (err) {
+      setPathError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleReset = async () => {
+    setWorking(true);
+    setPathError('');
+    try {
+      const info = await invokeTauri<LocalStorageDirInfo>('reset_local_storage_dir');
+      setPathInfo(info);
+      setPathInput(info.path);
+      onFolderChanged?.();
+    } catch (err) {
+      setPathError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  return (
+    <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
+      <SectionLabel>Local storage folder</SectionLabel>
+      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+        Use a writable folder for offline vault files. Change this if vault creation fails due to permissions.
+      </p>
+
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <input
+          type="text"
+          value={pathInput}
+          onChange={(e) => setPathInput(e.target.value)}
+          placeholder="/path/to/mindmapvault-local"
+          disabled={working}
+          className="flex-1 rounded-lg px-3 py-2 text-sm"
+          style={{ background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border-light)' }}
+        />
+        <button
+          type="button"
+          onClick={() => void handleBrowse()}
+          disabled={working || isWslRuntime}
+          title={isWslRuntime ? 'Browse dialog is disabled in WSL for stability. Paste path manually.' : 'Browse folders'}
+          className="rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50"
+          style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-light)' }}
+        >
+          Browse…
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleSave()}
+          disabled={working || !pathInput.trim()}
+          className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--accent-hover)] disabled:opacity-50"
+        >
+          {working ? 'Saving…' : 'Set folder'}
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleReset()}
+          disabled={working}
+          className="rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50"
+          style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-light)' }}
+        >
+          Use default
+        </button>
+      </div>
+
+      {pathInfo && (
+        <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+          Active folder: {pathInfo.path}{pathInfo.is_override ? ' (custom)' : ' (default)'}
+        </p>
+      )}
+
+      {pathError && (
+        <p className="mt-2 text-xs text-red-400">{pathError}</p>
+      )}
+
+      {isWslRuntime && (
+        <p className="mt-2 text-xs text-amber-300">
+          WSL mode detected: folder browse popup is disabled for stability. Paste a path manually, e.g. /home/kornelko/mindmapvault-local.
+        </p>
+      )}
+    </section>
+  );
+}
+
 // ─── Account ─────────────────────────────────────────────────────────────────
 
 function AccountTab({
@@ -65,11 +215,13 @@ function AccountTab({
   autoLogoutMinutes,
   setAutoLogoutMinutes,
   onClose,
+  onStorageFolderChanged,
 }: {
   username: string | null;
   autoLogoutMinutes: number | null;
   setAutoLogoutMinutes: (minutes: number | null) => void;
   onClose: () => void;
+  onStorageFolderChanged?: () => void;
 }) {
   const navigate = useNavigate();
 
@@ -87,6 +239,8 @@ function AccountTab({
           </p>
         </div>
       </section>
+
+      <LocalStorageFolderSection onFolderChanged={onStorageFolderChanged} />
 
       <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
         <SectionLabel>Auto-logout after inactivity</SectionLabel>
@@ -257,6 +411,7 @@ function AppearanceTab({
                 boxShadow: primaryColor.toLowerCase() === c ? '0 0 0 1px var(--surface-1)' : 'none',
               }}
               title={c}
+              aria-label={`Use accent colour ${c}`}
             />
           ))}
         </div>
@@ -266,6 +421,7 @@ function AppearanceTab({
             type="color"
             value={primaryColor}
             onChange={(e) => setPrimaryColor(e.target.value)}
+            aria-label="Custom accent colour"
             className="h-7 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
           />
           <span className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>{primaryColor}</span>
@@ -277,6 +433,7 @@ function AppearanceTab({
         <select
           value={autosaveMode}
           onChange={(e) => setAutosaveMode(e.target.value as AutosaveMode)}
+          aria-label="Autosave"
           className="w-full rounded-lg px-3 py-2 text-sm"
           style={{ background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border-light)' }}
         >
@@ -325,6 +482,8 @@ interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
   initialTab?: SettingsTab;
+  /** Called after the local storage folder is set or reset, so a vault list can refresh. */
+  onStorageFolderChanged?: () => void;
 }
 
 /**
@@ -333,7 +492,7 @@ interface SettingsModalProps {
  * The FOSS build is local-only, so there is no profile, plan, notification or
  * feedback section — everything here is device-local state.
  */
-export function SettingsModal({ open, onClose, initialTab = 'account' }: SettingsModalProps) {
+export function SettingsModal({ open, onClose, initialTab = 'account', onStorageFolderChanged }: SettingsModalProps) {
   const {
     mode, primaryColor, autoLogoutMinutes, autosaveMode,
     toggleMode, setPrimaryColor, setAutoLogoutMinutes, setAutosaveMode,
@@ -343,7 +502,7 @@ export function SettingsModal({ open, onClose, initialTab = 'account' }: Setting
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [legalDocument, setLegalDocument] = useState<LegalDocument | null>(null);
 
-  const order: SettingsTab[] = ['account', 'changelog', 'appearance'];
+  const order: SettingsTab[] = ['account', 'changelog', 'appearance', 'help'];
 
   useEffect(() => {
     if (open) setTab(initialTab);
@@ -424,6 +583,7 @@ export function SettingsModal({ open, onClose, initialTab = 'account' }: Setting
                   autoLogoutMinutes={autoLogoutMinutes}
                   setAutoLogoutMinutes={setAutoLogoutMinutes}
                   onClose={onClose}
+                  onStorageFolderChanged={onStorageFolderChanged}
                 />
               )}
               {tab === 'changelog' && <ChangelogTab />}
@@ -438,6 +598,7 @@ export function SettingsModal({ open, onClose, initialTab = 'account' }: Setting
                   onOpenLegal={setLegalDocument}
                 />
               )}
+              {tab === 'help' && <HelpTab />}
             </div>
           </div>
         </div>
@@ -445,6 +606,53 @@ export function SettingsModal({ open, onClose, initialTab = 'account' }: Setting
       <LegalDocumentDialog document={legalDocument} onClose={() => setLegalDocument(null)} />
     </>,
     document.body,
+  );
+}
+
+// ─── Help ────────────────────────────────────────────────────────────────────
+
+function HelpTab() {
+  return (
+    <div className="space-y-6">
+      <section>
+        <SectionLabel>Getting help</SectionLabel>
+        <p className="text-sm leading-6" style={{ color: 'var(--text-primary)' }}>
+          MindMapVault FOSS is local-only — there is no account or server to write to. For bugs,
+          questions, and ideas, the project's GitHub repository is the place to go.
+        </p>
+      </section>
+
+      <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
+        <SectionLabel>Links</SectionLabel>
+        <a
+          href="https://github.com/mindmapvault/mindmapvault-foss/discussions"
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex w-full items-center justify-center rounded-lg px-3 py-2 text-sm font-medium transition"
+          style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-light)' }}
+        >
+          Ask a question in Discussions
+        </a>
+        <a
+          href="https://github.com/mindmapvault/mindmapvault-foss/issues"
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 inline-flex w-full items-center justify-center rounded-lg px-3 py-2 text-sm font-medium transition"
+          style={{ background: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--border-light)' }}
+        >
+          Report a bug
+        </a>
+        <a
+          href="https://github.com/mindmapvault/mindmapvault-foss"
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 inline-flex w-full items-center justify-center rounded-lg px-3 py-2 text-sm font-medium transition"
+          style={{ background: 'transparent', color: 'var(--text-primary)', border: '1px solid var(--border-light)' }}
+        >
+          Open project repository
+        </a>
+      </section>
+    </div>
   );
 }
 

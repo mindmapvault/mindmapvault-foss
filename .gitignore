@@ -68,6 +68,10 @@ __pycache__/
 DECISIONS_NEEDED.md
 OSS_SCOPE.md
 RELEASE_PROCESS.md
+
+# Local-only design planning — not for the public repo
+/docs/UI_REWORK_PLAN.md
+/docs/ui-mockups/
 # Keep developer scripts tracked. Ignore only generated/backup files inside scripts/
 /scripts/*.bak*
 /scripts/*.tmp

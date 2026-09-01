@@ -12,6 +12,41 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Removed
 
+## [0.3.34] - 2026-09-01
+
+### Added
+- **Picture on node** — a node can now carry a small picture, drawn directly on the node. Drop a single image onto a node, paste one from the clipboard, or press `Alt+K` (right-click → Add Image also offers this); the full-resolution original is attached as usual and click-through opens it. Ported from the server build: `createNodeImageGlyph` in `utils/filePreview.ts` crops to a 3:1 max aspect ratio and encodes to WebP at the exact display size, degrading quality until the glyph is under 8 KB so it stays cheap inside the encrypted map JSON. Rendered as an SVG `<image>` (not `foreignObject`) so it survives PNG/PDF export, and the layout engine (`MindMapLayout.ts`) and the vault-list preview thumbnail (`vaultPreview.ts`) both reserve and draw the picture band.
+- **Voice notes** — record and attach a voice memo to a node from the mobile-width layout's node-properties panel. Uses `MediaRecorder`; requires `desktop/src-tauri/Info.plist` (`NSMicrophoneUsageDescription`), added so macOS actually shows the microphone permission prompt.
+- **Settings → Help tab** — links to the project's GitHub Discussions, Issues, and repository, replacing the absence of any in-app "getting help" path.
+- Accessible labels (`aria-label`) on the accent-colour swatches, the custom colour input, and the autosave select in Settings → Appearance.
+- `Ctrl/Cmd+E` now actually toggles Write/Read mode in the node notes dialog — the button already advertised the shortcut, but no listener existed.
+
+### Changed
+- **Icon picker rebuilt on a static registry.** Replaced the `lucide-react/dynamic` runtime lookup (manual kebab/Pascal conversion, an alias patch table, search capped at 120 of ~1500 icons) with `components/lucideIconRegistry.ts`, a direct-import registry of the same ~120 curated icons the picker already showed by default. Search is now exhaustive over the curated set instead of truncated over the full one. The `lucide-icons` JS chunk dropped from 1.14 MB to 62 KB gzipped as a result.
+- **Local storage folder setting moved.** The folder picker (Browse / Set folder / Use default, WSL notice) now lives in Settings → Account instead of its own panel in the vault lobby; changing it there refreshes the lobby's vault list.
+- **Lobby header condensed.** The "Total storage used" panel is gone; its numbers (bytes used, vault count, attached files) now sit inline next to the "Your Vaults" heading in the same row.
+- **Desktop window has a minimum size.** 1024×720, set above the app's own 768px mobile-layout breakpoint so the window can no longer be resized into a state that accidentally triggers the phone UI.
+- Password fields on the local unlock and create-profile screens (`LocalUnlockPage.tsx`) now have a show/hide eye-toggle, matching the convention used elsewhere.
+
+### Fixed
+- **Local password change re-enabled.** `PasswordRotationForm.tsx`'s `ROTATION_ENABLED` flag was off repository-wide (see 0.3.24's follow-up) against a real risk in the hosted product: there, an attachment's own key is wrapped directly by the master key, and rotation never re-wrapped it, so a hosted rotation would silently make every attachment undecryptable. That risk does not exist in this build — every call site of that master-key attachment wrapping is gated behind `isLocalMode`, which is unconditionally `true` here, and a local attachment is stored as inline base64 inside the mind-map tree, protected by the vault's KEM-derived key, which rotation never touches (confirmed on the Rust side too: `apply_local_password_rotation` only rewrites the profile file and the vault title index, never a vault blob). Change password is available again from Settings → Account.
+
+### Security
+- **DevTools closed in built apps.** `desktop/src-tauri/Cargo.toml` no longer enables the `devtools` Cargo feature, which had force-enabled DevTools access in release builds — session keys and decrypted content live in the JS heap and were reachable from the console in a shipped app. The "Inspect → Open WebView Devtools" menu and its handler in `lib.rs` are now `#[cfg(debug_assertions)]`-gated, so they exist in `tauri dev` builds only; a release build has no devtools capability and no menu entry for it at all. Verified clean under both `cargo check` and `cargo check --release`.
+
+### Removed
+- **Dead weight from the shared codebase lineage**, none of it reachable in this build:
+  - `MobileMindMapEditor.tsx` (857 lines) — a standalone mobile editor superseded by the `isMobile`-conditional rendering already inside `MindMapEditor.tsx`, never imported.
+  - `ShortcutsPanel.tsx` and `NodeContextMenu.tsx` — standalone components duplicating logic that lives inline in `MindMapEditor.tsx`; never imported.
+  - `MindMapNode.tsx` — an old `@xyflow/react`-based node prototype from before the current hand-rolled SVG canvas. It was the only consumer of `@xyflow/react`, so the dependency is gone too.
+  - `EncryptedVaultDialog.tsx` (529 lines) — a cloud attachments/shares modal whose trigger started with `if (isLocalMode) return`, so it could never open in this build.
+  - The dead wiring that fed it in `EditorPage.tsx` (333 lines net removed): the version-history restore path (`loadVersion`, `handleDeleteVersion` — `onShowHistory` had no button anywhere to trigger it) and the share/upload handlers (`handleUploadFiles`, `handleDownloadAttachment`, `handleDeleteAttachment`, `handleAssignAttachmentNode`, `handleCopyShareUrl`, `handleRevokeShare`, `handleCreateShare`) that existed only to feed the removed dialog. The shared, genuinely dual-mode functions (`refreshSecureData`, `uploadEncryptedNodeFiles`, the node-attachment handlers, `load()`, `handleSave()`) were left untouched — they carry real local logic alongside the unreachable cloud branches, and keeping that structure is what makes future ports from the server/SaaS builds a diff instead of a rewrite.
+
+### Validation
+- `tsc --noEmit`, `vite build`, `vitest run` (38/38) — clean throughout.
+- `cargo check` and `cargo check --release` in `desktop/src-tauri` — clean, no warnings.
+- Verified live in `tauri dev` on macOS.
+
 ## [0.3.33] - 2026-08-08
 
 Release-tooling fix. No application code changed — the desktop binaries built

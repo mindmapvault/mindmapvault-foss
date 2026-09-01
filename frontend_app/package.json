@@ -1,6 +1,6 @@
 {
   "name": "mindmapvault-desktop-app",
-  "version": "0.3.33",
+  "version": "0.3.34",
   "private": true,
   "type": "module",
   "scripts": {
@@ -24,7 +24,6 @@
     "@tauri-apps/plugin-dialog": "^2.7.2",
     "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-shell": "^2.3.5",
-    "@xyflow/react": "^12.11.2",
     "dompurify": "^3.4.13",
     "fflate": "^0.8.3",
     "hash-wasm": "^4.12.0",

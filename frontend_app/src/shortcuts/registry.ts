@@ -63,6 +63,8 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: 'view.focusMode', label: 'Focus mode', group: 'View', freemind: ['F5', 'F'], mac: ['Mod+Shift+F'] },
   { id: 'view.zoomIn', label: 'Zoom in', group: 'View', freemind: ['+'], mac: ['+'] },
   { id: 'view.zoomOut', label: 'Zoom out', group: 'View', freemind: ['-'], mac: ['-'] },
+  { id: 'view.colourTray', label: 'Toggle colour tray', group: 'View', freemind: ['Mod+Shift+1'], mac: ['Mod+Shift+1'] },
+  { id: 'view.iconTray', label: 'Toggle icon tray', group: 'View', freemind: ['Mod+Shift+2'], mac: ['Mod+Shift+2'] },
 
   // ── Edit ───────────────────────────────────────────────────────────────
   { id: 'edit.undo', label: 'Undo', group: 'Edit', freemind: ['F9', 'Mod+Z'], mac: ['Mod+Z'] },

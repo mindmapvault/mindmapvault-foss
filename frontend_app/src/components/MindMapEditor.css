@@ -904,6 +904,93 @@
 }
 
 /* ── Canvas ──────────────────────────────────────────────────────────────── */
+/* ── Canvas area + docked trays (see docs/UI_REWORK_PLAN.md §2.2) ─────────── */
+.mm-canvas-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.mm-canvas-middle {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+.mm-tray-row {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  border-top: 1px solid var(--mm-toolbar-border);
+  background: var(--mm-toolbar-bg);
+}
+.mm-tray-col {
+  display: flex;
+  flex-direction: row;
+  flex-shrink: 0;
+  border-left: 1px solid var(--mm-toolbar-border);
+  background: var(--mm-toolbar-bg);
+}
+.mm-tray {
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.mm-tray--horizontal {
+  flex-direction: row;
+  align-items: center;
+  max-height: 96px;
+  flex-wrap: wrap;
+}
+.mm-tray--vertical {
+  flex-direction: column;
+  align-items: center;
+  max-width: 52px;
+}
+.mm-tray-sep {
+  flex-shrink: 0;
+}
+.mm-tray--horizontal .mm-tray-sep { width: 1px; align-self: stretch; background: var(--mm-toolbar-border); margin: 0 2px; }
+.mm-tray--vertical .mm-tray-sep { height: 1px; align-self: stretch; background: var(--mm-toolbar-border); margin: 2px 0; }
+
+.mm-tray-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 1px solid var(--mm-btn-border);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+}
+.mm-tray-swatch--clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mm-btn-bg);
+  color: var(--mm-btn-text);
+}
+.mm-tray-swatch--clear svg { width: 12px; height: 12px; }
+
+.mm-tray-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--mm-btn-text);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+}
+.mm-tray-icon:hover { background: var(--mm-btn-hover); }
+.mm-tray-icon.active { background: var(--accent); color: #fff; }
+.mm-tray-icon--clear svg { width: 12px; height: 12px; }
+
 .mm-canvas-wrap {
   flex: 1;
   position: relative;

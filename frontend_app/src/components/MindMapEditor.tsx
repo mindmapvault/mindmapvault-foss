@@ -68,7 +68,9 @@ import { exportSvgAsPdf, renderSvgToCanvas } from '../utils/pdfExport';
 import { downloadBlob, downloadDataUrl } from '../utils/download';
 import { handleDelegatedLinkClick, openExternalUrl } from '../utils/openExternal';
 import { createNodeImageGlyph, type NodeImageGlyph } from '../utils/filePreview';
-import { useEffectiveKeyboardLayout, useUiStore, useResolvedDensity } from '../store/ui';
+import { useEffectiveKeyboardLayout, useUiStore, useResolvedDensity, type TrayPosition } from '../store/ui';
+import { ColorTray } from './ColorTray';
+import { IconTray } from './IconTray';
 import { matchShortcut, formatShortcut, SHORTCUTS } from '../shortcuts/registry';
 import { isMac } from '../platform/isMac';
 import './MindMapEditor.css';
@@ -102,6 +104,12 @@ export function DesktopMindMapEditor({
   const densityPreset = useUiStore((s) => s.densityPreset);
   const { statusBarVisible, toolbarLabels, toolbarMode } = useResolvedDensity();
   const [showToolbarOverflow, setShowToolbarOverflow] = useState(false);
+  const colourTrayEnabled = useUiStore((s) => s.colourTrayEnabled);
+  const colourTrayPosition = useUiStore((s) => s.colourTrayPosition);
+  const setColourTray = useUiStore((s) => s.setColourTray);
+  const iconTrayEnabled = useUiStore((s) => s.iconTrayEnabled);
+  const iconTrayPosition = useUiStore((s) => s.iconTrayPosition);
+  const setIconTray = useUiStore((s) => s.setIconTray);
 
   // ── Mobile detection ───────────────────────────────────────────────────────
   const [isMobile, setIsMobile] = useState(() =>
@@ -1417,6 +1425,14 @@ export function DesktopMindMapEditor({
       'find.search': () => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 50); },
       'view.zoomIn': () => { setZoom((z) => Math.min(3, z + 0.15)); },
       'view.zoomOut': () => { setZoom((z) => Math.max(0.3, z - 0.15)); },
+      'view.colourTray': () => {
+        setColourTray(!colourTrayEnabled);
+        toast('view.colourTray', colourTrayEnabled ? 'Colour tray off' : 'Colour tray on');
+      },
+      'view.iconTray': () => {
+        setIconTray(!iconTrayEnabled);
+        toast('view.iconTray', iconTrayEnabled ? 'Icon tray off' : 'Icon tray on');
+      },
     };
 
     const actionId = matchShortcut(e, keyboardLayout);
@@ -1427,7 +1443,8 @@ export function DesktopMindMapEditor({
     handler();
   }, [editingId, notesOpen, openNotes, saveNotes, selectedId, root, layout, addChild, addSibling, deleteNode, cancelEdit, cycleProgress,
     toggleCheckbox, undo, redo, toggleCollapse, showToast, resetNodePosition, resetAllPositions, autoAlignSubtree, showIconPicker, showColorPicker, focusMode, focusedIds,
-    hasBulk, bulkDelete, bulkToggleCheckbox, bulkCycleProgress, bulkToggleCollapse, bulkResetPosition, keyboardLayout]);
+    hasBulk, bulkDelete, bulkToggleCheckbox, bulkCycleProgress, bulkToggleCollapse, bulkResetPosition, keyboardLayout,
+    colourTrayEnabled, setColourTray, iconTrayEnabled, setIconTray]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -2361,6 +2378,15 @@ export function DesktopMindMapEditor({
       focusMode, focusedIds, rootLeftCollapsed, rootRightCollapsed]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const selNode = findNode(root, selectedId)?.node;
+
+  const traysByPosition = useMemo(() => {
+    const result: Record<TrayPosition, Array<'colour' | 'icon'>> = { top: [], bottom: [], left: [], right: [] };
+    if (colourTrayEnabled) result[colourTrayPosition].push('colour');
+    if (iconTrayEnabled) result[iconTrayPosition].push('icon');
+    return result;
+  }, [colourTrayEnabled, colourTrayPosition, iconTrayEnabled, iconTrayPosition]);
+  const hasAnyTray = colourTrayEnabled || iconTrayEnabled;
+
   const selectedNodeAttachments = selNode ? getNodeAttachments(selNode.id, selNode.attachments) : [];
   const notesReferencedAttachments = useMemo(() => {
     const ids = Array.from((notesText || '').matchAll(/attachment:\/\/([0-9a-fA-F-]{12,})/g)).map((match) => match[1]);
@@ -2646,7 +2672,29 @@ export function DesktopMindMapEditor({
         </div>
       )}
 
-      {/* ── Canvas ──────────────────────────────────────────────────── */}
+      {/* ── Canvas + trays (docked per Settings -> Interface) ──────────── */}
+      <div className={`mm-canvas-area${hasAnyTray ? ' mm-canvas-area--trays' : ''}`}>
+        {traysByPosition.top.length > 0 && (
+          <div className="mm-tray-row">
+            {traysByPosition.top.includes('colour') && (
+              <ColorTray orientation="horizontal" currentColor={selNode?.color ?? null} onSelect={(c) => { hasBulk ? bulkSetColor(c) : setNodeColor(selectedId, c); }} />
+            )}
+            {traysByPosition.top.includes('icon') && (
+              <IconTray orientation="horizontal" currentIcons={selNode?.icons ?? []} onSelect={(n) => { hasBulk ? bulkSetIcon(n) : setNodeIcon(selectedId, n); }} onOpenPicker={() => setShowIconPicker(true)} />
+            )}
+          </div>
+        )}
+        <div className="mm-canvas-middle">
+          {traysByPosition.left.length > 0 && (
+            <div className="mm-tray-col">
+              {traysByPosition.left.includes('colour') && (
+                <ColorTray orientation="vertical" currentColor={selNode?.color ?? null} onSelect={(c) => { hasBulk ? bulkSetColor(c) : setNodeColor(selectedId, c); }} />
+              )}
+              {traysByPosition.left.includes('icon') && (
+                <IconTray orientation="vertical" currentIcons={selNode?.icons ?? []} onSelect={(n) => { hasBulk ? bulkSetIcon(n) : setNodeIcon(selectedId, n); }} onOpenPicker={() => setShowIconPicker(true)} />
+              )}
+            </div>
+          )}
       <div className="mm-canvas-wrap">
         <svg ref={svgRef} className="mm-canvas" onMouseDown={onMouseDownSvg} onMouseMove={onMouseMoveSvg} onMouseUp={onMouseUpSvg} onMouseLeave={onMouseUpSvg}
           onTouchStart={onTouchStartSvg} onTouchMove={onTouchMoveSvg} onTouchEnd={onTouchEndSvg} onTouchCancel={onTouchEndSvg}
@@ -2699,6 +2747,28 @@ export function DesktopMindMapEditor({
           </div>
         )}
         {shortcutToast && (<div className="mm-shortcut-toast"><span className="mm-shortcut-toast-key">{shortcutToast.split('—')[0].trim()}</span>{shortcutToast.includes('—') && <span className="mm-shortcut-toast-desc">{shortcutToast.split('—')[1]?.trim()}</span>}</div>)}
+      </div>
+          {traysByPosition.right.length > 0 && (
+            <div className="mm-tray-col">
+              {traysByPosition.right.includes('colour') && (
+                <ColorTray orientation="vertical" currentColor={selNode?.color ?? null} onSelect={(c) => { hasBulk ? bulkSetColor(c) : setNodeColor(selectedId, c); }} />
+              )}
+              {traysByPosition.right.includes('icon') && (
+                <IconTray orientation="vertical" currentIcons={selNode?.icons ?? []} onSelect={(n) => { hasBulk ? bulkSetIcon(n) : setNodeIcon(selectedId, n); }} onOpenPicker={() => setShowIconPicker(true)} />
+              )}
+            </div>
+          )}
+        </div>
+        {traysByPosition.bottom.length > 0 && (
+          <div className="mm-tray-row">
+            {traysByPosition.bottom.includes('colour') && (
+              <ColorTray orientation="horizontal" currentColor={selNode?.color ?? null} onSelect={(c) => { hasBulk ? bulkSetColor(c) : setNodeColor(selectedId, c); }} />
+            )}
+            {traysByPosition.bottom.includes('icon') && (
+              <IconTray orientation="horizontal" currentIcons={selNode?.icons ?? []} onSelect={(n) => { hasBulk ? bulkSetIcon(n) : setNodeIcon(selectedId, n); }} onOpenPicker={() => setShowIconPicker(true)} />
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Status bar ──────────────────────────────────────────────── */}

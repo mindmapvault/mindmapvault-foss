@@ -37,6 +37,12 @@ interface UiState {
   iconTrayEnabled: boolean;
   iconTrayPosition: TrayPosition;
   setIconTray: (enabled: boolean, position?: TrayPosition) => void;
+
+  /** Pinned via right-click on a tray swatch/icon; shown ahead of the curated set. */
+  colourFavourites: string[];
+  toggleColourFavourite: (color: string) => void;
+  iconFavourites: string[];
+  toggleIconFavourite: (name: string) => void;
 }
 
 export const useUiStore = create<UiState>()(
@@ -76,6 +82,20 @@ export const useUiStore = create<UiState>()(
       setIconTray: (iconTrayEnabled, iconTrayPosition) => set((state) => ({
         iconTrayEnabled,
         iconTrayPosition: iconTrayPosition ?? state.iconTrayPosition,
+      })),
+
+      colourFavourites: [],
+      toggleColourFavourite: (color) => set((state) => ({
+        colourFavourites: state.colourFavourites.includes(color)
+          ? state.colourFavourites.filter((c) => c !== color)
+          : [...state.colourFavourites, color],
+      })),
+
+      iconFavourites: [],
+      toggleIconFavourite: (name) => set((state) => ({
+        iconFavourites: state.iconFavourites.includes(name)
+          ? state.iconFavourites.filter((n) => n !== name)
+          : [...state.iconFavourites, name],
       })),
     }),
     { name: 'mindmapvault-ui' },

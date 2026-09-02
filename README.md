@@ -1,6 +1,6 @@
 # MindMapVault FOSS
 
-> **Quick download:** Prebuilt Windows and Linux desktop artifacts are published in the repository Releases section.
+> **Quick download:** Prebuilt macOS, Windows and Linux desktop artifacts are published in the repository Releases section.
 
 MindMapVault FOSS is a local-first, privacy-focused desktop mind-mapping application.
 
@@ -298,10 +298,13 @@ Workflow-style checks on Linux/WSL/macOS:
 
 ## Release Outputs
 
-Typical outputs include:
+Each release carries three installers, plus a `.sha256` checksum for each:
 
-- Windows executable/installer bundles
-- Linux AppImage artifacts (when host packaging dependencies are available)
+- macOS universal DMG — one file for both Apple Silicon and Intel (see the
+  macOS notes above: the DMG is unsigned, so first launch needs a right-click →
+  Open or the `xattr` command)
+- Windows `.exe` installer
+- Linux AppImage
 
 Build workflow configuration lives in .github/workflows/desktop-build.yml.
 

@@ -12,7 +12,7 @@
  * equal `CHANGELOG[0].version`.
  */
 
-export const APP_VERSION = '0.3.33';
+export const APP_VERSION = '0.3.34';
 
 /**
  * localStorage key recording the last version whose "What's New" the user saw.
@@ -36,6 +36,47 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.3.34',
+    date: '2026-09-01',
+    highlights: 'Pictures on nodes, voice notes, and a working password change.',
+    items: [
+      {
+        kind: 'feature',
+        title: 'Pictures on nodes',
+        desc: 'Drop an image onto a node, paste one from the clipboard, or press Alt+K. Shows directly on the node and survives PDF/PNG export.',
+      },
+      {
+        kind: 'feature',
+        title: 'Voice notes',
+        desc: 'Record a voice memo straight into a node from the mobile-width layout.',
+      },
+      {
+        kind: 'fix',
+        title: 'Change password is back',
+        desc: 'It was disabled by a safety flag that never applied to this local-only build.',
+      },
+      {
+        kind: 'improvement',
+        title: 'Rebuilt icon picker',
+        desc: 'Search now covers every curated icon instead of a truncated subset, and loads far less code.',
+      },
+      {
+        kind: 'improvement',
+        title: 'Settings reorganised',
+        desc: 'Local storage folder moved into Settings, storage stats moved next to the vault list, and a new Help tab links to support.',
+      },
+      {
+        kind: 'improvement',
+        title: 'Password fields have a show/hide toggle',
+      },
+      {
+        kind: 'fix',
+        title: 'DevTools access closed in built apps',
+        desc: 'It exposed decrypted vault data in the console. Still available in development builds.',
+      },
+    ],
+  },
   {
     version: '0.3.33',
     date: '2026-08-08',

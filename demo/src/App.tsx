@@ -4,10 +4,19 @@ import { encryptTree } from '../../frontend_app/src/crypto/vault';
 import { randomBytes, toBase64 } from '../../frontend_app/src/crypto/utils';
 import { treeToMarkdown } from '../../frontend_app/src/utils/markdownExport';
 import { useThemeStore } from '../../frontend_app/src/store/theme';
+import { useUiStore, type DensityPreset } from '../../frontend_app/src/store/ui';
 import type { MindMapTree } from '../../frontend_app/src/types';
+import { DEMO_NODE_IMAGE } from './demoNodeImage';
 
 const DEMO_STORAGE_KEY = 'mindmapvault:foss:canvas-demo:v1';
 const USER_LABELS_STORAGE_KEY = 'user-labels';
+const TRAY_SEEDED_KEY = 'mindmapvault:foss:canvas-demo:tray-seeded';
+
+const DENSITY_OPTIONS: Array<{ value: DensityPreset; label: string }> = [
+  { value: 'lean', label: 'Lean' },
+  { value: 'standard', label: 'Standard' },
+  { value: 'large', label: 'Large' },
+];
 
 const DEMO_LABEL_LIBRARY: Array<{ name: string; color: string }> = [
   { name: 'demo', color: '#7c3aed' },
@@ -161,6 +170,15 @@ function createStarterTree(): MindMapTree {
               notes: 'Visual QA node: icons, progress pie, tags, and date badges.',
               children: [],
             },
+            {
+              id: 'demo-1-4',
+              text: 'Pictures on nodes',
+              collapsed: false,
+              icons: ['Image'],
+              image: { thumb: DEMO_NODE_IMAGE, w: 64, h: 64, name: 'mindmapvault.webp' },
+              notes: 'Drop an image onto a node, paste one from the clipboard, or press Alt+K. The picture is drawn on the node itself and survives PNG and PDF export.',
+              children: [],
+            },
           ],
         },
         {
@@ -288,11 +306,29 @@ export default function App() {
   const mode = useThemeStore((state) => state.mode);
   const primaryColor = useThemeStore((state) => state.primaryColor);
   const setMode = useThemeStore((state) => state.setMode);
+  const densityPreset = useUiStore((state) => state.densityPreset);
+  const setDensityPreset = useUiStore((state) => state.setDensityPreset);
+  const setColourTray = useUiStore((state) => state.setColourTray);
+  const setIconTray = useUiStore((state) => state.setIconTray);
   const brandLogoSrc = `${import.meta.env.BASE_URL}favicon.svg`;
   const [isMobileView, setIsMobileView] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia('(max-width: 900px), (pointer: coarse)').matches;
   });
+
+  // Show both trays on a first visit so the feature is discoverable, in the
+  // app's own Large-density arrangement (colour right, icons left). Runs once
+  // — after that the store's persisted value wins, so closing a tray sticks.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(TRAY_SEEDED_KEY)) return;
+      localStorage.setItem(TRAY_SEEDED_KEY, '1');
+      setColourTray(true, 'right');
+      setIconTray(true, 'left');
+    } catch {
+      // Private mode with storage blocked — the trays just stay off.
+    }
+  }, [setColourTray, setIconTray]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -306,7 +342,9 @@ export default function App() {
   const initialSnapshot = useMemo(() => {
     seedDemoLabelLibrary();
     const parsed = parseSnapshot(localStorage.getItem(DEMO_STORAGE_KEY));
-    if (parsed && hasNode(parsed.tree, 'demo-crypto')) {
+    // `demo-1-4` is the newest seeded node — a draft saved before it existed
+    // is treated as stale and replaced, the same way `demo-crypto` works.
+    if (parsed && hasNode(parsed.tree, 'demo-crypto') && hasNode(parsed.tree, 'demo-1-4')) {
       return {
         title: parsed.title,
         tree: normalizeDemoLayout(parsed.tree, isMobileView),
@@ -420,6 +458,20 @@ export default function App() {
           <p>Interactive canvas only. No account, no backend, all draft state in this browser.</p>
         </div>
         <div className="demo-actions">
+          <div className="demo-density" role="group" aria-label="Toolbar density">
+            <span className="demo-density-label">Toolbar</span>
+            {DENSITY_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setDensityPreset(option.value)}
+                className={`demo-density-btn${densityPreset === option.value ? ' is-active' : ''}`}
+                aria-pressed={densityPreset === option.value}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           <a
             className="demo-reset demo-github-link"
             href="https://github.com/mindmapvault/mindmapvault-foss"

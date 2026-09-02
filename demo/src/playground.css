@@ -78,6 +78,47 @@
   border-color: var(--accent);
 }
 
+/* Segmented control for the three toolbar densities — one bordered pill
+   holding the label and the three options, so it reads as a single control
+   next to the plain action buttons rather than three more of them. */
+.demo-density {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  padding: 3px 4px 3px 8px;
+}
+
+.demo-density-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, var(--text-primary));
+  opacity: 0.7;
+  margin-right: 4px;
+}
+
+.demo-density-btn {
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.demo-density-btn:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.demo-density-btn.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
 .demo-github-link {
   text-decoration: none;
   background: color-mix(in srgb, var(--accent) 14%, transparent);

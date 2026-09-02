@@ -29,6 +29,10 @@ interface UiState {
   toolbarLabelsOverride: boolean | null;
   setToolbarLabelsOverride: (value: boolean | null) => void;
 
+  /** `null` = follow the preset's default (on at `large`, off otherwise). */
+  buttonShortcutsOverride: boolean | null;
+  setButtonShortcutsOverride: (value: boolean | null) => void;
+
   /** Not derived from density — an explicit toggle, seeded by the preset only when the preset itself changes. */
   colourTrayEnabled: boolean;
   colourTrayPosition: TrayPosition;
@@ -54,11 +58,11 @@ export const useUiStore = create<UiState>()(
       densityPreset: 'standard',
       setDensityPreset: (densityPreset) => set((state) => {
         // Switching preset re-seeds the tray defaults (large -> both on,
-        // bottom) unless the user has never touched them from the initial
-        // off state — a deliberate choice to turn a tray on stays even if
-        // the preset changes again later.
+        // colour right / icons left) unless the user has never touched
+        // them from the initial off state — a deliberate choice to turn a
+        // tray on stays even if the preset changes again later.
         const trayDefaults = densityPreset === 'large'
-          ? { colourTrayEnabled: true, colourTrayPosition: 'bottom' as TrayPosition, iconTrayEnabled: true, iconTrayPosition: 'bottom' as TrayPosition }
+          ? { colourTrayEnabled: true, colourTrayPosition: 'right' as TrayPosition, iconTrayEnabled: true, iconTrayPosition: 'left' as TrayPosition }
           : { colourTrayEnabled: false, iconTrayEnabled: false };
         const userHasCustomizedTrays = state.colourTrayEnabled || state.iconTrayEnabled;
         return { densityPreset, ...(userHasCustomizedTrays ? {} : trayDefaults) };
@@ -70,15 +74,18 @@ export const useUiStore = create<UiState>()(
       toolbarLabelsOverride: null,
       setToolbarLabelsOverride: (toolbarLabelsOverride) => set({ toolbarLabelsOverride }),
 
+      buttonShortcutsOverride: null,
+      setButtonShortcutsOverride: (buttonShortcutsOverride) => set({ buttonShortcutsOverride }),
+
       colourTrayEnabled: false,
-      colourTrayPosition: 'bottom',
+      colourTrayPosition: 'right',
       setColourTray: (colourTrayEnabled, colourTrayPosition) => set((state) => ({
         colourTrayEnabled,
         colourTrayPosition: colourTrayPosition ?? state.colourTrayPosition,
       })),
 
       iconTrayEnabled: false,
-      iconTrayPosition: 'bottom',
+      iconTrayPosition: 'left',
       setIconTray: (iconTrayEnabled, iconTrayPosition) => set((state) => ({
         iconTrayEnabled,
         iconTrayPosition: iconTrayPosition ?? state.iconTrayPosition,
@@ -111,6 +118,7 @@ export function useEffectiveKeyboardLayout(): KeyboardLayoutName {
 export interface ResolvedDensity {
   statusBarVisible: boolean;
   toolbarLabels: boolean;
+  buttonShortcuts: boolean;
   toolbarMode: 'essentials' | 'full';
 }
 
@@ -119,10 +127,12 @@ export function resolveDensity(
   densityPreset: DensityPreset,
   statusBarOverride: boolean | null,
   toolbarLabelsOverride: boolean | null,
+  buttonShortcutsOverride: boolean | null,
 ): ResolvedDensity {
   return {
     statusBarVisible: statusBarOverride ?? densityPreset !== 'lean',
     toolbarLabels: toolbarLabelsOverride ?? densityPreset === 'large',
+    buttonShortcuts: buttonShortcutsOverride ?? densityPreset === 'large',
     toolbarMode: densityPreset === 'lean' ? 'essentials' : 'full',
   };
 }
@@ -131,5 +141,6 @@ export function useResolvedDensity(): ResolvedDensity {
   const densityPreset = useUiStore((s) => s.densityPreset);
   const statusBarOverride = useUiStore((s) => s.statusBarOverride);
   const toolbarLabelsOverride = useUiStore((s) => s.toolbarLabelsOverride);
-  return resolveDensity(densityPreset, statusBarOverride, toolbarLabelsOverride);
+  const buttonShortcutsOverride = useUiStore((s) => s.buttonShortcutsOverride);
+  return resolveDensity(densityPreset, statusBarOverride, toolbarLabelsOverride, buttonShortcutsOverride);
 }

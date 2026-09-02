@@ -92,6 +92,37 @@ function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * On/off switch for the settings rows. It stays a real checkbox under the
+ * paint — `appearance-none` turns the input itself into the track — so the
+ * wrapping `<label>`, keyboard operation and focus handling all keep working.
+ */
+function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (value: boolean) => void }) {
+  return (
+    <span className="relative inline-flex shrink-0">
+      <input
+        type="checkbox"
+        role="switch"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-6 w-11 cursor-pointer appearance-none rounded-full transition-colors"
+        style={{
+          background: checked ? 'var(--accent)' : 'var(--surface-2)',
+          border: `1px solid ${checked ? 'var(--accent)' : 'var(--border-light)'}`,
+        }}
+      />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-[3px] top-1/2 h-[18px] w-[18px] rounded-full transition-transform"
+        style={{
+          transform: `translateY(-50%) translateX(${checked ? '20px' : '0'})`,
+          background: checked ? '#fff' : 'var(--text-muted)',
+        }}
+      />
+    </span>
+  );
+}
+
 // ─── Local storage folder ────────────────────────────────────────────────────
 
 function LocalStorageFolderSection({ onFolderChanged }: { onFolderChanged?: () => void }) {
@@ -564,6 +595,8 @@ function InterfaceTab() {
   const setStatusBarOverride = useUiStore((s) => s.setStatusBarOverride);
   const toolbarLabelsOverride = useUiStore((s) => s.toolbarLabelsOverride);
   const setToolbarLabelsOverride = useUiStore((s) => s.setToolbarLabelsOverride);
+  const buttonShortcutsOverride = useUiStore((s) => s.buttonShortcutsOverride);
+  const setButtonShortcutsOverride = useUiStore((s) => s.setButtonShortcutsOverride);
   const colourTrayEnabled = useUiStore((s) => s.colourTrayEnabled);
   const colourTrayPosition = useUiStore((s) => s.colourTrayPosition);
   const setColourTray = useUiStore((s) => s.setColourTray);
@@ -571,7 +604,7 @@ function InterfaceTab() {
   const iconTrayPosition = useUiStore((s) => s.iconTrayPosition);
   const setIconTray = useUiStore((s) => s.setIconTray);
 
-  const resolved = resolveDensity(densityPreset, statusBarOverride, toolbarLabelsOverride);
+  const resolved = resolveDensity(densityPreset, statusBarOverride, toolbarLabelsOverride, buttonShortcutsOverride);
 
   return (
     <div className="space-y-6">
@@ -612,11 +645,7 @@ function InterfaceTab() {
               {statusBarOverride == null ? `(following ${densityPreset} default: ${resolved.statusBarVisible ? 'on' : 'off'})` : '(set explicitly)'}
             </span>
           </span>
-          <input
-            type="checkbox"
-            checked={resolved.statusBarVisible}
-            onChange={(e) => setStatusBarOverride(e.target.checked)}
-          />
+          <ToggleSwitch checked={resolved.statusBarVisible} onChange={setStatusBarOverride} />
         </label>
         {statusBarOverride != null && (
           <button type="button" onClick={() => setStatusBarOverride(null)} className="text-xs underline decoration-dotted underline-offset-2" style={{ color: 'var(--accent)' }}>
@@ -631,14 +660,25 @@ function InterfaceTab() {
               {toolbarLabelsOverride == null ? `(following ${densityPreset} default: ${resolved.toolbarLabels ? 'on' : 'off'})` : '(set explicitly)'}
             </span>
           </span>
-          <input
-            type="checkbox"
-            checked={resolved.toolbarLabels}
-            onChange={(e) => setToolbarLabelsOverride(e.target.checked)}
-          />
+          <ToggleSwitch checked={resolved.toolbarLabels} onChange={setToolbarLabelsOverride} />
         </label>
         {toolbarLabelsOverride != null && (
           <button type="button" onClick={() => setToolbarLabelsOverride(null)} className="text-xs underline decoration-dotted underline-offset-2" style={{ color: 'var(--accent)' }}>
+            Reset to density default
+          </button>
+        )}
+
+        <label className="mt-2 flex items-center justify-between gap-3 py-1.5 text-sm" style={{ color: 'var(--text-primary)' }}>
+          <span>
+            Keyboard shortcuts on buttons
+            <span className="ml-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+              {buttonShortcutsOverride == null ? `(following ${densityPreset} default: ${resolved.buttonShortcuts ? 'on' : 'off'})` : '(set explicitly)'}
+            </span>
+          </span>
+          <ToggleSwitch checked={resolved.buttonShortcuts} onChange={setButtonShortcutsOverride} />
+        </label>
+        {buttonShortcutsOverride != null && (
+          <button type="button" onClick={() => setButtonShortcutsOverride(null)} className="text-xs underline decoration-dotted underline-offset-2" style={{ color: 'var(--accent)' }}>
             Reset to density default
           </button>
         )}
@@ -648,7 +688,7 @@ function InterfaceTab() {
         <SectionLabel>Colour tray</SectionLabel>
         <label className="flex items-center justify-between gap-3 py-1.5 text-sm" style={{ color: 'var(--text-primary)' }}>
           <span>Show the colour swatch strip on the canvas</span>
-          <input type="checkbox" checked={colourTrayEnabled} onChange={(e) => setColourTray(e.target.checked)} />
+          <ToggleSwitch checked={colourTrayEnabled} onChange={(v) => setColourTray(v)} />
         </label>
         {colourTrayEnabled && (
           <div className="mt-1 flex gap-1.5">
@@ -675,7 +715,7 @@ function InterfaceTab() {
         <SectionLabel>Icon tray</SectionLabel>
         <label className="flex items-center justify-between gap-3 py-1.5 text-sm" style={{ color: 'var(--text-primary)' }}>
           <span>Show the icon strip on the canvas</span>
-          <input type="checkbox" checked={iconTrayEnabled} onChange={(e) => setIconTray(e.target.checked)} />
+          <ToggleSwitch checked={iconTrayEnabled} onChange={(v) => setIconTray(v)} />
         </label>
         {iconTrayEnabled && (
           <div className="mt-1 flex gap-1.5">
@@ -732,7 +772,7 @@ export function SettingsModal({ open, onClose, initialTab = 'account', onStorage
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [legalDocument, setLegalDocument] = useState<LegalDocument | null>(null);
 
-  const order: SettingsTab[] = ['account', 'changelog', 'appearance', 'interface', 'help'];
+  const order: SettingsTab[] = ['account', 'appearance', 'interface', 'changelog', 'help'];
 
   useEffect(() => {
     if (open) setTab(initialTab);

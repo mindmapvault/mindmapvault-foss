@@ -7,10 +7,17 @@ import { LegalDocumentDialog, type LegalDocument } from './LegalDocumentDialog';
 import { APP_VERSION, CHANGELOG, type ChangeKind } from '../changelog';
 import { useAuthStore } from '../store/auth';
 import { AutosaveMode, useThemeStore } from '../store/theme';
-import { useUiStore, useEffectiveKeyboardLayout, type KeyboardLayoutName } from '../store/ui';
+import {
+  useUiStore,
+  useEffectiveKeyboardLayout,
+  resolveDensity,
+  type KeyboardLayoutName,
+  type DensityPreset,
+  type TrayPosition,
+} from '../store/ui';
 import { isMac } from '../platform/isMac';
 
-export type SettingsTab = 'account' | 'changelog' | 'appearance' | 'help';
+export type SettingsTab = 'account' | 'changelog' | 'appearance' | 'interface' | 'help';
 
 interface LocalStorageDirInfo {
   path: string;
@@ -54,6 +61,12 @@ const icons: Record<SettingsTab, ReactNode> = {
       <path strokeLinecap="round" d="M12 3a9 9 0 0 0 0 18" fill="currentColor" stroke="none" opacity="0.35" />
     </svg>
   ),
+  interface: (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path strokeLinecap="round" d="M3 9h18M8 9v11" />
+    </svg>
+  ),
   help: (
     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
       <circle cx="12" cy="12" r="9" />
@@ -67,6 +80,7 @@ const tabTitles: Record<SettingsTab, string> = {
   account: 'Account',
   changelog: "What's New",
   appearance: 'Appearance',
+  interface: 'Interface',
   help: 'Help',
 };
 
@@ -504,11 +518,6 @@ function AppearanceTab({
       </section>
 
       <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
-        <SectionLabel>Keyboard layout</SectionLabel>
-        <KeyboardLayoutPicker />
-      </section>
-
-      <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
         <SectionLabel>About</SectionLabel>
         <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Version {APP_VERSION}</p>
         <div className="mt-2 flex flex-wrap items-center gap-4">
@@ -533,6 +542,165 @@ function AppearanceTab({
             GitHub
           </a>
         </div>
+      </section>
+    </div>
+  );
+}
+
+// ─── Interface ────────────────────────────────────────────────────────────────
+
+const DENSITY_OPTIONS: { value: DensityPreset; title: string; blurb: string }[] = [
+  { value: 'lean', title: 'Lean', blurb: 'Smaller buttons. Only the essentials stay on the toolbar; the rest live in a "More actions" menu. Status bar hidden by default.' },
+  { value: 'standard', title: 'Standard', blurb: 'Today\'s toolbar — every action visible, default sizing.' },
+  { value: 'large', title: 'Large', blurb: 'Bigger buttons with labels under the essentials. Colour and icon trays turn on by default.' },
+];
+
+const TRAY_POSITIONS: TrayPosition[] = ['top', 'bottom', 'left', 'right'];
+
+function InterfaceTab() {
+  const densityPreset = useUiStore((s) => s.densityPreset);
+  const setDensityPreset = useUiStore((s) => s.setDensityPreset);
+  const statusBarOverride = useUiStore((s) => s.statusBarOverride);
+  const setStatusBarOverride = useUiStore((s) => s.setStatusBarOverride);
+  const toolbarLabelsOverride = useUiStore((s) => s.toolbarLabelsOverride);
+  const setToolbarLabelsOverride = useUiStore((s) => s.setToolbarLabelsOverride);
+  const colourTrayEnabled = useUiStore((s) => s.colourTrayEnabled);
+  const colourTrayPosition = useUiStore((s) => s.colourTrayPosition);
+  const setColourTray = useUiStore((s) => s.setColourTray);
+  const iconTrayEnabled = useUiStore((s) => s.iconTrayEnabled);
+  const iconTrayPosition = useUiStore((s) => s.iconTrayPosition);
+  const setIconTray = useUiStore((s) => s.setIconTray);
+
+  const resolved = resolveDensity(densityPreset, statusBarOverride, toolbarLabelsOverride);
+
+  return (
+    <div className="space-y-6">
+      <section>
+        <SectionLabel>Density</SectionLabel>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {DENSITY_OPTIONS.map((opt) => {
+            const active = densityPreset === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setDensityPreset(opt.value)}
+                className="rounded-lg p-3 text-left text-sm transition"
+                style={{
+                  background: 'var(--surface-2)',
+                  border: `1px solid ${active ? 'var(--accent)' : 'var(--border-light)'}`,
+                  color: 'var(--text-primary)',
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{opt.title}</span>
+                  {active && <span className="text-xs" style={{ color: 'var(--accent)' }}>Active</span>}
+                </div>
+                <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>{opt.blurb}</p>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
+        <SectionLabel>Overrides</SectionLabel>
+        <label className="flex items-center justify-between gap-3 py-1.5 text-sm" style={{ color: 'var(--text-primary)' }}>
+          <span>
+            Status bar
+            <span className="ml-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+              {statusBarOverride == null ? `(following ${densityPreset} default: ${resolved.statusBarVisible ? 'on' : 'off'})` : '(set explicitly)'}
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={resolved.statusBarVisible}
+            onChange={(e) => setStatusBarOverride(e.target.checked)}
+          />
+        </label>
+        {statusBarOverride != null && (
+          <button type="button" onClick={() => setStatusBarOverride(null)} className="text-xs underline decoration-dotted underline-offset-2" style={{ color: 'var(--accent)' }}>
+            Reset to density default
+          </button>
+        )}
+
+        <label className="mt-2 flex items-center justify-between gap-3 py-1.5 text-sm" style={{ color: 'var(--text-primary)' }}>
+          <span>
+            Toolbar labels
+            <span className="ml-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+              {toolbarLabelsOverride == null ? `(following ${densityPreset} default: ${resolved.toolbarLabels ? 'on' : 'off'})` : '(set explicitly)'}
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={resolved.toolbarLabels}
+            onChange={(e) => setToolbarLabelsOverride(e.target.checked)}
+          />
+        </label>
+        {toolbarLabelsOverride != null && (
+          <button type="button" onClick={() => setToolbarLabelsOverride(null)} className="text-xs underline decoration-dotted underline-offset-2" style={{ color: 'var(--accent)' }}>
+            Reset to density default
+          </button>
+        )}
+      </section>
+
+      <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
+        <SectionLabel>Colour tray</SectionLabel>
+        <label className="flex items-center justify-between gap-3 py-1.5 text-sm" style={{ color: 'var(--text-primary)' }}>
+          <span>Show the colour swatch strip on the canvas</span>
+          <input type="checkbox" checked={colourTrayEnabled} onChange={(e) => setColourTray(e.target.checked)} />
+        </label>
+        {colourTrayEnabled && (
+          <div className="mt-1 flex gap-1.5">
+            {TRAY_POSITIONS.map((pos) => (
+              <button
+                key={pos}
+                type="button"
+                onClick={() => setColourTray(true, pos)}
+                className="rounded px-2.5 py-1 text-xs capitalize transition"
+                style={{
+                  background: colourTrayPosition === pos ? 'var(--accent)' : 'var(--surface-2)',
+                  color: colourTrayPosition === pos ? '#fff' : 'var(--text-secondary)',
+                  border: '1px solid var(--border-light)',
+                }}
+              >
+                {pos}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
+        <SectionLabel>Icon tray</SectionLabel>
+        <label className="flex items-center justify-between gap-3 py-1.5 text-sm" style={{ color: 'var(--text-primary)' }}>
+          <span>Show the icon strip on the canvas</span>
+          <input type="checkbox" checked={iconTrayEnabled} onChange={(e) => setIconTray(e.target.checked)} />
+        </label>
+        {iconTrayEnabled && (
+          <div className="mt-1 flex gap-1.5">
+            {TRAY_POSITIONS.map((pos) => (
+              <button
+                key={pos}
+                type="button"
+                onClick={() => setIconTray(true, pos)}
+                className="rounded px-2.5 py-1 text-xs capitalize transition"
+                style={{
+                  background: iconTrayPosition === pos ? 'var(--accent)' : 'var(--surface-2)',
+                  color: iconTrayPosition === pos ? '#fff' : 'var(--text-secondary)',
+                  border: '1px solid var(--border-light)',
+                }}
+              >
+                {pos}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
+        <SectionLabel>Keyboard layout</SectionLabel>
+        <KeyboardLayoutPicker />
       </section>
     </div>
   );
@@ -564,7 +732,7 @@ export function SettingsModal({ open, onClose, initialTab = 'account', onStorage
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [legalDocument, setLegalDocument] = useState<LegalDocument | null>(null);
 
-  const order: SettingsTab[] = ['account', 'changelog', 'appearance', 'help'];
+  const order: SettingsTab[] = ['account', 'changelog', 'appearance', 'interface', 'help'];
 
   useEffect(() => {
     if (open) setTab(initialTab);
@@ -660,6 +828,7 @@ export function SettingsModal({ open, onClose, initialTab = 'account', onStorage
                   onOpenLegal={setLegalDocument}
                 />
               )}
+              {tab === 'interface' && <InterfaceTab />}
               {tab === 'help' && <HelpTab />}
             </div>
           </div>

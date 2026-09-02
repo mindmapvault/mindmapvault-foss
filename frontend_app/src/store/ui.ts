@@ -3,6 +3,8 @@ import { persist } from 'zustand/middleware';
 import { isMac } from '../platform/isMac';
 
 export type KeyboardLayoutName = 'freemind' | 'mac';
+export type DensityPreset = 'lean' | 'standard' | 'large';
+export type TrayPosition = 'top' | 'bottom' | 'left' | 'right';
 
 interface UiState {
   /**
@@ -14,6 +16,27 @@ interface UiState {
    */
   keyboardLayout: KeyboardLayoutName | null;
   setKeyboardLayout: (layout: KeyboardLayoutName | null) => void;
+
+  /** Lean / Standard / Large — see docs/UI_REWORK_PLAN.md §2.1. */
+  densityPreset: DensityPreset;
+  setDensityPreset: (preset: DensityPreset) => void;
+
+  /** `null` = follow the preset's default (off for lean, on otherwise). */
+  statusBarOverride: boolean | null;
+  setStatusBarOverride: (value: boolean | null) => void;
+
+  /** `null` = follow the preset's default (labels only show at `large`). */
+  toolbarLabelsOverride: boolean | null;
+  setToolbarLabelsOverride: (value: boolean | null) => void;
+
+  /** Not derived from density — an explicit toggle, seeded by the preset only when the preset itself changes. */
+  colourTrayEnabled: boolean;
+  colourTrayPosition: TrayPosition;
+  setColourTray: (enabled: boolean, position?: TrayPosition) => void;
+
+  iconTrayEnabled: boolean;
+  iconTrayPosition: TrayPosition;
+  setIconTray: (enabled: boolean, position?: TrayPosition) => void;
 }
 
 export const useUiStore = create<UiState>()(
@@ -21,6 +44,39 @@ export const useUiStore = create<UiState>()(
     (set) => ({
       keyboardLayout: null,
       setKeyboardLayout: (keyboardLayout) => set({ keyboardLayout }),
+
+      densityPreset: 'standard',
+      setDensityPreset: (densityPreset) => set((state) => {
+        // Switching preset re-seeds the tray defaults (large -> both on,
+        // bottom) unless the user has never touched them from the initial
+        // off state — a deliberate choice to turn a tray on stays even if
+        // the preset changes again later.
+        const trayDefaults = densityPreset === 'large'
+          ? { colourTrayEnabled: true, colourTrayPosition: 'bottom' as TrayPosition, iconTrayEnabled: true, iconTrayPosition: 'bottom' as TrayPosition }
+          : { colourTrayEnabled: false, iconTrayEnabled: false };
+        const userHasCustomizedTrays = state.colourTrayEnabled || state.iconTrayEnabled;
+        return { densityPreset, ...(userHasCustomizedTrays ? {} : trayDefaults) };
+      }),
+
+      statusBarOverride: null,
+      setStatusBarOverride: (statusBarOverride) => set({ statusBarOverride }),
+
+      toolbarLabelsOverride: null,
+      setToolbarLabelsOverride: (toolbarLabelsOverride) => set({ toolbarLabelsOverride }),
+
+      colourTrayEnabled: false,
+      colourTrayPosition: 'bottom',
+      setColourTray: (colourTrayEnabled, colourTrayPosition) => set((state) => ({
+        colourTrayEnabled,
+        colourTrayPosition: colourTrayPosition ?? state.colourTrayPosition,
+      })),
+
+      iconTrayEnabled: false,
+      iconTrayPosition: 'bottom',
+      setIconTray: (iconTrayEnabled, iconTrayPosition) => set((state) => ({
+        iconTrayEnabled,
+        iconTrayPosition: iconTrayPosition ?? state.iconTrayPosition,
+      })),
     }),
     { name: 'mindmapvault-ui' },
   ),
@@ -30,4 +86,30 @@ export const useUiStore = create<UiState>()(
 export function useEffectiveKeyboardLayout(): KeyboardLayoutName {
   const chosen = useUiStore((s) => s.keyboardLayout);
   return chosen ?? (isMac ? 'mac' : 'freemind');
+}
+
+export interface ResolvedDensity {
+  statusBarVisible: boolean;
+  toolbarLabels: boolean;
+  toolbarMode: 'essentials' | 'full';
+}
+
+/** Turns the preset + overrides into the flags components actually read. */
+export function resolveDensity(
+  densityPreset: DensityPreset,
+  statusBarOverride: boolean | null,
+  toolbarLabelsOverride: boolean | null,
+): ResolvedDensity {
+  return {
+    statusBarVisible: statusBarOverride ?? densityPreset !== 'lean',
+    toolbarLabels: toolbarLabelsOverride ?? densityPreset === 'large',
+    toolbarMode: densityPreset === 'lean' ? 'essentials' : 'full',
+  };
+}
+
+export function useResolvedDensity(): ResolvedDensity {
+  const densityPreset = useUiStore((s) => s.densityPreset);
+  const statusBarOverride = useUiStore((s) => s.statusBarOverride);
+  const toolbarLabelsOverride = useUiStore((s) => s.toolbarLabelsOverride);
+  return resolveDensity(densityPreset, statusBarOverride, toolbarLabelsOverride);
 }

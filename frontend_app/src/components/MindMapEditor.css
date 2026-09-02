@@ -63,6 +63,42 @@
   position: relative;
 }
 
+/* ── Density (see docs/UI_REWORK_PLAN.md §2.1) ─────────────────────────────
+   Standard is the default (no attribute needed); lean/large override the
+   custom properties that .mm-btn and the toolbar rows read. */
+.mm-root {
+  --mm-btn-h: 32px;
+  --mm-btn-icon: 15px;
+  --mm-toolbar-h: 44px;
+}
+.mm-root[data-density="lean"] {
+  --mm-btn-h: 28px;
+  --mm-btn-icon: 14px;
+  --mm-toolbar-h: 38px;
+}
+.mm-root[data-density="large"] {
+  --mm-btn-h: 44px;
+  --mm-btn-icon: 22px;
+  --mm-toolbar-h: 56px;
+}
+/* Lean: only the essentials stay in the toolbar row; everything else moves
+   into the "More actions" overflow menu. */
+.mm-root[data-density="lean"] .mm-toolbar-right .mm-btn:not(.mm-essential) {
+  display: none;
+}
+.mm-overflow-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 300;
+  min-width: 180px;
+  border-radius: 10px;
+  background: var(--mm-notes-bg);
+  border: 1px solid var(--mm-notes-border);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+  padding: 4px 0;
+}
+
 /* ── Toolbar ─────────────────────────────────────────────────────────────── */
 .mm-toolbar {
   display: flex;
@@ -79,8 +115,8 @@
   display: flex;
   align-items: center;
   padding: 0 8px 0 12px;
-  height: 44px;
-  min-height: 44px;
+  height: var(--mm-toolbar-h);
+  min-height: var(--mm-toolbar-h);
   gap: 8px;
   flex: 0 0 auto;
   border-right: 1px solid var(--mm-toolbar-border);
@@ -111,8 +147,9 @@
   flex: 1 1 500px;
   gap: 4px;
   padding: 5px 8px;
-  min-height: 44px;
+  min-height: var(--mm-toolbar-h);
   box-shadow: inset 0 1px 0 var(--mm-toolbar-border);
+  position: relative;
 }
 
 .mm-title-input {
@@ -168,7 +205,7 @@
   align-items: center;
   gap: 5px;
   padding: 0 10px;
-  height: 32px;
+  height: var(--mm-btn-h, 32px);
   border-radius: 7px;
   border: 1px solid var(--mm-btn-border);
   background: var(--mm-btn-bg);
@@ -179,7 +216,24 @@
   outline: none;
   font-family: inherit;
 }
-.mm-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
+.mm-btn svg { width: var(--mm-btn-icon, 15px); height: var(--mm-btn-icon, 15px); flex-shrink: 0; }
+
+/* Toolbar labels: on by default at large density, toggleable independently
+   via the Interface settings (data-toolbar-labels overrides the density-only
+   default). */
+.mm-root[data-toolbar-labels="true"] .mm-toolbar-right button.mm-btn[data-label] {
+  flex-direction: column;
+  gap: 2px;
+  height: auto;
+  min-height: var(--mm-btn-h);
+  padding: 4px 10px 5px;
+}
+.mm-root[data-toolbar-labels="true"] .mm-toolbar-right button.mm-btn[data-label]::after {
+  content: attr(data-label);
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0.8;
+}
 .mm-btn:hover:not(:disabled) {
   background: var(--mm-btn-hover);
   color: var(--mm-btn-text-hover);

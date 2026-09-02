@@ -68,7 +68,7 @@ import { exportSvgAsPdf, renderSvgToCanvas } from '../utils/pdfExport';
 import { downloadBlob, downloadDataUrl } from '../utils/download';
 import { handleDelegatedLinkClick, openExternalUrl } from '../utils/openExternal';
 import { createNodeImageGlyph, type NodeImageGlyph } from '../utils/filePreview';
-import { useEffectiveKeyboardLayout } from '../store/ui';
+import { useEffectiveKeyboardLayout, useUiStore, useResolvedDensity } from '../store/ui';
 import { matchShortcut, formatShortcut, SHORTCUTS } from '../shortcuts/registry';
 import { isMac } from '../platform/isMac';
 import './MindMapEditor.css';
@@ -99,6 +99,9 @@ export function DesktopMindMapEditor({
   const themeMode = useThemeStore((s) => s.mode);
   const toggleThemeMode = useThemeStore((s) => s.toggleMode);
   const keyboardLayout = useEffectiveKeyboardLayout();
+  const densityPreset = useUiStore((s) => s.densityPreset);
+  const { statusBarVisible, toolbarLabels, toolbarMode } = useResolvedDensity();
+  const [showToolbarOverflow, setShowToolbarOverflow] = useState(false);
 
   // ── Mobile detection ───────────────────────────────────────────────────────
   const [isMobile, setIsMobile] = useState(() =>
@@ -2395,7 +2398,7 @@ export function DesktopMindMapEditor({
   // ══════════════════════════════════════════════════════════════════════════
 
   return (
-    <div className="mm-root" ref={containerRef}>
+    <div className="mm-root" data-density={densityPreset} data-toolbar-labels={toolbarLabels} ref={containerRef}>
       {/* ── Mobile top bar ──────────────────────────────────────────────── */}
       {isMobile && (
         <div className="mm-mobile-topbar">
@@ -2488,12 +2491,12 @@ export function DesktopMindMapEditor({
               e.currentTarget.value = '';
             }}
           />
-          <button className="mm-btn" onClick={undo} title={`Undo (${formatShortcut('edit.undo', keyboardLayout)})`} disabled={historyIdx <= 0}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a6 6 0 010 12H9m-6-12l4-4m-4 4l4 4"/></svg></button>
-          <button className="mm-btn" onClick={redo} title={`Redo (${formatShortcut('edit.redo', keyboardLayout)})`} disabled={historyIdx >= history.length - 1}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 10H11a6 6 0 000 12h4m6-12l-4-4m4 4l-4 4"/></svg></button>
+          <button className="mm-btn mm-essential" data-label="Undo" onClick={undo} title={`Undo (${formatShortcut('edit.undo', keyboardLayout)})`} disabled={historyIdx <= 0}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a6 6 0 010 12H9m-6-12l4-4m-4 4l4 4"/></svg></button>
+          <button className="mm-btn mm-essential" data-label="Redo" onClick={redo} title={`Redo (${formatShortcut('edit.redo', keyboardLayout)})`} disabled={historyIdx >= history.length - 1}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 10H11a6 6 0 000 12h4m6-12l-4-4m4 4l-4 4"/></svg></button>
           <div className="mm-toolbar-sep" />
-          <button className="mm-btn" onClick={() => addChild(selectedId)} title={`Add child (${formatShortcut('node.addChild', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg></button>
-          <button className="mm-btn" onClick={() => addSibling(selectedId)} title={`Add sibling (${formatShortcut('node.addSibling', keyboardLayout)})`} disabled={selectedId === 'root'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 5H7m0 0v12m0-12l-3 3m3-3l3 3"/></svg></button>
-          <button className="mm-btn mm-btn--danger" onClick={() => hasBulk ? bulkDelete() : deleteNode(selectedId)} title={`Delete (${formatShortcut('node.delete', keyboardLayout)})`} disabled={selectedId === 'root' && !hasBulk}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+          <button className="mm-btn mm-essential" data-label="Child" onClick={() => addChild(selectedId)} title={`Add child (${formatShortcut('node.addChild', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg></button>
+          <button className="mm-btn mm-essential" data-label="Sibling" onClick={() => addSibling(selectedId)} title={`Add sibling (${formatShortcut('node.addSibling', keyboardLayout)})`} disabled={selectedId === 'root'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 5H7m0 0v12m0-12l-3 3m3-3l3 3"/></svg></button>
+          <button className="mm-btn mm-btn--danger mm-essential" data-label="Delete" onClick={() => hasBulk ? bulkDelete() : deleteNode(selectedId)} title={`Delete (${formatShortcut('node.delete', keyboardLayout)})`} disabled={selectedId === 'root' && !hasBulk}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
           <div className="mm-toolbar-sep" />
           <button className="mm-btn" onClick={() => { hasBulk ? bulkToggleCheckbox() : toggleCheckbox(selectedId); }} title={`Checkbox (${formatShortcut('node.checkbox', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></button>
           <button className="mm-btn" onClick={() => { hasBulk ? bulkCycleProgress() : cycleProgress(selectedId); }} title={`Progress (${formatShortcut('node.progress', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 017.07 17.07" strokeLinecap="round"/></svg></button>
@@ -2508,7 +2511,8 @@ export function DesktopMindMapEditor({
             <MindMapIconPicker open={showIconPicker} currentIcons={selNode?.icons ?? []} onSelect={(name: string | null) => hasBulk ? bulkSetIcon(name) : setNodeIcon(selectedId, name)} onClose={() => setShowIconPicker(false)} showToast={showToast} />
           </div>
           <button
-            className={`mm-btn mm-btn--notes${selNodeAttachmentCount > 0 ? ' mm-btn--notes-has-files' : ''}`}
+            data-label="Notes"
+            className={`mm-btn mm-btn--notes mm-essential${selNodeAttachmentCount > 0 ? ' mm-btn--notes-has-files' : ''}`}
             onClick={() => { openNotes(selectedId); setNotesOpen(true); }}
             title={selNodeAttachmentCount > 0 ? `Notes (${formatShortcut('node.notesToggle', keyboardLayout)}) · ${selNodeAttachmentLabel}${selNodeAttachmentNames ? `: ${selNodeAttachmentNames}` : ''}` : `Notes (${formatShortcut('node.notesToggle', keyboardLayout)})`}
           >
@@ -2528,7 +2532,7 @@ export function DesktopMindMapEditor({
           <button className="mm-btn" onClick={fitView} title="Fit view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/></svg></button>
           <button className="mm-btn" onClick={() => autoAlignSubtree(selectedId)} title={`${selectedId === 'root' ? 'Auto-align all nodes' : 'Auto-align subtree'} (${formatShortcut('node.autoAlign', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M3 12h12M3 18h8"/></svg></button>
           <button className={`mm-btn${focusMode ? ' mm-btn--active' : ''}`} onClick={() => { setFocusMode((v) => { if (!v) setFocusAnchorId(selectedId); return !v; }); }} title={`Focus mode (${formatShortcut('view.focusMode', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2m8.66-17.66l-1.41 1.41M4.75 19.25l-1.41 1.41M23 12h-2M3 12H1m17.66 7.66l-1.41-1.41M4.75 4.75L3.34 3.34"/></svg></button>
-          <button className="mm-btn" onClick={() => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 50); }} title={`Search (${formatShortcut('find.search', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+          <button className="mm-btn mm-essential" data-label="Search" onClick={() => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 50); }} title={`Search (${formatShortcut('find.search', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
           <div className="mm-toolbar-sep" />
           <button className="mm-btn" onClick={() => setShowShortcuts((v) => !v)} title={`Shortcuts (${formatShortcut('find.shortcuts', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg></button>
           <button
@@ -2597,6 +2601,36 @@ export function DesktopMindMapEditor({
             )}
           </button>
           <ThemePanel />
+          {toolbarMode === 'essentials' && (
+            <div style={{ position: 'relative' }}>
+              <button className="mm-btn" onClick={() => setShowToolbarOverflow((v) => !v)} title="More actions">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="12" r="1.5"/></svg>
+              </button>
+              {showToolbarOverflow && (
+                <div className="mm-overflow-menu" onMouseDown={(e) => e.stopPropagation()}>
+                  {([
+                    ['node.checkbox', 'Checkbox', () => { hasBulk ? bulkToggleCheckbox() : toggleCheckbox(selectedId); }],
+                    ['node.progress', 'Progress', () => { hasBulk ? bulkCycleProgress() : cycleProgress(selectedId); }],
+                    ['node.colour', 'Colour', () => setShowColorPicker((v) => !v)],
+                    ['node.icons', 'Icons', () => setShowIconPicker((v) => !v)],
+                    ['node.dates', 'Dates', () => setShowDateDialog(true)],
+                    ['node.labels', 'Tags', () => setShowTagDialog((v) => !v)],
+                    ['view.zoomIn', 'Zoom in', () => setZoom((z) => Math.min(3, z + 0.15))],
+                    ['view.zoomOut', 'Zoom out', () => setZoom((z) => Math.max(0.3, z - 0.15))],
+                    [null, 'Fit view', fitView],
+                    ['node.autoAlign', 'Auto-align', () => autoAlignSubtree(selectedId)],
+                    ['view.focusMode', 'Focus mode', () => { setFocusMode((v) => { if (!v) setFocusAnchorId(selectedId); return !v; }); }],
+                    ['find.shortcuts', 'Shortcuts', () => setShowShortcuts((v) => !v)],
+                    ['node.attachFile', 'Attach file', () => nodeAttachmentInputRef.current?.click()],
+                  ] as const).map(([id, label, onClick]) => (
+                    <button key={label} className="mm-context-item" onClick={() => { onClick(); setShowToolbarOverflow(false); }}>
+                      {label}{id && <kbd>{formatShortcut(id, keyboardLayout)}</kbd>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>}
 
@@ -2668,7 +2702,7 @@ export function DesktopMindMapEditor({
       </div>
 
       {/* ── Status bar ──────────────────────────────────────────────── */}
-      {!isMobile && (
+      {!isMobile && statusBarVisible && (
         <div className="mm-statusbar">
           <span>{flattenTree(root).length} node{flattenTree(root).length !== 1 ? 's' : ''}{multiSelect.size > 0 ? ` · ${multiSelect.size} selected` : ''}</span>
           <span>{selNode ? `Selected: ${selNode.text.split('\n')[0]}` : ''}</span>

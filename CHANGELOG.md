@@ -7,18 +7,44 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ## [Unreleased]
 
 ### Added
-- **Two keyboard-shortcut layouts.** `FreeMind` (the legacy bindings, default on Windows/Linux) and `Mac` (modelled on MindNode, avoids function keys, default on macOS) — pick one in Settings → Interface, or leave it on the per-platform default. Both are closed sets: nothing falls back to the other layout's keys, so the F1 shortcuts panel, toolbar tooltips, context menu, and status bar hints are always exactly what will fire. Single source of truth is `frontend_app/src/shortcuts/registry.ts`; `Mod` resolves to the current OS regardless of which layout is active, so a Mac user on the FreeMind layout still gets a working ⌘Z/⌘F/⌘S. 19 vitest cases cover the matcher on both platforms.
-- **Three UI density modes** — Lean, Standard, Large — in Settings → Interface. Driven by CSS custom properties and `data-density`/`data-toolbar-labels` attributes rather than per-component sizing logic. Lean mode collapses the toolbar to its essential buttons behind a "More actions" overflow menu; status bar and toolbar-label visibility can also be overridden independently of the preset.
-- **Dockable colour and icon trays.** Off by default (on by default at Large density); toggle and reposition (top/bottom/left/right) in Settings → Interface, or with `Ctrl/Cmd+Shift+1` (colour) and `Ctrl/Cmd+Shift+2` (icon). Right-click a swatch or icon to pin it as a favourite, shown ahead of the curated set; favourites persist per profile.
-- **A real native app menu**, replacing the debug-build-only "Inspect" menu. App (About, Settings, Hide, Quit), File (Save, Attach File, Close), Edit (Undo, Redo, Cut, Copy, Paste, Select All, Find), View (Lean mode, Colour/Icon tray, Status bar, Zoom, Fit to window, Focus mode), Node (Add child/sibling, Rename, Notes, Delete), and Help (Keyboard Shortcuts, plus Inspect in dev builds). Undo/Redo are custom items wired to the app's own tree-history rather than the OS-level predefined ones — those are unsupported on Windows/Linux and would be the wrong history even where they exist — while Cut/Copy/Paste/Select All use the real predefined items.
-- README "Keyboard Shortcuts" section, generated from the registry.
 
 ### Changed
 
 ### Fixed
-- **⌘C/⌘V (and Cut/Select All) now work.** There was no Edit menu at all before this release, so macOS's own copy/paste never reached the app — the native app menu above is the actual fix; `PredefinedMenuItem`'s Cut/Copy/Paste/Select All wire directly into the OS.
 
 ### Removed
+
+## [0.3.35] - 2026-09-02
+
+### Added
+- **Two keyboard-shortcut layouts.** `FreeMind` (the legacy bindings, default on Windows/Linux) and `Mac` (modelled on MindNode, avoids function keys, default on macOS) — pick one in Settings → Interface, or leave it on the per-platform default. Both are closed sets: nothing falls back to the other layout's keys, so the F1 shortcuts panel, toolbar tooltips, context menu, and status bar hints are always exactly what will fire. Single source of truth is `frontend_app/src/shortcuts/registry.ts`; `Mod` resolves to the current OS regardless of which layout is active, so a Mac user on the FreeMind layout still gets a working ⌘Z/⌘F/⌘S. 19 vitest cases cover the matcher on both platforms.
+- **Three UI density modes** — Lean, Standard, Large — in Settings → Interface. Driven by CSS custom properties and `data-density`/`data-toolbar-labels` attributes rather than per-component sizing logic. Lean mode collapses the toolbar to its essential buttons behind a "More actions" overflow menu; status bar and toolbar-label visibility can also be overridden independently of the preset.
+- **Dockable colour and icon trays.** Off by default (on by default at Large density); toggle and reposition (top/bottom/left/right) in Settings → Interface, or with `Ctrl/Cmd+Shift+1` (colour) and `Ctrl/Cmd+Shift+2` (icon). Right-click a swatch or icon to pin it as a favourite, shown ahead of the curated set; favourites persist per profile.
+- **A real native app menu**, replacing the debug-build-only "Inspect" menu. App (About, Settings, Hide, Quit), File (Save, Attach File, Close), Edit (Undo, Redo, Cut, Copy, Paste, Select All, Find), View (Lean mode, Colour/Icon tray, Status bar, Zoom, Fit to window, Focus mode), Node (Add child/sibling, Rename, Notes, Delete), and Help (Keyboard Shortcuts, plus Inspect in dev builds). Undo/Redo are custom items wired to the app's own tree-history rather than the OS-level predefined ones — those are unsupported on Windows/Linux and would be the wrong history even where they exist — while Cut/Copy/Paste/Select All use the real predefined items.
+- **Thematic toolbar groups with visible captions**, across all three densities. Large density gets a real ribbon: a `Home / Insert / View / Export` tab bar on its own row, with Back, Save, the map title, the theme toggle and Settings sharing a single nav row above it. Group rendering goes through one `toolbarGroup()` helper so the markup cannot drift between densities.
+- **Keyboard shortcuts printed on the toolbar buttons.** A third override in Settings → Interface, following the same tri-state pattern as the status bar and toolbar labels (on by default at Large, off elsewhere, overridable either way). Button captions use a trimmed form — `formatButtonShortcut` — so `Delete` and `Insert` show one binding instead of three; the F1 panel, tooltips and context menu still list every binding.
+- **An Image button in the toolbar.** Adding a picture to a node was previously only reachable from the context menu or `Alt+K`. It now sits in the Insert/Files group at Standard and Large density, and in the "More actions" overflow at Lean.
+- **Search in the icon tray.** The tray showed a fixed 16 icons behind a "More icons…" button; it now scrolls and searches the whole curated set, matching what the colour tray already did.
+- README "Keyboard Shortcuts" section, generated from the registry.
+
+### Changed
+- **Settings opens on Account** rather than Appearance, from every entry point — the editor toolbar's gear, the vault lobby's gear, and the native `Settings…` menu item. The once-per-release What's New popup still opens on its own tab.
+- **Settings → Interface uses switches** instead of bare checkboxes. They remain real checkboxes under the paint (`appearance-none` on the input itself), so label clicks, keyboard operation and focus behaviour are unchanged.
+- **What's New moved** between Interface and Help in the settings sidebar.
+- **Trays default to colour on the right, icons on the left** when Large density seeds them, instead of both at the bottom.
+- Zoom shortcuts now match the applications they are modelled on: FreeMind's `Alt+Down` / `Alt+Up` alongside `+` / `-`, and MindNode's `⌘+` / `⌘−` / `⌘⇧8` for fit-to-window. `Alt+Arrow` no longer gets swallowed by spatial node navigation. Fit-to-window and Back-to-lobby gained bindings of their own (`F8` / `⌘⇧8`, `Alt+Left` / `⌘[`).
+- The date and version label is gone from the editor toolbar in every density; the title sits alone and centred.
+
+### Fixed
+- **⌘C/⌘V (and Cut/Select All) now work.** There was no Edit menu at all before this release, so macOS's own copy/paste never reached the app — the native app menu above is the actual fix; `PredefinedMenuItem`'s Cut/Copy/Paste/Select All wire directly into the OS.
+- **A bare `+` shortcut never fired.** Binding strings split on `'+'` as the modifier separator, so `'+'` as the key itself produced empty tokens that matched nothing. It is now a named `'Plus'` token, following the existing `'Space'` precedent.
+- **The selection border was invisible on a coloured node.** The border colour was taken from the node's own fill colour before selection was considered, so selecting a coloured node changed nothing on screen. Root nodes had the same problem for the same reason. Selection now wins over both.
+- **A node's colour no longer cascades onto the whole subtree below it.** It paints only the line coming into that node; the lines going out stay on the default until a child sets a colour of its own.
+- **The export dropdown and the node context menu stay inside the window.** Both are measured against the viewport and pulled back inside — the context menu shifts up rather than running off the bottom, and the export dropdown opens towards whichever side has room, which is what the Large ribbon needs with the button hard against the left edge. Either one scrolls internally if the window is genuinely too short for it.
+- Buttons without a shortcut (Settings, More, Back) no longer render shorter than their neighbours. An empty `content: attr()` pseudo-element collapses to zero height in this WebView instead of reserving its line, so the height is now set on the button itself.
+
+### Removed
+- The 16-icon cap and the "More icons…" button in the icon tray, superseded by the searchable full set above.
 
 ## [0.3.34] - 2026-09-01
 

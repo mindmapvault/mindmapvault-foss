@@ -12,7 +12,7 @@
  * equal `CHANGELOG[0].version`.
  */
 
-export const APP_VERSION = '0.3.34';
+export const APP_VERSION = '0.3.35';
 
 /**
  * localStorage key recording the last version whose "What's New" the user saw.
@@ -36,6 +36,58 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.3.35',
+    date: '2026-09-02',
+    highlights: 'Keyboard shortcuts, three density modes, and a reworked toolbar.',
+    items: [
+      {
+        kind: 'feature',
+        title: 'Two keyboard-shortcut layouts',
+        desc: 'FreeMind or Mac, whichever suits you — pick one in Settings → Interface, or leave it on your platform default. Press F1 for the full list.',
+      },
+      {
+        kind: 'feature',
+        title: 'Three density modes',
+        desc: 'Lean, Standard and Large. Lean keeps only the essentials on the toolbar; Large adds a full ribbon with Home, Insert, View and Export tabs.',
+      },
+      {
+        kind: 'feature',
+        title: 'Colour and icon trays',
+        desc: 'Dock a colour or icon strip to any edge of the canvas. Right-click a swatch to pin it as a favourite. Both trays now search the full set.',
+      },
+      {
+        kind: 'feature',
+        title: 'A real app menu',
+        desc: 'File, Edit, View, Node and Help menus — which also means copy and paste finally work on macOS.',
+      },
+      {
+        kind: 'feature',
+        title: 'Image button on the toolbar',
+        desc: 'Adding a picture to a node no longer needs the context menu or a shortcut.',
+      },
+      {
+        kind: 'fix',
+        title: 'Selected coloured nodes show their border again',
+        desc: 'A node with its own colour drew its selection border in that same colour, so selecting it looked like nothing happened.',
+      },
+      {
+        kind: 'fix',
+        title: 'Node colour stays on its own line',
+        desc: 'Colouring a node used to repaint every line below it. It now paints only the line coming into that node.',
+      },
+      {
+        kind: 'fix',
+        title: 'Menus stay inside the window',
+        desc: 'The export dropdown and the node context menu no longer run off the edge of the screen.',
+      },
+      {
+        kind: 'improvement',
+        title: 'Settings opens on Account',
+        desc: 'And the Interface tab now uses switches instead of checkboxes.',
+      },
+    ],
+  },
   {
     version: '0.3.34',
     date: '2026-09-01',

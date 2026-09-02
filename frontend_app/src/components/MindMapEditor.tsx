@@ -190,7 +190,15 @@ export function DesktopMindMapEditor({
   // ── UI toggles ─────────────────────────────────────────────────────────────
   const [showShortcuts, setShowShortcuts] = useState(() => Boolean(initialShowShortcuts));
   const [shortcutsPos, setShortcutsPos] = useState<{ x: number; y: number } | null>(null);
-  const scDragRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
+  const scDragRef = useRef<{
+    /** Grab point inside the panel. */
+    offsetX: number; offsetY: number;
+    /** Offset-parent origin, so viewport coords can be converted to the
+     *  `left`/`top` the absolutely-positioned panel actually needs. */
+    originX: number; originY: number;
+    /** Bounds to keep the panel inside its (overflow-hidden) parent. */
+    maxX: number; maxY: number;
+  } | null>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [showDateDialog, setShowDateDialog] = useState(false);
@@ -3598,10 +3606,28 @@ export function DesktopMindMapEditor({
             onMouseDown={(e) => {
               const el = (e.currentTarget.parentElement as HTMLDivElement);
               const rect = el.getBoundingClientRect();
-              scDragRef.current = { offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
+              // The panel is positioned against its offset parent, not the
+              // viewport, so the pointer's client coords have to be rebased
+              // onto that parent or the panel jumps by the parent's offset
+              // the moment it is grabbed.
+              const parent = (el.offsetParent as HTMLElement | null);
+              const pRect = parent?.getBoundingClientRect();
+              const MARGIN = 8;
+              scDragRef.current = {
+                offsetX: e.clientX - rect.left,
+                offsetY: e.clientY - rect.top,
+                originX: pRect?.left ?? 0,
+                originY: pRect?.top ?? 0,
+                maxX: (pRect?.width ?? window.innerWidth) - rect.width - MARGIN,
+                maxY: (pRect?.height ?? window.innerHeight) - rect.height - MARGIN,
+              };
               const onMove = (me: MouseEvent) => {
-                if (!scDragRef.current) return;
-                setShortcutsPos({ x: me.clientX - scDragRef.current.offsetX, y: me.clientY - scDragRef.current.offsetY });
+                const d = scDragRef.current;
+                if (!d) return;
+                setShortcutsPos({
+                  x: Math.max(MARGIN, Math.min(me.clientX - d.offsetX - d.originX, d.maxX)),
+                  y: Math.max(MARGIN, Math.min(me.clientY - d.offsetY - d.originY, d.maxY)),
+                });
               };
               const onUp = () => { scDragRef.current = null; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
               window.addEventListener('mousemove', onMove);

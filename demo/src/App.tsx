@@ -1,16 +1,34 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DesktopMindMapEditor } from '../../frontend_app/src/components/MindMapEditor';
 import { encryptTree } from '../../frontend_app/src/crypto/vault';
-import { randomBytes, toBase64 } from '../../frontend_app/src/crypto/utils';
+import { randomBytes, toBase64, fromBase64 } from '../../frontend_app/src/crypto/utils';
 import { treeToMarkdown } from '../../frontend_app/src/utils/markdownExport';
 import { useThemeStore } from '../../frontend_app/src/store/theme';
 import { useUiStore, type DensityPreset } from '../../frontend_app/src/store/ui';
-import type { MindMapTree } from '../../frontend_app/src/types';
-import { DEMO_NODE_IMAGE } from './demoNodeImage';
+import type { MindMapTree, NodeAttachmentRef } from '../../frontend_app/src/types';
+import { DEMO_NODE_IMAGE, DEMO_NODE_IMAGE_FULL, DEMO_NODE_IMAGE_FULL_BYTES } from './demoNodeImage';
 
 const DEMO_STORAGE_KEY = 'mindmapvault:foss:canvas-demo:v1';
 const USER_LABELS_STORAGE_KEY = 'user-labels';
 const TRAY_SEEDED_KEY = 'mindmapvault:foss:canvas-demo:tray-seeded';
+
+const DEMO_IMAGE_ATTACHMENT_ID = 'demo-node-image-1';
+
+/**
+ * The full-resolution original behind the demo's node picture. Carried inline
+ * (`inline_data_base64`) exactly as the desktop app stores a local attachment,
+ * so `handleFetchNodeAttachmentContent` below can hand it to the preview
+ * dialog without any backend.
+ */
+const DEMO_IMAGE_ATTACHMENT: NodeAttachmentRef = {
+  attachment_id: DEMO_IMAGE_ATTACHMENT_ID,
+  name: 'mindmapvault.webp',
+  content_type: 'image/webp',
+  size_bytes: DEMO_NODE_IMAGE_FULL_BYTES,
+  preview_kind: 'image',
+  uploaded_at: '2026-09-02T00:00:00.000Z',
+  inline_data_base64: DEMO_NODE_IMAGE_FULL,
+};
 
 const DENSITY_OPTIONS: Array<{ value: DensityPreset; label: string }> = [
   { value: 'lean', label: 'Lean' },
@@ -175,8 +193,12 @@ function createStarterTree(): MindMapTree {
               text: 'Pictures on nodes',
               collapsed: false,
               icons: ['Image'],
-              image: { thumb: DEMO_NODE_IMAGE, w: 64, h: 64, name: 'mindmapvault.webp' },
-              notes: 'Drop an image onto a node, paste one from the clipboard, or press Alt+K. The picture is drawn on the node itself and survives PNG and PDF export.',
+              // `attachment_id` points at the inline attachment below, which is
+              // what makes clicking the glyph open the full-size original in
+              // the preview dialog rather than reporting it as unavailable.
+              image: { thumb: DEMO_NODE_IMAGE, w: 64, h: 64, name: 'mindmapvault.webp', attachment_id: DEMO_IMAGE_ATTACHMENT_ID },
+              attachments: [DEMO_IMAGE_ATTACHMENT],
+              notes: 'Drop an image onto a node, paste one from the clipboard, or press Alt+K. The picture is drawn on the node itself and survives PNG and PDF export. Click it to open the full-size original.',
               children: [],
             },
           ],
@@ -440,6 +462,16 @@ export default function App() {
     }
   }, [currentTree, title]);
 
+  // Mirrors the desktop app's local-mode path: an attachment carries its own
+  // bytes inline, so the preview dialog works with no backend behind it.
+  const fetchNodeAttachmentContent = useCallback(async (attachment: NodeAttachmentRef) => {
+    if (!attachment.inline_data_base64) return null;
+    const bytes = fromBase64(attachment.inline_data_base64);
+    const payload = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    const contentType = attachment.content_type || 'application/octet-stream';
+    return { name: attachment.name, contentType, blob: new Blob([payload], { type: contentType }) };
+  }, []);
+
   const exportMarkdown = useCallback((tree: MindMapTree, treeTitle: string) => {
     const safeName = normalizeFileBaseName(treeTitle || title);
     const markdown = treeToMarkdown(tree.root, treeTitle || 'Untitled mind map');
@@ -546,6 +578,7 @@ export default function App() {
           renamingTitle={renamingTitle}
           onExportMarkdown={exportMarkdown}
           onTreeChange={handleTreeChange}
+          onFetchNodeAttachmentContent={fetchNodeAttachmentContent}
         />
       </div>
     </div>

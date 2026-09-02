@@ -58,6 +58,25 @@ describe('matchBinding — PC', () => {
     const { matchBinding } = await loadRegistry('pc');
     expect(matchBinding(key({ key: 'k', code: 'KeyK', altKey: true }), 'Alt+KeyK')).toBe(true);
   });
+
+  it('"Plus" fires on the + key — a literal "+" token would collide with the modifier separator', async () => {
+    const { matchBinding } = await loadRegistry('pc');
+    expect(matchBinding(key({ key: '+' }), 'Plus')).toBe(true);
+    expect(matchBinding(key({ key: '+', ctrlKey: true }), 'Mod+Plus')).toBe(true);
+  });
+
+  it('freemind zoom: Plus/- zoom in/out, Alt+Down/Alt+Up match FreeMind itself', async () => {
+    const { matchShortcut } = await loadRegistry('pc');
+    expect(matchShortcut(key({ key: '+' }), 'freemind')).toBe('view.zoomIn');
+    expect(matchShortcut(key({ key: '-' }), 'freemind')).toBe('view.zoomOut');
+    expect(matchShortcut(key({ key: 'ArrowDown', altKey: true }), 'freemind')).toBe('view.zoomIn');
+    expect(matchShortcut(key({ key: 'ArrowUp', altKey: true }), 'freemind')).toBe('view.zoomOut');
+  });
+
+  it('freemind: plain arrows are untouched by the zoom bindings (Alt is required)', async () => {
+    const { matchShortcut } = await loadRegistry('pc');
+    expect(matchShortcut(key({ key: 'ArrowDown' }), 'freemind')).toBeNull();
+  });
 });
 
 describe('matchBinding — Mac', () => {
@@ -75,6 +94,18 @@ describe('matchBinding — Mac', () => {
   it('a bare letter does not fire while Cmd is held', async () => {
     const { matchBinding } = await loadRegistry('mac');
     expect(matchBinding(key({ key: 'b', metaKey: true }), 'B')).toBe(false);
+  });
+
+  it('mac zoom follows MindNode: Cmd+Plus / Cmd+Minus / Cmd+Shift+* for fit', async () => {
+    const { matchShortcut } = await loadRegistry('mac');
+    expect(matchShortcut(key({ key: '+', metaKey: true }), 'mac')).toBe('view.zoomIn');
+    expect(matchShortcut(key({ key: '-', metaKey: true }), 'mac')).toBe('view.zoomOut');
+    expect(matchShortcut(key({ key: '*', metaKey: true, shiftKey: true }), 'mac')).toBe('view.zoomFit');
+  });
+
+  it('mac: bare + does not zoom — MindNode requires Cmd', async () => {
+    const { matchShortcut } = await loadRegistry('mac');
+    expect(matchShortcut(key({ key: '+' }), 'mac')).toBeNull();
   });
 });
 
@@ -125,6 +156,12 @@ describe('formatBinding', () => {
     const { formatBinding } = await loadRegistry('mac');
     expect(formatBinding('Alt+KeyK')).toBe('⌥K');
   });
+
+  it('renders Plus as + and arrow keys as arrow symbols', async () => {
+    const { formatBinding } = await loadRegistry('pc');
+    expect(formatBinding('Plus')).toBe('+');
+    expect(formatBinding('Alt+ArrowDown')).toBe('Alt+↓');
+  });
 });
 
 describe('formatShortcut', () => {
@@ -136,5 +173,30 @@ describe('formatShortcut', () => {
   it('mac layout has a single, closed binding per action where the table says so', async () => {
     const { formatShortcut } = await loadRegistry('mac');
     expect(formatShortcut('edit.undo', 'mac')).toBe('⌘Z');
+  });
+});
+
+describe('formatButtonShortcut', () => {
+  it('defaults to the full list, same as formatShortcut, when there is no trim entry', async () => {
+    const { formatButtonShortcut, formatShortcut } = await loadRegistry('pc');
+    expect(formatButtonShortcut('edit.undo', 'freemind')).toBe(formatShortcut('edit.undo', 'freemind'));
+  });
+
+  it('trims node.addChild to Insert on freemind — Tab reads as a focus hint there', async () => {
+    const { formatButtonShortcut } = await loadRegistry('pc');
+    expect(formatButtonShortcut('node.addChild', 'freemind')).toBe('Insert');
+  });
+
+  it('trims node.delete to just Delete on both layouts', async () => {
+    const pc = await loadRegistry('pc');
+    expect(pc.formatButtonShortcut('node.delete', 'freemind')).toBe('Delete');
+    const mac = await loadRegistry('mac');
+    expect(mac.formatButtonShortcut('node.delete', 'mac')).toBe('Delete');
+  });
+
+  it('drops edit.redo\'s third freemind binding but keeps it on the F1 panel', async () => {
+    const { formatButtonShortcut, formatShortcut } = await loadRegistry('pc');
+    expect(formatButtonShortcut('edit.redo', 'freemind')).toBe('F10 / Ctrl+Y');
+    expect(formatShortcut('edit.redo', 'freemind')).toBe('F10 / Ctrl+Y / Ctrl+Shift+Z');
   });
 });

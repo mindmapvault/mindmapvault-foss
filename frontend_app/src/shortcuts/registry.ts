@@ -61,8 +61,14 @@ export const SHORTCUTS: ShortcutDef[] = [
   // ── View ───────────────────────────────────────────────────────────────
   { id: 'view.root', label: 'Go to root', group: 'View', freemind: ['Home'], mac: ['H'] },
   { id: 'view.focusMode', label: 'Focus mode', group: 'View', freemind: ['F5', 'F'], mac: ['Mod+Shift+F'] },
-  { id: 'view.zoomIn', label: 'Zoom in', group: 'View', freemind: ['+'], mac: ['+'] },
-  { id: 'view.zoomOut', label: 'Zoom out', group: 'View', freemind: ['-'], mac: ['-'] },
+  // FreeMind's real binding is Alt+Down/Alt+Up (no +/-); Mac follows
+  // MindNode's Cmd+Plus/Cmd+Minus. Plus/- kept too on freemind since it's
+  // this app's own long-standing toolbar convention.
+  { id: 'view.zoomIn', label: 'Zoom in', group: 'View', freemind: ['Plus', 'Alt+ArrowDown'], mac: ['Mod+Plus'] },
+  { id: 'view.zoomOut', label: 'Zoom out', group: 'View', freemind: ['-', 'Alt+ArrowUp'], mac: ['Mod+-'] },
+  // FreeMind has no "fit to window" concept; Mac follows MindNode's
+  // Cmd+Shift+8 (Cmd+*, "Zoom to Fit Content").
+  { id: 'view.zoomFit', label: 'Fit to window', group: 'View', freemind: ['F8'], mac: ['Mod+Shift+*'] },
   { id: 'view.colourTray', label: 'Toggle colour tray', group: 'View', freemind: ['Mod+Shift+1'], mac: ['Mod+Shift+1'] },
   { id: 'view.iconTray', label: 'Toggle icon tray', group: 'View', freemind: ['Mod+Shift+2'], mac: ['Mod+Shift+2'] },
 
@@ -76,6 +82,11 @@ export const SHORTCUTS: ShortcutDef[] = [
 
   // ── File ───────────────────────────────────────────────────────────────
   { id: 'file.save', label: 'Save', group: 'File', freemind: ['Mod+S'], mac: ['Mod+S'] },
+  // Each platform's own "navigate back" convention (Alt+Left on
+  // Windows/Linux browsers, Cmd+[ on macOS — Safari, Finder). Not Mod+W:
+  // that's already claimed by the native Close Window menu item, at the
+  // OS level, before it would ever reach this app's own key handling.
+  { id: 'nav.back', label: 'Back to lobby', group: 'File', freemind: ['Alt+ArrowLeft'], mac: ['Mod+['] },
 ];
 
 const BY_ID: Record<string, ShortcutDef> = Object.fromEntries(SHORTCUTS.map((s) => [s.id, s]));
@@ -95,6 +106,10 @@ export function bindingsFor(id: string, layout: KeyboardLayoutName): string[] {
 function matchKeyToken(e: KeyboardEvent, token: string): boolean {
   if (/^Key[A-Z]$/.test(token)) return e.code === token;
   if (token === 'Space') return e.key === ' ';
+  // A literal "+" can't be the token in a binding string — it's also the
+  // modifier separator, so "Mod++" would parse as an empty key. "Plus" is
+  // the named stand-in, same idea as "Space".
+  if (token === 'Plus') return e.key === '+';
   if (/^[A-Za-z]$/.test(token)) return e.key.toLowerCase() === token.toLowerCase();
   return e.key === token;
 }
@@ -139,9 +154,15 @@ export function matchShortcut(
 
 // ── Display ──────────────────────────────────────────────────────────────
 
+const ARROW_SYMBOLS: Record<string, string> = {
+  ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
+};
+
 function formatKeyToken(token: string): string {
   if (/^Key[A-Z]$/.test(token)) return token.slice(3);
   if (token === 'Space') return 'Space';
+  if (token === 'Plus') return '+';
+  if (token in ARROW_SYMBOLS) return ARROW_SYMBOLS[token];
   return token;
 }
 
@@ -161,4 +182,24 @@ export function formatBinding(binding: string): string {
 /** All bindings for one shortcut, formatted and joined (`⌘Z` or `F9 / Ctrl+Z`). */
 export function formatShortcut(id: string, layout: KeyboardLayoutName, sep = ' / '): string {
   return bindingsFor(id, layout).map(formatBinding).join(sep);
+}
+
+/**
+ * A toolbar button's own inline caption can't afford every alternate
+ * binding the way a tooltip or the F1 panel can — joining them all gets
+ * too wide. This trims a few down to a shorter subset (in display order)
+ * for the button caption only; formatShortcut() above — tooltips, the F1
+ * panel — is untouched and keeps showing the full list.
+ */
+const BUTTON_BINDING_TRIM: Partial<Record<string, Partial<Record<KeyboardLayoutName, string[]>>>> = {
+  // Tab reads as a focus hint rather than this button's own shortcut.
+  'node.addChild': { freemind: ['Insert'] },
+  'node.delete': { freemind: ['Delete'], mac: ['Delete'] },
+  'edit.redo': { freemind: ['F10', 'Mod+Y'] },
+};
+
+export function formatButtonShortcut(id: string, layout: KeyboardLayoutName, sep = ' / '): string {
+  const all = bindingsFor(id, layout);
+  const shown = BUTTON_BINDING_TRIM[id]?.[layout] ?? all;
+  return shown.map(formatBinding).join(sep);
 }

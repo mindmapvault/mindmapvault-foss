@@ -209,6 +209,63 @@ pnpm approve-builds
 
 Then retry the previous install/build command.
 
+## Keyboard Shortcuts
+
+The editor is keyboard-first and ships two closed layouts — pick one in
+Settings → Interface, or let it default per platform (`FreeMind` on
+Windows/Linux, `Mac` on macOS). `Mod` always resolves to your OS's own
+modifier (⌘ on macOS, Ctrl elsewhere), regardless of which layout is active.
+Press <kbd>F1</kbd> (FreeMind) / <kbd>⌘/</kbd> (Mac) in the editor for the
+same table, grouped and always in sync with what will actually fire.
+
+| Action | FreeMind (Windows/Linux) | Mac |
+|---|---|---|
+| **Nodes** | | |
+| Add child | Tab / Insert | Tab |
+| Add left child (root) | Shift+Tab | ⇧Tab |
+| Add sibling | Enter | Enter |
+| Delete node | Delete / Backspace | Delete / Backspace |
+| Rename | F2 | ⌘Enter |
+| Notes | F3 | ⌘⇧K |
+| Edit notes | Ctrl+E | ⌘E |
+| Add image | Alt+K | ⌥K |
+| Attach encrypted file | F6 | ⌘O |
+| Fold / Unfold | Space | Space |
+| Reset position | R | R |
+| Reset all positions | Ctrl+Shift+R | ⌘⇧R |
+| Auto-align subtree | A | A |
+| **Format** | | |
+| Colour picker | F4 | B |
+| Icons | I | I |
+| Checkbox | C | C |
+| Progress | P | P |
+| Dates | D | D |
+| URL | U | U |
+| Labels | T | T |
+| **View** | | |
+| Go to root | Home | H |
+| Focus mode | F5 / F | ⌘⇧F |
+| Zoom in | + | + |
+| Zoom out | - | - |
+| Toggle colour tray | Ctrl+Shift+1 | ⌘⇧1 |
+| Toggle icon tray | Ctrl+Shift+2 | ⌘⇧2 |
+| **Edit** | | |
+| Undo | F9 / Ctrl+Z | ⌘Z |
+| Redo | F10 / Ctrl+Y / Ctrl+Shift+Z | ⌘⇧Z |
+| **Find** | | |
+| Search | Ctrl+F | ⌘F |
+| Shortcuts (this table) | F1 | ⌘/ |
+| **File** | | |
+| Save | Ctrl+S | ⌘S |
+
+Source of truth: `frontend_app/src/shortcuts/registry.ts` — each layout is
+an exhaustive, closed set (nothing falls back to the other layout's keys).
+The desktop app's native menu bar mirrors the subset of these with an
+unambiguous, modifier-based binding; bare-letter shortcuts (`B`, `H`, `R`,
+`A`, `C`, `P`, `D`, `U`, `T`, `Space`, `Tab`, `Enter`, `+`/`-`) are
+click-only there so an OS-level accelerator can't steal that character
+while you're typing in a text field.
+
 ## Validation
 
 Repository checks:

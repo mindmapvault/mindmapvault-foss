@@ -7,8 +7,16 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ## [Unreleased]
 
 ### Added
+- **Two keyboard-shortcut layouts.** `FreeMind` (the legacy bindings, default on Windows/Linux) and `Mac` (modelled on MindNode, avoids function keys, default on macOS) — pick one in Settings → Interface, or leave it on the per-platform default. Both are closed sets: nothing falls back to the other layout's keys, so the F1 shortcuts panel, toolbar tooltips, context menu, and status bar hints are always exactly what will fire. Single source of truth is `frontend_app/src/shortcuts/registry.ts`; `Mod` resolves to the current OS regardless of which layout is active, so a Mac user on the FreeMind layout still gets a working ⌘Z/⌘F/⌘S. 19 vitest cases cover the matcher on both platforms.
+- **Three UI density modes** — Lean, Standard, Large — in Settings → Interface. Driven by CSS custom properties and `data-density`/`data-toolbar-labels` attributes rather than per-component sizing logic. Lean mode collapses the toolbar to its essential buttons behind a "More actions" overflow menu; status bar and toolbar-label visibility can also be overridden independently of the preset.
+- **Dockable colour and icon trays.** Off by default (on by default at Large density); toggle and reposition (top/bottom/left/right) in Settings → Interface, or with `Ctrl/Cmd+Shift+1` (colour) and `Ctrl/Cmd+Shift+2` (icon). Right-click a swatch or icon to pin it as a favourite, shown ahead of the curated set; favourites persist per profile.
+- **A real native app menu**, replacing the debug-build-only "Inspect" menu. App (About, Settings, Hide, Quit), File (Save, Attach File, Close), Edit (Undo, Redo, Cut, Copy, Paste, Select All, Find), View (Lean mode, Colour/Icon tray, Status bar, Zoom, Fit to window, Focus mode), Node (Add child/sibling, Rename, Notes, Delete), and Help (Keyboard Shortcuts, plus Inspect in dev builds). Undo/Redo are custom items wired to the app's own tree-history rather than the OS-level predefined ones — those are unsupported on Windows/Linux and would be the wrong history even where they exist — while Cut/Copy/Paste/Select All use the real predefined items.
+- README "Keyboard Shortcuts" section, generated from the registry.
 
 ### Changed
+
+### Fixed
+- **⌘C/⌘V (and Cut/Select All) now work.** There was no Edit menu at all before this release, so macOS's own copy/paste never reached the app — the native app menu above is the actual fix; `PredefinedMenuItem`'s Cut/Copy/Paste/Select All wire directly into the OS.
 
 ### Removed
 

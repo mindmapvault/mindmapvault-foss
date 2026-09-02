@@ -110,16 +110,25 @@
   z-index: 10;
 }
 
-/* Vault identity — always visible, takes natural width */
+/* Vault identity — always visible, takes natural width. No vertical
+   divider on the trailing edge — nav never actually shares its row with
+   another strip that a divider would be separating it from, in any
+   density (Lean/Standard sit alone on one compact row; Large's own row
+   is full-width, split into left/center/right internally below). */
 .mm-toolbar-nav {
   display: flex;
   align-items: center;
   padding: 0 8px 0 12px;
-  height: var(--mm-toolbar-h);
   min-height: var(--mm-toolbar-h);
   gap: 8px;
   flex: 0 0 auto;
-  border-right: 1px solid var(--mm-toolbar-border);
+}
+/* Large: nav is its own full-width row (title bar), not just sized to its
+   content — center grows to fill the space between the fixed-width left
+   and right clusters, so the title sits truly centered and Theme/Settings
+   land flush against the right edge. */
+.mm-root[data-density="large"] .mm-toolbar-nav {
+  flex: 1 0 100%;
 }
 
 .mm-toolbar-left {
@@ -136,12 +145,23 @@
   min-width: 0;
   justify-content: center;
 }
+.mm-root[data-density="large"] .mm-toolbar-center {
+  flex: 1;
+}
+
+.mm-toolbar-nav-end {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
 
 /* Action icons — sit on the same row as nav when there is space;
    automatically wrap to a full-width second row when there is not.
    box-shadow creates a top separator only when right is on its own wrapped row. */
 .mm-toolbar-right {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-start;
   flex: 1 1 500px;
@@ -150,6 +170,15 @@
   min-height: var(--mm-toolbar-h);
   box-shadow: inset 0 1px 0 var(--mm-toolbar-border);
   position: relative;
+}
+/* Lean and Standard put nav and the action row on a single compact line
+   by design — they're never meant to look like two separate strips, so
+   the wrapped-row top separator above needs to disappear there rather
+   than showing up as a stray line. Large is the exception: its tab bar
+   sits between nav and the group row, so that boundary is a real, wanted
+   separator there. */
+.mm-root:not([data-density="large"]) .mm-toolbar-right {
+  box-shadow: none;
 }
 
 .mm-title-input {
@@ -221,18 +250,135 @@
 /* Toolbar labels: on by default at large density, toggleable independently
    via the Interface settings (data-toolbar-labels overrides the density-only
    default). */
-.mm-root[data-toolbar-labels="true"] .mm-toolbar-right button.mm-btn[data-label] {
+.mm-root[data-toolbar-labels="true"] .mm-toolbar button.mm-btn[data-label] {
   flex-direction: column;
   gap: 2px;
   height: auto;
   min-height: var(--mm-btn-h);
   padding: 4px 10px 5px;
 }
-.mm-root[data-toolbar-labels="true"] .mm-toolbar-right button.mm-btn[data-label]::after {
+.mm-root[data-toolbar-labels="true"] .mm-toolbar button.mm-btn[data-label]::after {
   content: attr(data-label);
   font-size: 9px;
   line-height: 1;
   opacity: 0.8;
+  order: 2;
+}
+
+/* Keyboard shortcut hints: an independent opt-in (Settings -> Interface),
+   works at every density regardless of whether names are also shown —
+   ::before (order:3, so it still sorts under the icon and any ::after
+   label) since a button can only carry one of each pseudo-element.
+   Gated on [data-label] rather than [data-shortcut] so every labelled
+   button reserves the same line. The extra min-height is explicit rather
+   than left to the ::before box's own size — an empty attr(data-shortcut)
+   (Settings, More, Back with no binding) collapses to zero height in
+   WebKit instead of keeping the line's height like a browser with real
+   content would, which is what left those buttons visibly shorter. */
+.mm-root[data-shortcuts="true"] .mm-toolbar button.mm-btn[data-label] {
+  flex-direction: column;
+  gap: 2px;
+  height: auto;
+  min-height: calc(var(--mm-btn-h) + 10px);
+  padding: 4px 10px 5px;
+}
+.mm-root[data-shortcuts="true"] .mm-toolbar button.mm-btn[data-label]::before {
+  content: attr(data-shortcut);
+  order: 3;
+  font-size: 8px;
+  font-family: var(--mm-mono, ui-monospace, monospace);
+  line-height: 1;
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+/* ── Toolbar ribbon groups ───────────────────────────────────────────────
+   Compact (lean) / Grouped (standard) / Ribbon (large) — see
+   docs/ui-mockups/toolbar-ribbon-concepts.html. Every density shares the
+   same group markup (caption + a row of buttons); only the caption's
+   visibility/position and the group's own divider change per density. */
+.mm-toolbar-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 2px 10px;
+}
+.mm-toolbar-group:not(:first-child) {
+  border-left: 1px solid var(--mm-toolbar-border);
+  margin-left: 2px;
+}
+.mm-toolbar-group-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mm-toolbar-group-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--mm-btn-text);
+  opacity: 0.55;
+  padding-left: 1px;
+  white-space: nowrap;
+}
+
+/* Compact (lean): no captions, and a group with nothing essential in it
+   disappears entirely rather than leaving an empty divider — the
+   essentials + "More actions" overflow are the whole story here. */
+.mm-root[data-density="lean"] .mm-toolbar-group-label {
+  display: none;
+}
+.mm-root[data-density="lean"] .mm-toolbar-group {
+  padding: 2px 4px;
+}
+.mm-root[data-density="lean"] .mm-toolbar-group:not(:has(.mm-essential)) {
+  display: none;
+}
+
+/* Ribbon (large): caption moves below the button row and centers under
+   it; buttons themselves already grow into icon-over-label chips via the
+   [data-toolbar-labels] rule above (large's own density default). */
+.mm-root[data-density="large"] .mm-toolbar-group {
+  flex-direction: column-reverse;
+  align-items: center;
+  padding: 2px 14px 6px;
+}
+.mm-root[data-density="large"] .mm-toolbar-group-label {
+  text-align: center;
+}
+
+/* ── Ribbon tab bar (large density only) ─────────────────────────────── */
+.mm-ribbon-tabs {
+  display: flex;
+  flex: 1 0 100%;
+  gap: 2px;
+  padding: 6px 14px 0;
+  background: var(--mm-toolbar-bg);
+  border-bottom: 1px solid var(--mm-toolbar-border);
+}
+.mm-ribbon-tab {
+  all: unset;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--mm-btn-text);
+  padding: 7px 14px 9px;
+  border-radius: 6px 6px 0 0;
+  transition: background 0.12s, color 0.12s;
+}
+.mm-ribbon-tab:hover {
+  color: var(--mm-btn-text-hover);
+}
+.mm-ribbon-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.mm-ribbon-tab--active {
+  color: var(--text-primary);
+  background: var(--mm-toolbar-bg);
+  box-shadow: inset 0 2px 0 var(--accent);
 }
 .mm-btn:hover:not(:disabled) {
   background: var(--mm-btn-hover);
@@ -278,6 +424,13 @@
   width: 32px;
   padding: 0;
   justify-content: center;
+}
+/* At large density every button grows to fit an icon + label (see the
+   [data-toolbar-labels="true"] rule above) — the fixed 32px swatch size
+   above only applies to the compact, icon-only sizing. */
+.mm-root[data-toolbar-labels="true"] .mm-toolbar-right button.mm-btn--color[data-label] {
+  width: auto;
+  padding: 4px 10px 5px;
 }
 
 .mm-btn-icon {
@@ -642,12 +795,16 @@
   z-index: 300;
   min-width: 200px;
   max-width: 280px;
+  /* Last-resort cap for a window shorter than the menu — the JS that places
+     the menu keeps it inside the viewport, and this makes the remainder
+     scroll instead of spilling off the bottom. */
+  max-height: calc(100vh - 16px);
   border-radius: 10px;
   background: var(--mm-notes-bg);
   border: 1px solid var(--mm-notes-border);
   box-shadow: 0 8px 30px rgba(0,0,0,0.35);
   padding: 4px 0;
-  overflow: hidden;
+  overflow: hidden auto;
   animation: mm-ctx-in 0.1s ease;
 }
 @keyframes mm-ctx-in {
@@ -990,6 +1147,34 @@
 .mm-tray-icon:hover { background: var(--mm-btn-hover); }
 .mm-tray-icon.active { background: var(--accent); color: #fff; }
 .mm-tray-icon--clear svg { width: 12px; height: 12px; }
+
+.mm-tray-search { flex-shrink: 0; }
+.mm-tray--horizontal .mm-tray-search { width: 100px; }
+.mm-tray--vertical .mm-tray-search { width: 100%; }
+.mm-tray-search input {
+  width: 100%;
+  height: 20px;
+  box-sizing: border-box;
+  border-radius: 5px;
+  border: 1px solid var(--mm-btn-border);
+  background: var(--mm-btn-bg);
+  color: var(--mm-btn-text);
+  font-size: 10.5px;
+  padding: 0 6px;
+  outline: none;
+  font-family: inherit;
+}
+.mm-tray-search input:focus { border-color: var(--accent); }
+.mm-tray-search input::placeholder { color: var(--mm-btn-text); opacity: 0.6; }
+
+.mm-tray-empty {
+  font-size: 10.5px;
+  color: var(--mm-btn-text);
+  opacity: 0.6;
+  padding: 4px 2px;
+  white-space: nowrap;
+}
+.mm-tray--vertical .mm-tray-empty { white-space: normal; text-align: center; }
 
 .mm-canvas-wrap {
   flex: 1;

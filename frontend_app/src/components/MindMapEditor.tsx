@@ -24,7 +24,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import type { MindMapTree, MindMapTreeNode, NodeAttachmentRef, UrlEntry } from '../types';
@@ -71,7 +71,7 @@ import { createNodeImageGlyph, type NodeImageGlyph } from '../utils/filePreview'
 import { useEffectiveKeyboardLayout, useUiStore, useResolvedDensity, type TrayPosition } from '../store/ui';
 import { ColorTray } from './ColorTray';
 import { IconTray } from './IconTray';
-import { matchShortcut, formatShortcut, SHORTCUTS } from '../shortcuts/registry';
+import { matchShortcut, formatShortcut, formatButtonShortcut, SHORTCUTS } from '../shortcuts/registry';
 import { isMac } from '../platform/isMac';
 import './MindMapEditor.css';
 
@@ -85,6 +85,20 @@ interface DragState {
   currentX: number;
   currentY: number;
   moved: boolean;
+}
+
+// A captioned cluster of toolbar buttons — Standard density merges some of
+// these together (Content+Files, Arrange+Find, Appearance+Settings) that
+// Large's ribbon tabs keep separate, so the two densities build different
+// group boundaries around the same button elements rather than sharing one
+// fixed layout.
+function toolbarGroup(label: string, children: ReactNode, ribbonTab?: string) {
+  return (
+    <div className="mm-toolbar-group" data-ribbon-tab={ribbonTab}>
+      <span className="mm-toolbar-group-label">{label}</span>
+      <div className="mm-toolbar-group-btns">{children}</div>
+    </div>
+  );
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -104,8 +118,9 @@ export function DesktopMindMapEditor({
   const densityPreset = useUiStore((s) => s.densityPreset);
   const setDensityPreset = useUiStore((s) => s.setDensityPreset);
   const setStatusBarOverride = useUiStore((s) => s.setStatusBarOverride);
-  const { statusBarVisible, toolbarLabels, toolbarMode } = useResolvedDensity();
+  const { statusBarVisible, toolbarLabels, buttonShortcuts: buttonShortcutsVisible, toolbarMode } = useResolvedDensity();
   const [showToolbarOverflow, setShowToolbarOverflow] = useState(false);
+  const [activeRibbonTab, setActiveRibbonTab] = useState<'home' | 'insert' | 'view' | 'export'>('home');
   const colourTrayEnabled = useUiStore((s) => s.colourTrayEnabled);
   const colourTrayPosition = useUiStore((s) => s.colourTrayPosition);
   const setColourTray = useUiStore((s) => s.setColourTray);
@@ -195,6 +210,35 @@ export function DesktopMindMapEditor({
 
   // ── Export menu ────────────────────────────────────────────────────────────
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const [exportMenuMaxH, setExportMenuMaxH] = useState<number | null>(null);
+  const [exportMenuAlign, setExportMenuAlign] = useState<'left' | 'right'>('right');
+
+  // Where the Export button lands moves with the density — the Large ribbon
+  // puts it low and hard against the left edge, the Lean icon row high and to
+  // the right — so both the room below it and the side it can open towards
+  // have to be measured rather than guessed at in CSS.
+  useLayoutEffect(() => {
+    if (!showExportMenu) { setExportMenuMaxH(null); setExportMenuAlign('right'); return; }
+    const measure = () => {
+      const el = exportMenuRef.current;
+      const anchor = el?.parentElement;
+      if (!el || !anchor) return;
+      const MARGIN = 8;
+      setExportMenuMaxH(Math.max(120, window.innerHeight - el.getBoundingClientRect().top - 12));
+      // Right-aligned by default so it tucks under the toolbar's edge; flip to
+      // left-aligned only when that would hang the menu off the left of the
+      // window and opening rightwards actually fits.
+      const anchorRect = anchor.getBoundingClientRect();
+      const width = el.offsetWidth;
+      const overflowsLeft = anchorRect.right - width < MARGIN;
+      const rightwardsFits = anchorRect.left + width <= window.innerWidth - MARGIN;
+      setExportMenuAlign(overflowsLeft && rightwardsFits ? 'left' : 'right');
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [showExportMenu]);
 
   // ── Voice recording ────────────────────────────────────────────────────────
   const [mobileRecordingOpen, setMobileRecordingOpen] = useState(false);
@@ -216,6 +260,25 @@ export function DesktopMindMapEditor({
 
   // ── Context menu ───────────────────────────────────────────────────────────
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+  const [contextMenuPos, setContextMenuPos] = useState<{ left: number; top: number } | null>(null);
+
+  // The menu is long and the right-click can land anywhere, so the raw click
+  // point routinely pushes its bottom half past the window edge. Measure it
+  // once it is up and pull it back inside — shifting it up or left rather than
+  // letting the entries fall off; a menu taller than the window itself is
+  // capped by `max-height` in the CSS and scrolls.
+  useLayoutEffect(() => {
+    if (!contextMenu) { setContextMenuPos(null); return; }
+    const el = contextMenuRef.current;
+    if (!el) return;
+    const MARGIN = 8;
+    const { width, height } = el.getBoundingClientRect();
+    setContextMenuPos({
+      left: Math.max(MARGIN, Math.min(contextMenu.x, window.innerWidth - width - MARGIN)),
+      top: Math.max(MARGIN, Math.min(contextMenu.y, window.innerHeight - height - MARGIN)),
+    });
+  }, [contextMenu]);
 
   // ── Drag-and-drop ──────────────────────────────────────────────────────────
   const [isDragging, setIsDragging] = useState(false);
@@ -1307,7 +1370,9 @@ export function DesktopMindMapEditor({
     }
     if (!selectedId) return;
 
-    if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    // Alt+Arrow is reserved for zoom (FreeMind's real Alt+Up/Alt+Down binding)
+    // and falls through to the registry dispatch below instead.
+    if (!e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
       e.preventDefault();
       const box = layout[selectedId];
       if (!box) return;
@@ -1427,6 +1492,8 @@ export function DesktopMindMapEditor({
       'find.search': () => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 50); },
       'view.zoomIn': () => { setZoom((z) => Math.min(3, z + 0.15)); },
       'view.zoomOut': () => { setZoom((z) => Math.max(0.3, z - 0.15)); },
+      'view.zoomFit': () => fitView(),
+      'nav.back': () => { onBack?.(); },
       'view.colourTray': () => {
         setColourTray(!colourTrayEnabled);
         toast('view.colourTray', colourTrayEnabled ? 'Colour tray off' : 'Colour tray on');
@@ -2037,12 +2104,11 @@ export function DesktopMindMapEditor({
     );
   };
 
-  const renderConnections = useCallback((node: MindMapTreeNode, inheritedColor?: string): JSX.Element[] => {
+  const renderConnections = useCallback((node: MindMapTreeNode): JSX.Element[] => {
     const paths: JSX.Element[] = [];
     if (node.collapsed) return paths;
     const pBox = layout[node.id];
     if (!pBox) return paths;
-    const nodeColor = node.color ?? inheritedColor;
     for (const ch of node.children) {
       if (node.id === 'root') {
         const isLeftSide = ch.side === 'left';
@@ -2058,7 +2124,10 @@ export function DesktopMindMapEditor({
       const y1 = pBox.y + pBox.h / 2;
       const x2 = childOnLeft ? cBox.x + cBox.w : cBox.x;
       const y2 = cBox.y + cBox.h / 2;
-      const branchColor = ch.color ?? nodeColor;
+      // A node's colour paints only the line coming *into* it. The lines
+      // going out to its children stay on the default until a child sets a
+      // colour of its own — colour no longer cascades down the subtree.
+      const branchColor = ch.color;
       const faded = focusMode && focusedIds.size > 0 && !focusedIds.has(node.id) && !focusedIds.has(ch.id);
       paths.push(
         <path
@@ -2073,7 +2142,7 @@ export function DesktopMindMapEditor({
           opacity={faded ? 0.2 : 1}
         />,
       );
-      paths.push(...renderConnections(ch, branchColor));
+      paths.push(...renderConnections(ch));
     }
     return paths;
   }, [layout, focusMode, focusedIds, rootLeftCollapsed, rootRightCollapsed]);
@@ -2171,7 +2240,7 @@ export function DesktopMindMapEditor({
     }, 140);
   }, [cancelHoverPopupClose, hoveringNotePopup]);
 
-  const renderNodes = useCallback((node: MindMapTreeNode, depth = 0, inheritedColor?: string): JSX.Element[] => {
+  const renderNodes = useCallback((node: MindMapTreeNode, depth = 0): JSX.Element[] => {
     const box = layout[node.id];
     if (!box) return [];
     const isRoot = depth === 0;
@@ -2179,12 +2248,19 @@ export function DesktopMindMapEditor({
     const isEditing = node.id === editingId;
     const isDrop = node.id === dropTargetId;
     const ownColor = node.color ?? null;
-    // Only the node's own explicit color fills the bubble.
-    // Inherited color is passed down solely for connection lines.
+    // Only the node's own explicit color fills the bubble — and, in
+    // renderConnections, the one line coming into it. Nothing is inherited.
     const rx = isRoot ? 18 : 8;
 
     const fillColor = ownColor ?? (isRoot ? 'var(--mm-root-fill)' : 'var(--mm-node-fill)');
-    const strokeColor = isDrop ? '#22c55e' : (ownColor ?? (isRoot ? 'var(--mm-root-stroke)' : isSelected ? 'var(--accent)' : 'var(--mm-node-stroke)'));
+    // Selection has to win over the node's own colour and over the root's
+    // stroke: both used to be checked first, so a coloured node drew its
+    // border in the same colour as its fill and selecting it showed nothing.
+    const strokeColor = isDrop
+      ? '#22c55e'
+      : isSelected
+        ? 'var(--accent)'
+        : (ownColor ?? (isRoot ? 'var(--mm-root-stroke)' : 'var(--mm-node-stroke)'));
     const textColor = ownColor ? '#ffffff' : (isRoot ? 'var(--mm-root-text)' : 'var(--mm-node-text)');
 
     const lines = getVisibleNodeTextLines(node.text);
@@ -2463,8 +2539,6 @@ export function DesktopMindMapEditor({
       </g>,
     ];
 
-    // Pass inherited color for connections: own color takes priority, otherwise keep propagating
-    const colorForChildren = ownColor ?? inheritedColor;
     if (!node.collapsed) {
       for (const ch of node.children) {
         if (node.id === 'root') {
@@ -2472,7 +2546,7 @@ export function DesktopMindMapEditor({
           if (isLeftSide && rootLeftCollapsed) continue;
           if (!isLeftSide && rootRightCollapsed) continue;
         }
-        elems.push(...renderNodes(ch, depth + 1, colorForChildren));
+        elems.push(...renderNodes(ch, depth + 1));
       }
     }
     return elems;
@@ -2526,8 +2600,46 @@ export function DesktopMindMapEditor({
   //  RENDER
   // ══════════════════════════════════════════════════════════════════════════
 
+  // Shared between the nav row (lean/standard) and the Home tab's File
+  // group (large) — see the toolbar JSX below.
+  const backBtn = onBack && (
+    <button className="mm-btn" data-label="Back" data-shortcut={formatButtonShortcut('nav.back', keyboardLayout)} onClick={onBack} title={`Back to vaults (${formatShortcut('nav.back', keyboardLayout)})`} style={{ flexShrink: 0 }}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/></svg>
+    </button>
+  );
+  const saveBtn = (
+    <button
+      className={`mm-btn mm-save-btn${isDirty ? ' mm-save-btn--dirty' : ''}${saving ? ' mm-save-btn--saving' : ''}${error ? ' mm-save-btn--err' : ''}${saveMsg ? ' mm-save-btn--ok' : ''}`}
+      data-label="Save"
+      data-shortcut={formatButtonShortcut('file.save', keyboardLayout)}
+      onClick={handleSave}
+      disabled={saving || (!isDirty && !error)}
+      title={saving ? 'Saving…' : error ? error : isDirty ? `Unsaved changes — click to save (${formatShortcut('file.save', keyboardLayout)})` : 'All changes saved'}
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+        <polyline points="17 21 17 13 7 13 7 21" />
+        <polyline points="7 3 7 8 15 8" />
+      </svg>
+    </button>
+  );
+  const themeBtn = (
+    <button
+      className="mm-btn"
+      data-label="Theme"
+      onClick={toggleThemeMode}
+      title={themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+    >
+      {themeMode === 'dark' ? (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      ) : (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      )}
+    </button>
+  );
+
   return (
-    <div className="mm-root" data-density={densityPreset} data-toolbar-labels={toolbarLabels} ref={containerRef}>
+    <div className="mm-root" data-density={densityPreset} data-toolbar-labels={toolbarLabels} data-shortcuts={buttonShortcutsVisible} ref={containerRef}>
       {/* ── Mobile top bar ──────────────────────────────────────────────── */}
       {isMobile && (
         <div className="mm-mobile-topbar">
@@ -2563,40 +2675,39 @@ export function DesktopMindMapEditor({
       {!isMobile && <div className="mm-toolbar">
         <div className="mm-toolbar-nav">
           <div className="mm-toolbar-left">
-            {onBack && (
-              <button className="mm-btn" onClick={onBack} title="Back to vaults" style={{ padding: '0 8px', flexShrink: 0 }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/></svg>
-              </button>
-            )}
-            <button
-              className={`mm-btn mm-save-btn${isDirty ? ' mm-save-btn--dirty' : ''}${saving ? ' mm-save-btn--saving' : ''}${error ? ' mm-save-btn--err' : ''}${saveMsg ? ' mm-save-btn--ok' : ''}`}
-              onClick={handleSave}
-              disabled={saving || (!isDirty && !error)}
-              title={saving ? 'Saving…' : error ? error : isDirty ? `Unsaved changes — click to save (${formatShortcut('file.save', keyboardLayout)})` : 'All changes saved'}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
-                <polyline points="17 21 17 13 7 13 7 21" />
-                <polyline points="7 3 7 8 15 8" />
-              </svg>
-            </button>
+            {backBtn}
+            {saveBtn}
           </div>
           <div className="mm-toolbar-center">
             <input ref={titleInputRef} className="mm-title-input" value={title} onChange={(e) => onTitleChange(e.target.value)} placeholder="Untitled" style={{ textAlign: 'center' }} />
-            {versionLabel && (
-              <span
-                style={{ fontSize: 11, color: 'var(--mm-statusbar-text, #94a3b8)', flexShrink: 0, whiteSpace: 'nowrap', cursor: versionTooltip ? 'help' : 'default' }}
-                title={versionTooltip}
-              >
-                {versionLabel}
-              </span>
-            )}
             {onRenameTitle && titleChanged && (
               <button className="mm-btn" onClick={onRenameTitle} disabled={renamingTitle} title="Rename vault (title only)"
                 style={{ padding: '0 8px', flexShrink: 0, color: 'var(--accent)', border: '1px solid var(--accent)' }}>{renamingTitle ? '…' : 'Rename'}</button>
             )}
           </div>
+          {densityPreset === 'large' && (
+            <div className="mm-toolbar-nav-end">
+              {themeBtn}
+              <ThemePanel toolbarButton />
+            </div>
+          )}
         </div>
+        {densityPreset === 'large' && (
+          <div className="mm-ribbon-tabs" role="tablist" aria-label="Toolbar tabs">
+            {([['home', 'Home'], ['insert', 'Insert'], ['view', 'View'], ['export', 'Export']] as const).map(([tab, label]) => (
+              <button
+                key={tab}
+                role="tab"
+                type="button"
+                aria-selected={activeRibbonTab === tab}
+                className={`mm-ribbon-tab${activeRibbonTab === tab ? ' mm-ribbon-tab--active' : ''}`}
+                onClick={() => setActiveRibbonTab(tab)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="mm-toolbar-right">
           <input
             ref={nodeAttachmentInputRef}
@@ -2620,118 +2731,184 @@ export function DesktopMindMapEditor({
               e.currentTarget.value = '';
             }}
           />
-          <button className="mm-btn mm-essential" data-label="Undo" onClick={undo} title={`Undo (${formatShortcut('edit.undo', keyboardLayout)})`} disabled={historyIdx <= 0}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a6 6 0 010 12H9m-6-12l4-4m-4 4l4 4"/></svg></button>
-          <button className="mm-btn mm-essential" data-label="Redo" onClick={redo} title={`Redo (${formatShortcut('edit.redo', keyboardLayout)})`} disabled={historyIdx >= history.length - 1}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 10H11a6 6 0 000 12h4m6-12l-4-4m4 4l-4 4"/></svg></button>
-          <div className="mm-toolbar-sep" />
-          <button className="mm-btn mm-essential" data-label="Child" onClick={() => addChild(selectedId)} title={`Add child (${formatShortcut('node.addChild', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg></button>
-          <button className="mm-btn mm-essential" data-label="Sibling" onClick={() => addSibling(selectedId)} title={`Add sibling (${formatShortcut('node.addSibling', keyboardLayout)})`} disabled={selectedId === 'root'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 5H7m0 0v12m0-12l-3 3m3-3l3 3"/></svg></button>
-          <button className="mm-btn mm-btn--danger mm-essential" data-label="Delete" onClick={() => hasBulk ? bulkDelete() : deleteNode(selectedId)} title={`Delete (${formatShortcut('node.delete', keyboardLayout)})`} disabled={selectedId === 'root' && !hasBulk}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
-          <div className="mm-toolbar-sep" />
-          <button className="mm-btn" data-label="Checkbox" onClick={() => { hasBulk ? bulkToggleCheckbox() : toggleCheckbox(selectedId); }} title={`Checkbox (${formatShortcut('node.checkbox', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></button>
-          <button className="mm-btn" data-label="Progress" onClick={() => { hasBulk ? bulkCycleProgress() : cycleProgress(selectedId); }} title={`Progress (${formatShortcut('node.progress', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 017.07 17.07" strokeLinecap="round"/></svg></button>
-          <div style={{ position: 'relative' }}>
-            <button className="mm-btn mm-btn--color" data-label="Colour" onClick={() => setShowColorPicker((v) => !v)} title={`Color (${formatShortcut('node.colour', keyboardLayout)})`} style={{ background: selNode?.color ?? 'transparent' }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
-            </button>
-            <MindMapColorPicker open={showColorPicker} currentColor={selNode?.color ?? null} onSelect={(c) => { hasBulk ? bulkSetColor(c) : setNodeColor(selectedId, c); setShowColorPicker(false); }} onClose={() => setShowColorPicker(false)} showToast={showToast} />
-          </div>
-          <div style={{ position: 'relative' }}>
-            <button className="mm-btn" data-label="Icons" onClick={() => setShowIconPicker((v) => !v)} title={`Icons (${formatShortcut('node.icons', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></button>
-            <MindMapIconPicker open={showIconPicker} currentIcons={selNode?.icons ?? []} onSelect={(name: string | null) => hasBulk ? bulkSetIcon(name) : setNodeIcon(selectedId, name)} onClose={() => setShowIconPicker(false)} showToast={showToast} />
-          </div>
-          <button
-            data-label="Notes"
-            className={`mm-btn mm-btn--notes mm-essential${selNodeAttachmentCount > 0 ? ' mm-btn--notes-has-files' : ''}`}
-            onClick={() => { openNotes(selectedId); setNotesOpen(true); }}
-            title={selNodeAttachmentCount > 0 ? `Notes (${formatShortcut('node.notesToggle', keyboardLayout)}) · ${selNodeAttachmentLabel}${selNodeAttachmentNames ? `: ${selNodeAttachmentNames}` : ''}` : `Notes (${formatShortcut('node.notesToggle', keyboardLayout)})`}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-            {selNodeAttachmentCount > 0 && (
-              <span className="mm-btn-notes-meta">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21.44 11.05l-9.19 9.19a6 6 0 11-8.49-8.49l9.2-9.19a4 4 0 015.65 5.66l-9.2 9.19a2 2 0 11-2.82-2.82l8.48-8.48"/></svg>
-                <span>{selNodeAttachmentCount}</span>
-              </span>
-            )}
-          </button>
-          <button className="mm-btn" data-label="Dates" onClick={() => setShowDateDialog(true)} title={`Dates (${formatShortcut('node.dates', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
-          <button className={`mm-btn${showTagDialog ? ' mm-btn--active' : ''}`} data-label="Tags" onClick={() => setShowTagDialog((v) => !v)} title={`Tags (${formatShortcut('node.labels', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5l8.5 8.5a2 2 0 010 2.83l-5.17 5.17a2 2 0 01-2.83 0L3 10V5a2 2 0 012-2z"/></svg></button>
-          <div className="mm-toolbar-sep" />
-          <button className="mm-btn" data-label="Zoom in" onClick={() => setZoom((z) => Math.min(3, z + 0.15))} title={`Zoom in (${formatShortcut('view.zoomIn', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 8v6m-3-3h6"/></svg></button>
-          <button className="mm-btn" data-label="Zoom out" onClick={() => setZoom((z) => Math.max(0.3, z - 0.15))} title={`Zoom out (${formatShortcut('view.zoomOut', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M8 11h6"/></svg></button>
-          <button className="mm-btn" data-label="Fit" onClick={fitView} title="Fit view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/></svg></button>
-          <button className="mm-btn" data-label="Align" onClick={() => autoAlignSubtree(selectedId)} title={`${selectedId === 'root' ? 'Auto-align all nodes' : 'Auto-align subtree'} (${formatShortcut('node.autoAlign', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M3 12h12M3 18h8"/></svg></button>
-          <button className={`mm-btn${focusMode ? ' mm-btn--active' : ''}`} data-label="Focus" onClick={() => { setFocusMode((v) => { if (!v) setFocusAnchorId(selectedId); return !v; }); }} title={`Focus mode (${formatShortcut('view.focusMode', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2m8.66-17.66l-1.41 1.41M4.75 19.25l-1.41 1.41M23 12h-2M3 12H1m17.66 7.66l-1.41-1.41M4.75 4.75L3.34 3.34"/></svg></button>
-          <button className="mm-btn mm-essential" data-label="Search" onClick={() => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 50); }} title={`Search (${formatShortcut('find.search', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
-          <div className="mm-toolbar-sep" />
-          <button className="mm-btn" data-label="Shortcuts" onClick={() => setShowShortcuts((v) => !v)} title={`Shortcuts (${formatShortcut('find.shortcuts', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg></button>
-          <button
-            className="mm-btn"
-            data-label="Attach"
-            onClick={() => nodeAttachmentInputRef.current?.click()}
-            title={`Attach encrypted files to selected node (${formatShortcut('node.attachFile', keyboardLayout)})`}
-            disabled={!onNodeFileDrop || selectedId === 'root'}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21.44 11.05l-9.19 9.19a6 6 0 11-8.49-8.49l9.2-9.19a4 4 0 015.65 5.66l-9.2 9.19a2 2 0 11-2.82-2.82l8.48-8.48"/></svg>
-          </button>
-          {onExportMarkdown && <div className="mm-toolbar-sep" />}
-          {onExportMarkdown && (
-            <div style={{ position: 'relative' }}>
-              <button className="mm-btn" data-label="Export" onClick={() => setShowExportMenu((v) => !v)} title="Export">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-              </button>
-              {showExportMenu && (
-                <div
-                  style={{ position: 'absolute', right: 0, top: '100%', zIndex: 300, background: 'var(--mm-node-fill, #1e293b)', border: '1px solid var(--mm-node-stroke, #334155)', borderRadius: 8, padding: '4px 0', minWidth: 150, boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }}
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  {onExportMarkdown && (
-                    <button className="mm-context-item" onClick={() => { onExportMarkdown({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
-                      Markdown (.md)
-                    </button>
-                  )}
-                  {onExportFreemind && (
-                    <button className="mm-context-item" onClick={() => { onExportFreemind({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
-                      FreeMind (.mm)
-                    </button>
-                  )}
-                  {onExportFreeplane && (
-                    <button className="mm-context-item" onClick={() => { onExportFreeplane({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
-                      FreePlane (.mm)
-                    </button>
-                  )}
-                  {onExportWisemapping && (
-                    <button className="mm-context-item" onClick={() => { onExportWisemapping({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
-                      WiseMapping (.wxml)
-                    </button>
-                  )}
-                  {onExportXmind && (
-                    <button className="mm-context-item" onClick={() => { onExportXmind({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
-                      XMind (.xmind)
-                    </button>
-                  )}
-                  <button className="mm-context-item" onClick={() => { exportPng(); setShowExportMenu(false); }}>
-                    PNG image
-                  </button>
-                  <button className="mm-context-item" onClick={() => { exportPdf(); setShowExportMenu(false); }}>
-                    PDF document
-                  </button>
-                </div>
-              )}
+          {(densityPreset !== 'large' || activeRibbonTab === 'home') && (
+          <div className="mm-toolbar-group" data-ribbon-tab="home">
+            <span className="mm-toolbar-group-label">Edit</span>
+            <div className="mm-toolbar-group-btns">
+              <button className="mm-btn mm-essential" data-label="Undo" data-shortcut={formatButtonShortcut('edit.undo', keyboardLayout)} onClick={undo} title={`Undo (${formatShortcut('edit.undo', keyboardLayout)})`} disabled={historyIdx <= 0}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a6 6 0 010 12H9m-6-12l4-4m-4 4l4 4"/></svg></button>
+              <button className="mm-btn mm-essential" data-label="Redo" data-shortcut={formatButtonShortcut('edit.redo', keyboardLayout)} onClick={redo} title={`Redo (${formatShortcut('edit.redo', keyboardLayout)})`} disabled={historyIdx >= history.length - 1}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 10H11a6 6 0 000 12h4m6-12l-4-4m4 4l-4 4"/></svg></button>
             </div>
+          </div>
           )}
-          <button
-            className="mm-btn"
-            data-label="Theme"
-            onClick={toggleThemeMode}
-            title={themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            {themeMode === 'dark' ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-            )}
-          </button>
-          <ThemePanel />
+          {(densityPreset !== 'large' || activeRibbonTab === 'home') && (
+          <div className="mm-toolbar-group" data-ribbon-tab="home">
+            <span className="mm-toolbar-group-label">Node</span>
+            <div className="mm-toolbar-group-btns">
+              <button className="mm-btn mm-essential" data-label="Child" data-shortcut={formatButtonShortcut('node.addChild', keyboardLayout)} onClick={() => addChild(selectedId)} title={`Add child (${formatShortcut('node.addChild', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg></button>
+              <button className="mm-btn mm-essential" data-label="Sibling" data-shortcut={formatButtonShortcut('node.addSibling', keyboardLayout)} onClick={() => addSibling(selectedId)} title={`Add sibling (${formatShortcut('node.addSibling', keyboardLayout)})`} disabled={selectedId === 'root'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 5H7m0 0v12m0-12l-3 3m3-3l3 3"/></svg></button>
+              <button className="mm-btn mm-btn--danger mm-essential" data-label="Delete" data-shortcut={formatButtonShortcut('node.delete', keyboardLayout)} onClick={() => hasBulk ? bulkDelete() : deleteNode(selectedId)} title={`Delete (${formatShortcut('node.delete', keyboardLayout)})`} disabled={selectedId === 'root' && !hasBulk}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+            </div>
+          </div>
+          )}
+          {(densityPreset !== 'large' || activeRibbonTab === 'home') && (
+          <div className="mm-toolbar-group" data-ribbon-tab="home">
+            <span className="mm-toolbar-group-label">Format</span>
+            <div className="mm-toolbar-group-btns">
+              <button className="mm-btn" data-label="Checkbox" data-shortcut={formatButtonShortcut('node.checkbox', keyboardLayout)} onClick={() => { hasBulk ? bulkToggleCheckbox() : toggleCheckbox(selectedId); }} title={`Checkbox (${formatShortcut('node.checkbox', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></button>
+              <button className="mm-btn" data-label="Progress" data-shortcut={formatButtonShortcut('node.progress', keyboardLayout)} onClick={() => { hasBulk ? bulkCycleProgress() : cycleProgress(selectedId); }} title={`Progress (${formatShortcut('node.progress', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 017.07 17.07" strokeLinecap="round"/></svg></button>
+              <div style={{ position: 'relative' }}>
+                <button className="mm-btn mm-btn--color" data-label="Colour" data-shortcut={formatButtonShortcut('node.colour', keyboardLayout)} onClick={() => setShowColorPicker((v) => !v)} title={`Color (${formatShortcut('node.colour', keyboardLayout)})`} style={{ background: selNode?.color ?? 'transparent' }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
+                </button>
+                <MindMapColorPicker open={showColorPicker} currentColor={selNode?.color ?? null} onSelect={(c) => { hasBulk ? bulkSetColor(c) : setNodeColor(selectedId, c); setShowColorPicker(false); }} onClose={() => setShowColorPicker(false)} showToast={showToast} />
+              </div>
+              <div style={{ position: 'relative' }}>
+                <button className="mm-btn" data-label="Icons" data-shortcut={formatButtonShortcut('node.icons', keyboardLayout)} onClick={() => setShowIconPicker((v) => !v)} title={`Icons (${formatShortcut('node.icons', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></button>
+                <MindMapIconPicker open={showIconPicker} currentIcons={selNode?.icons ?? []} onSelect={(name: string | null) => hasBulk ? bulkSetIcon(name) : setNodeIcon(selectedId, name)} onClose={() => setShowIconPicker(false)} showToast={showToast} />
+              </div>
+            </div>
+          </div>
+          )}
+          {(() => {
+            const notesBtn = (
+              <button
+                key="notes"
+                data-label="Notes"
+                data-shortcut={formatButtonShortcut('node.notesToggle', keyboardLayout)}
+                className={`mm-btn mm-btn--notes mm-essential${selNodeAttachmentCount > 0 ? ' mm-btn--notes-has-files' : ''}`}
+                onClick={() => { openNotes(selectedId); setNotesOpen(true); }}
+                title={selNodeAttachmentCount > 0 ? `Notes (${formatShortcut('node.notesToggle', keyboardLayout)}) · ${selNodeAttachmentLabel}${selNodeAttachmentNames ? `: ${selNodeAttachmentNames}` : ''}` : `Notes (${formatShortcut('node.notesToggle', keyboardLayout)})`}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                {selNodeAttachmentCount > 0 && (
+                  <span className="mm-btn-notes-meta">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21.44 11.05l-9.19 9.19a6 6 0 11-8.49-8.49l9.2-9.19a4 4 0 015.65 5.66l-9.2 9.19a2 2 0 11-2.82-2.82l8.48-8.48"/></svg>
+                    <span>{selNodeAttachmentCount}</span>
+                  </span>
+                )}
+              </button>
+            );
+            const datesBtn = <button key="dates" className="mm-btn" data-label="Dates" data-shortcut={formatButtonShortcut('node.dates', keyboardLayout)} onClick={() => setShowDateDialog(true)} title={`Dates (${formatShortcut('node.dates', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>;
+            const tagsBtn = <button key="tags" className={`mm-btn${showTagDialog ? ' mm-btn--active' : ''}`} data-label="Tags" data-shortcut={formatButtonShortcut('node.labels', keyboardLayout)} onClick={() => setShowTagDialog((v) => !v)} title={`Tags (${formatShortcut('node.labels', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5l8.5 8.5a2 2 0 010 2.83l-5.17 5.17a2 2 0 01-2.83 0L3 10V5a2 2 0 012-2z"/></svg></button>;
+            const attachBtn = (
+              <button
+                key="attach"
+                className="mm-btn"
+                data-label="Attach"
+                data-shortcut={formatButtonShortcut('node.attachFile', keyboardLayout)}
+                onClick={() => nodeAttachmentInputRef.current?.click()}
+                title={`Attach encrypted files to selected node (${formatShortcut('node.attachFile', keyboardLayout)})`}
+                disabled={!onNodeFileDrop || selectedId === 'root'}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21.44 11.05l-9.19 9.19a6 6 0 11-8.49-8.49l9.2-9.19a4 4 0 015.65 5.66l-9.2 9.19a2 2 0 11-2.82-2.82l8.48-8.48"/></svg>
+              </button>
+            );
+            const alignBtn = <button key="align" className="mm-btn" data-label="Align" data-shortcut={formatButtonShortcut('node.autoAlign', keyboardLayout)} onClick={() => autoAlignSubtree(selectedId)} title={`${selectedId === 'root' ? 'Auto-align all nodes' : 'Auto-align subtree'} (${formatShortcut('node.autoAlign', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M3 12h12M3 18h8"/></svg></button>;
+            const focusBtn = <button key="focus" className={`mm-btn${focusMode ? ' mm-btn--active' : ''}`} data-label="Focus" data-shortcut={formatButtonShortcut('view.focusMode', keyboardLayout)} onClick={() => { setFocusMode((v) => { if (!v) setFocusAnchorId(selectedId); return !v; }); }} title={`Focus mode (${formatShortcut('view.focusMode', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2m8.66-17.66l-1.41 1.41M4.75 19.25l-1.41 1.41M23 12h-2M3 12H1m17.66 7.66l-1.41-1.41M4.75 4.75L3.34 3.34"/></svg></button>;
+            const searchBtn = <button key="search" className="mm-btn mm-essential" data-label="Search" data-shortcut={formatButtonShortcut('find.search', keyboardLayout)} onClick={() => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 50); }} title={`Search (${formatShortcut('find.search', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>;
+            const shortcutsBtn = <button key="shortcuts" className="mm-btn" data-label="Shortcuts" data-shortcut={formatButtonShortcut('find.shortcuts', keyboardLayout)} onClick={() => setShowShortcuts((v) => !v)} title={`Shortcuts (${formatShortcut('find.shortcuts', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg></button>;
+            const zoomGroup = (densityPreset !== 'large' || activeRibbonTab === 'view') && toolbarGroup('Zoom', <>
+              <button className="mm-btn" data-label="Zoom in" data-shortcut={formatButtonShortcut('view.zoomIn', keyboardLayout)} onClick={() => setZoom((z) => Math.min(3, z + 0.15))} title={`Zoom in (${formatShortcut('view.zoomIn', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 8v6m-3-3h6"/></svg></button>
+              <button className="mm-btn" data-label="Zoom out" data-shortcut={formatButtonShortcut('view.zoomOut', keyboardLayout)} onClick={() => setZoom((z) => Math.max(0.3, z - 0.15))} title={`Zoom out (${formatShortcut('view.zoomOut', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M8 11h6"/></svg></button>
+              <button className="mm-btn" data-label="Fit" data-shortcut={formatButtonShortcut('view.zoomFit', keyboardLayout)} onClick={fitView} title={`Fit view (${formatShortcut('view.zoomFit', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/></svg></button>
+            </>, 'view');
+            const outputGroup = onExportMarkdown && (densityPreset !== 'large' || activeRibbonTab === 'export') && toolbarGroup('Output', (
+              <div style={{ position: 'relative' }}>
+                <button className="mm-btn" data-label="Export" onClick={() => setShowExportMenu((v) => !v)} title="Export">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                </button>
+                {showExportMenu && (
+                  <div
+                    ref={exportMenuRef}
+                    style={{ position: 'absolute', ...(exportMenuAlign === 'left' ? { left: 0 } : { right: 0 }), top: '100%', zIndex: 300, background: 'var(--mm-node-fill, #1e293b)', border: '1px solid var(--mm-node-stroke, #334155)', borderRadius: 8, padding: '4px 0', minWidth: 150, maxHeight: exportMenuMaxH ?? undefined, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    {onExportMarkdown && (
+                      <button className="mm-context-item" onClick={() => { onExportMarkdown({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
+                        Markdown (.md)
+                      </button>
+                    )}
+                    {onExportFreemind && (
+                      <button className="mm-context-item" onClick={() => { onExportFreemind({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
+                        FreeMind (.mm)
+                      </button>
+                    )}
+                    {onExportFreeplane && (
+                      <button className="mm-context-item" onClick={() => { onExportFreeplane({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
+                        FreePlane (.mm)
+                      </button>
+                    )}
+                    {onExportWisemapping && (
+                      <button className="mm-context-item" onClick={() => { onExportWisemapping({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
+                        WiseMapping (.wxml)
+                      </button>
+                    )}
+                    {onExportXmind && (
+                      <button className="mm-context-item" onClick={() => { onExportXmind({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
+                        XMind (.xmind)
+                      </button>
+                    )}
+                    <button className="mm-context-item" onClick={() => { exportPng(); setShowExportMenu(false); }}>
+                      PNG image
+                    </button>
+                    <button className="mm-context-item" onClick={() => { exportPdf(); setShowExportMenu(false); }}>
+                      PDF document
+                    </button>
+                  </div>
+                )}
+              </div>
+            ), 'export');
+
+            if (densityPreset === 'large') {
+              return (
+                <>
+                  {activeRibbonTab === 'insert' && toolbarGroup('Content', <>{notesBtn}{datesBtn}{tagsBtn}</>, 'insert')}
+                  {activeRibbonTab === 'insert' && toolbarGroup('Files', attachBtn, 'insert')}
+                  {zoomGroup}
+                  {activeRibbonTab === 'view' && toolbarGroup('Arrange', <>{alignBtn}{focusBtn}</>, 'view')}
+                  {activeRibbonTab === 'view' && toolbarGroup('Find', <>{searchBtn}{shortcutsBtn}</>, 'view')}
+                  {outputGroup}
+                  {/* Theme and Settings live in the nav row's right-hand
+                      cluster for Large (see the toolbar-nav JSX above),
+                      not in the ribbon content. */}
+                </>
+              );
+            }
+            if (densityPreset === 'standard') {
+              // Fewer, broader groups than Large's tab-scoped ones —
+              // Content+Files, Arrange+Find and Theme+Settings all merge
+              // into one group apiece. "Settings" (not "Account") to match
+              // Large's own name for the same group.
+              return (
+                <>
+                  {toolbarGroup('Insert', <>{notesBtn}{datesBtn}{tagsBtn}{attachBtn}</>)}
+                  {zoomGroup}
+                  {toolbarGroup('Navigate', <>{alignBtn}{focusBtn}{searchBtn}{shortcutsBtn}</>)}
+                  {outputGroup}
+                  {toolbarGroup('Settings', <>{themeBtn}<ThemePanel toolbarButton /></>)}
+                </>
+              );
+            }
+            // Lean: same fine-grained groups as Large (not merged) — CSS
+            // hides whichever ones have nothing essential in them, leaving
+            // just the essentials + the "More" overflow. Settings/ThemePanel
+            // stays out of any group here, same as before this refactor —
+            // grouping it with Theme would carry it past the empty-group
+            // check (ThemePanel's own button is itself essential) and it
+            // would show up twice, once here and once in its usual trailing
+            // spot below.
+            return (
+              <>
+                {toolbarGroup('Content', <>{notesBtn}{datesBtn}{tagsBtn}</>)}
+                {toolbarGroup('Files', attachBtn)}
+                {zoomGroup}
+                {toolbarGroup('Arrange', <>{alignBtn}{focusBtn}</>)}
+                {toolbarGroup('Find', <>{searchBtn}{shortcutsBtn}</>)}
+                {outputGroup}
+                {toolbarGroup('Appearance', themeBtn)}
+              </>
+            );
+          })()}
           {toolbarMode === 'essentials' && (
             <div style={{ position: 'relative' }}>
               <button className="mm-btn mm-essential" data-label="More" onClick={() => setShowToolbarOverflow((v) => !v)} title="More actions">
@@ -2748,7 +2925,7 @@ export function DesktopMindMapEditor({
                     ['node.labels', 'Tags', () => setShowTagDialog((v) => !v)],
                     ['view.zoomIn', 'Zoom in', () => setZoom((z) => Math.min(3, z + 0.15))],
                     ['view.zoomOut', 'Zoom out', () => setZoom((z) => Math.max(0.3, z - 0.15))],
-                    [null, 'Fit view', fitView],
+                    ['view.zoomFit', 'Fit view', fitView],
                     ['node.autoAlign', 'Auto-align', () => autoAlignSubtree(selectedId)],
                     ['view.focusMode', 'Focus mode', () => { setFocusMode((v) => { if (!v) setFocusAnchorId(selectedId); return !v; }); }],
                     ['find.shortcuts', 'Shortcuts', () => setShowShortcuts((v) => !v)],
@@ -2762,6 +2939,7 @@ export function DesktopMindMapEditor({
               )}
             </div>
           )}
+          {densityPreset === 'lean' && <ThemePanel toolbarButton />}
         </div>
       </div>}
 
@@ -2785,7 +2963,7 @@ export function DesktopMindMapEditor({
               <ColorTray orientation="horizontal" currentColor={selNode?.color ?? null} onSelect={(c) => { hasBulk ? bulkSetColor(c) : setNodeColor(selectedId, c); }} />
             )}
             {traysByPosition.top.includes('icon') && (
-              <IconTray orientation="horizontal" currentIcons={selNode?.icons ?? []} onSelect={(n) => { hasBulk ? bulkSetIcon(n) : setNodeIcon(selectedId, n); }} onOpenPicker={() => setShowIconPicker(true)} />
+              <IconTray orientation="horizontal" currentIcons={selNode?.icons ?? []} onSelect={(n) => { hasBulk ? bulkSetIcon(n) : setNodeIcon(selectedId, n); }} />
             )}
           </div>
         )}
@@ -2796,7 +2974,7 @@ export function DesktopMindMapEditor({
                 <ColorTray orientation="vertical" currentColor={selNode?.color ?? null} onSelect={(c) => { hasBulk ? bulkSetColor(c) : setNodeColor(selectedId, c); }} />
               )}
               {traysByPosition.left.includes('icon') && (
-                <IconTray orientation="vertical" currentIcons={selNode?.icons ?? []} onSelect={(n) => { hasBulk ? bulkSetIcon(n) : setNodeIcon(selectedId, n); }} onOpenPicker={() => setShowIconPicker(true)} />
+                <IconTray orientation="vertical" currentIcons={selNode?.icons ?? []} onSelect={(n) => { hasBulk ? bulkSetIcon(n) : setNodeIcon(selectedId, n); }} />
               )}
             </div>
           )}
@@ -2804,7 +2982,7 @@ export function DesktopMindMapEditor({
         <svg ref={svgRef} className="mm-canvas" onMouseDown={onMouseDownSvg} onMouseMove={onMouseMoveSvg} onMouseUp={onMouseUpSvg} onMouseLeave={onMouseUpSvg}
           onTouchStart={onTouchStartSvg} onTouchMove={onTouchMoveSvg} onTouchEnd={onTouchEndSvg} onTouchCancel={onTouchEndSvg}
           onDragOver={onDragOverSvg} onDragLeave={onDragLeaveSvg} onDrop={(e) => { void onDropSvg(e); }}
-          onClick={() => { setShowColorPicker(false); setContextMenu(null); }}>
+          onClick={() => { setShowColorPicker(false); setContextMenu(null); setShowIconPicker(false); setShowExportMenu(false); setShowToolbarOverflow(false); }}>
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
             <g className="mm-connections">{renderConnections(root)}</g>
             <g className="mm-nodes">{renderNodes(root)}</g>
@@ -2859,7 +3037,7 @@ export function DesktopMindMapEditor({
                 <ColorTray orientation="vertical" currentColor={selNode?.color ?? null} onSelect={(c) => { hasBulk ? bulkSetColor(c) : setNodeColor(selectedId, c); }} />
               )}
               {traysByPosition.right.includes('icon') && (
-                <IconTray orientation="vertical" currentIcons={selNode?.icons ?? []} onSelect={(n) => { hasBulk ? bulkSetIcon(n) : setNodeIcon(selectedId, n); }} onOpenPicker={() => setShowIconPicker(true)} />
+                <IconTray orientation="vertical" currentIcons={selNode?.icons ?? []} onSelect={(n) => { hasBulk ? bulkSetIcon(n) : setNodeIcon(selectedId, n); }} />
               )}
             </div>
           )}
@@ -2870,7 +3048,7 @@ export function DesktopMindMapEditor({
               <ColorTray orientation="horizontal" currentColor={selNode?.color ?? null} onSelect={(c) => { hasBulk ? bulkSetColor(c) : setNodeColor(selectedId, c); }} />
             )}
             {traysByPosition.bottom.includes('icon') && (
-              <IconTray orientation="horizontal" currentIcons={selNode?.icons ?? []} onSelect={(n) => { hasBulk ? bulkSetIcon(n) : setNodeIcon(selectedId, n); }} onOpenPicker={() => setShowIconPicker(true)} />
+              <IconTray orientation="horizontal" currentIcons={selNode?.icons ?? []} onSelect={(n) => { hasBulk ? bulkSetIcon(n) : setNodeIcon(selectedId, n); }} />
             )}
           </div>
         )}
@@ -3136,7 +3314,11 @@ export function DesktopMindMapEditor({
         const cmHasCheckbox = cmNode.checked != null;
         return (<>
           <div className="mm-context-overlay" onClick={() => setContextMenu(null)} />
-          <div className="mm-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
+          <div
+            ref={contextMenuRef}
+            className="mm-context-menu"
+            style={{ left: contextMenuPos?.left ?? contextMenu.x, top: contextMenuPos?.top ?? contextMenu.y }}
+          >
             <div className="mm-context-header">{cmNode.text.substring(0, 30) || 'Node'}</div>
             <button className="mm-context-item" onClick={() => { const f = findNode(root, contextMenu.nodeId); if (f) startEditing(f.node); setContextMenu(null); }}>Rename <kbd>{formatShortcut('node.rename', keyboardLayout)}</kbd></button>
             <button className="mm-context-item" onClick={() => { addChild(contextMenu.nodeId); setContextMenu(null); }}>Add Child <kbd>{formatShortcut('node.addChild', keyboardLayout)}</kbd></button>

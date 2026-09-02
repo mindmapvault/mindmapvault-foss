@@ -10,6 +10,12 @@ All core functionality works offline, all data stays on the device, and the repo
 
 [![MindMapVault product preview](docs/assets/hero-preview.png)](https://www.mindmapvault.com/)
 
+Large density in light mode, with a picture on a node.
+
+The toolbar comes in three densities: Lean keeps only the essentials behind a
+"More actions" menu, Standard shows every group, and Large adds the tab bar
+above. Pick one in Settings → Interface, along with toolbar labels, the
+shortcut hints printed on each button, and the dockable colour and icon trays.
 
 ## Demo
 
@@ -245,8 +251,9 @@ same table, grouped and always in sync with what will actually fire.
 | **View** | | |
 | Go to root | Home | H |
 | Focus mode | F5 / F | ⌘⇧F |
-| Zoom in | + | + |
-| Zoom out | - | - |
+| Zoom in | + / Alt+↓ | ⌘+ |
+| Zoom out | - / Alt+↑ | ⌘− |
+| Fit to window | F8 | ⌘⇧8 |
 | Toggle colour tray | Ctrl+Shift+1 | ⌘⇧1 |
 | Toggle icon tray | Ctrl+Shift+2 | ⌘⇧2 |
 | **Edit** | | |
@@ -257,6 +264,7 @@ same table, grouped and always in sync with what will actually fire.
 | Shortcuts (this table) | F1 | ⌘/ |
 | **File** | | |
 | Save | Ctrl+S | ⌘S |
+| Back to vault list | Alt+← | ⌘[ |
 
 Source of truth: `frontend_app/src/shortcuts/registry.ts` — each layout is
 an exhaustive, closed set (nothing falls back to the other layout's keys).

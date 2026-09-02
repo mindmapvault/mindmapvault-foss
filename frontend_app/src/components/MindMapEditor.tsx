@@ -2803,7 +2803,22 @@ export function DesktopMindMapEditor({
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21.44 11.05l-9.19 9.19a6 6 0 11-8.49-8.49l9.2-9.19a4 4 0 015.65 5.66l-9.2 9.19a2 2 0 11-2.82-2.82l8.48-8.48"/></svg>
               </button>
             );
-            const alignBtn = <button key="align" className="mm-btn" data-label="Align" data-shortcut={formatButtonShortcut('node.autoAlign', keyboardLayout)} onClick={() => autoAlignSubtree(selectedId)} title={`${selectedId === 'root' ? 'Auto-align all nodes' : 'Auto-align subtree'} (${formatShortcut('node.autoAlign', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M3 12h12M3 18h8"/></svg></button>;
+            const imageBtn = (
+              <button
+                key="image"
+                className="mm-btn"
+                data-label="Image"
+                data-shortcut={formatButtonShortcut('node.addImage', keyboardLayout)}
+                onClick={() => {
+                  nodeImageTargetRef.current = selectedId;
+                  nodeImageInputRef.current?.click();
+                }}
+                title={`Add a picture to the selected node (${formatShortcut('node.addImage', keyboardLayout)})`}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 15l-5-5L5 21"/></svg>
+              </button>
+            );
+            const alignBtn =<button key="align" className="mm-btn" data-label="Align" data-shortcut={formatButtonShortcut('node.autoAlign', keyboardLayout)} onClick={() => autoAlignSubtree(selectedId)} title={`${selectedId === 'root' ? 'Auto-align all nodes' : 'Auto-align subtree'} (${formatShortcut('node.autoAlign', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M3 12h12M3 18h8"/></svg></button>;
             const focusBtn = <button key="focus" className={`mm-btn${focusMode ? ' mm-btn--active' : ''}`} data-label="Focus" data-shortcut={formatButtonShortcut('view.focusMode', keyboardLayout)} onClick={() => { setFocusMode((v) => { if (!v) setFocusAnchorId(selectedId); return !v; }); }} title={`Focus mode (${formatShortcut('view.focusMode', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2m8.66-17.66l-1.41 1.41M4.75 19.25l-1.41 1.41M23 12h-2M3 12H1m17.66 7.66l-1.41-1.41M4.75 4.75L3.34 3.34"/></svg></button>;
             const searchBtn = <button key="search" className="mm-btn mm-essential" data-label="Search" data-shortcut={formatButtonShortcut('find.search', keyboardLayout)} onClick={() => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 50); }} title={`Search (${formatShortcut('find.search', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>;
             const shortcutsBtn = <button key="shortcuts" className="mm-btn" data-label="Shortcuts" data-shortcut={formatButtonShortcut('find.shortcuts', keyboardLayout)} onClick={() => setShowShortcuts((v) => !v)} title={`Shortcuts (${formatShortcut('find.shortcuts', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg></button>;
@@ -2863,7 +2878,7 @@ export function DesktopMindMapEditor({
               return (
                 <>
                   {activeRibbonTab === 'insert' && toolbarGroup('Content', <>{notesBtn}{datesBtn}{tagsBtn}</>, 'insert')}
-                  {activeRibbonTab === 'insert' && toolbarGroup('Files', attachBtn, 'insert')}
+                  {activeRibbonTab === 'insert' && toolbarGroup('Files', <>{imageBtn}{attachBtn}</>, 'insert')}
                   {zoomGroup}
                   {activeRibbonTab === 'view' && toolbarGroup('Arrange', <>{alignBtn}{focusBtn}</>, 'view')}
                   {activeRibbonTab === 'view' && toolbarGroup('Find', <>{searchBtn}{shortcutsBtn}</>, 'view')}
@@ -2881,7 +2896,7 @@ export function DesktopMindMapEditor({
               // Large's own name for the same group.
               return (
                 <>
-                  {toolbarGroup('Insert', <>{notesBtn}{datesBtn}{tagsBtn}{attachBtn}</>)}
+                  {toolbarGroup('Insert', <>{notesBtn}{datesBtn}{tagsBtn}{imageBtn}{attachBtn}</>)}
                   {zoomGroup}
                   {toolbarGroup('Navigate', <>{alignBtn}{focusBtn}{searchBtn}{shortcutsBtn}</>)}
                   {outputGroup}
@@ -2900,7 +2915,7 @@ export function DesktopMindMapEditor({
             return (
               <>
                 {toolbarGroup('Content', <>{notesBtn}{datesBtn}{tagsBtn}</>)}
-                {toolbarGroup('Files', attachBtn)}
+                {toolbarGroup('Files', <>{imageBtn}{attachBtn}</>)}
                 {zoomGroup}
                 {toolbarGroup('Arrange', <>{alignBtn}{focusBtn}</>)}
                 {toolbarGroup('Find', <>{searchBtn}{shortcutsBtn}</>)}
@@ -2929,6 +2944,7 @@ export function DesktopMindMapEditor({
                     ['node.autoAlign', 'Auto-align', () => autoAlignSubtree(selectedId)],
                     ['view.focusMode', 'Focus mode', () => { setFocusMode((v) => { if (!v) setFocusAnchorId(selectedId); return !v; }); }],
                     ['find.shortcuts', 'Shortcuts', () => setShowShortcuts((v) => !v)],
+                    ['node.addImage', 'Image', () => { nodeImageTargetRef.current = selectedId; nodeImageInputRef.current?.click(); }],
                     ['node.attachFile', 'Attach file', () => nodeAttachmentInputRef.current?.click()],
                   ] as const).map(([id, label, onClick]) => (
                     <button key={label} className="mm-context-item" onClick={() => { onClick(); setShowToolbarOverflow(false); }}>

@@ -26,6 +26,26 @@ export function ThemePanel({ initialTab = 'appearance', autoOpenWhatsNew = false
     setOpen(true);
   }, [autoOpenWhatsNew]);
 
+  // The native "Settings…" app-menu item (desktop/src-tauri/src/lib.rs) has
+  // no view into React state, so it emits this event instead of calling in directly.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        const fn = await listen('menu:command', (event) => {
+          if (event.payload === 'app.settings') { setTab(initialTab); setOpen(true); }
+        });
+        if (cancelled) fn();
+        else unlisten = fn;
+      } catch {
+        // Not running inside Tauri — no menu to bridge.
+      }
+    })();
+    return () => { cancelled = true; unlisten?.(); };
+  }, [initialTab]);
+
   return (
     <>
       <button

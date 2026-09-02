@@ -102,6 +102,8 @@ export function DesktopMindMapEditor({
   const toggleThemeMode = useThemeStore((s) => s.toggleMode);
   const keyboardLayout = useEffectiveKeyboardLayout();
   const densityPreset = useUiStore((s) => s.densityPreset);
+  const setDensityPreset = useUiStore((s) => s.setDensityPreset);
+  const setStatusBarOverride = useUiStore((s) => s.setStatusBarOverride);
   const { statusBarVisible, toolbarLabels, toolbarMode } = useResolvedDensity();
   const [showToolbarOverflow, setShowToolbarOverflow] = useState(false);
   const colourTrayEnabled = useUiStore((s) => s.colourTrayEnabled);
@@ -1901,6 +1903,107 @@ export function DesktopMindMapEditor({
     setZoom(z);
     setPan({ x: pad - minX * z, y: pad - minY * z });
   }, [layout]);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  NATIVE MENU BRIDGE
+  //
+  //  The macOS/Windows/Linux app menu (desktop/src-tauri/src/lib.rs) has no
+  //  view into React state, so a click just emits `menu:command` with a
+  //  registry-style action id and lets the webview do the real work — the
+  //  same ids and handlers a keyboard shortcut would use. `latestMenuAction`
+  //  is refreshed every render (no dep array) so the listener below, set up
+  //  once on mount, always dispatches against current state without tearing
+  //  down and resubscribing to the Tauri event on every keystroke.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const latestMenuAction = useRef<(id: string) => void>(() => {});
+  useEffect(() => {
+    latestMenuAction.current = (id: string) => {
+      switch (id) {
+        case 'file.save':
+          handleSave();
+          showToast(`${formatShortcut('file.save', keyboardLayout)} — Save`);
+          break;
+        case 'node.attachFile':
+          nodeAttachmentInputRef.current?.click();
+          break;
+        case 'node.addChild':
+          addChild(selectedId);
+          break;
+        case 'node.addSibling':
+          addSibling(selectedId);
+          break;
+        case 'node.rename': {
+          const f = findNode(root, selectedId);
+          if (f) startEditing(f.node);
+          break;
+        }
+        case 'node.notesToggle':
+          setNotesOpen((v) => { if (!v) openNotes(selectedId); return !v; });
+          break;
+        case 'node.delete':
+          hasBulk ? bulkDelete() : deleteNode(selectedId);
+          break;
+        case 'edit.undo':
+          undo();
+          break;
+        case 'edit.redo':
+          redo();
+          break;
+        case 'find.search':
+          setSearchOpen(true);
+          setTimeout(() => searchRef.current?.focus(), 50);
+          break;
+        case 'find.shortcuts':
+          setShowShortcuts((v) => !v);
+          break;
+        case 'view.leanMode':
+          setDensityPreset(densityPreset === 'lean' ? 'standard' : 'lean');
+          break;
+        case 'view.colourTray':
+          setColourTray(!colourTrayEnabled);
+          break;
+        case 'view.iconTray':
+          setIconTray(!iconTrayEnabled);
+          break;
+        case 'view.statusBar':
+          setStatusBarOverride(!statusBarVisible);
+          break;
+        case 'view.zoomIn':
+          setZoom((z) => Math.min(3, z + 0.15));
+          break;
+        case 'view.zoomOut':
+          setZoom((z) => Math.max(0.3, z - 0.15));
+          break;
+        case 'view.zoomFit':
+          fitView();
+          break;
+        case 'view.focusMode':
+          setFocusMode((v) => { if (!v) setFocusAnchorId(selectedId); return !v; });
+          break;
+        default:
+          break;
+      }
+    };
+  });
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        const fn = await listen<string>('menu:command', (event) => {
+          latestMenuAction.current(event.payload);
+        });
+        if (cancelled) fn();
+        else unlisten = fn;
+      } catch {
+        // Not running inside Tauri (e.g. a plain browser preview) — no menu to bridge.
+      }
+    })();
+    return () => { cancelled = true; unlisten?.(); };
+  }, []);
 
   // ══════════════════════════════════════════════════════════════════════════
   //  SVG RENDERING

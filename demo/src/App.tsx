@@ -9,6 +9,13 @@ import type { MindMapTree, NodeAttachmentRef } from '../../frontend_app/src/type
 import { DEMO_NODE_IMAGE, DEMO_NODE_IMAGE_FULL, DEMO_NODE_IMAGE_FULL_BYTES } from './demoNodeImage';
 
 const DEMO_STORAGE_KEY = 'mindmapvault:foss:canvas-demo:v1';
+/**
+ * Bump whenever `createStarterTree` changes, so a visitor holding an older
+ * seed gets the new one. Checking for a node id instead only catches *added*
+ * nodes — a node whose contents changed (gaining an attachment, say) would
+ * pass that check and leave the stale copy in place.
+ */
+const DEMO_SEED_VERSION = 2;
 const USER_LABELS_STORAGE_KEY = 'user-labels';
 const TRAY_SEEDED_KEY = 'mindmapvault:foss:canvas-demo:tray-seeded';
 
@@ -52,6 +59,8 @@ const DEMO_LABEL_LIBRARY: Array<{ name: string; color: string }> = [
 interface DemoSnapshot {
   title: string;
   tree: MindMapTree;
+  /** `createStarterTree` revision this draft descends from. */
+  seed?: number;
 }
 
 function normalizeDemoLayout(tree: MindMapTree, isMobile: boolean): MindMapTree {
@@ -82,14 +91,6 @@ function normalizeDemoLayout(tree: MindMapTree, isMobile: boolean): MindMapTree 
   }
 
   return cloned;
-}
-
-function hasNode(tree: MindMapTree, nodeId: string): boolean {
-  const walk = (node: MindMapTree['root']): boolean => {
-    if (node.id === nodeId) return true;
-    return node.children.some(walk);
-  };
-  return walk(tree.root);
 }
 
 function seedDemoLabelLibrary(): void {
@@ -128,6 +129,7 @@ function parseSnapshot(raw: string | null): DemoSnapshot | null {
     return {
       title: parsed.title,
       tree: parsed.tree as MindMapTree,
+      seed: typeof parsed.seed === 'number' ? parsed.seed : 0,
     };
   } catch {
     return null;
@@ -364,9 +366,7 @@ export default function App() {
   const initialSnapshot = useMemo(() => {
     seedDemoLabelLibrary();
     const parsed = parseSnapshot(localStorage.getItem(DEMO_STORAGE_KEY));
-    // `demo-1-4` is the newest seeded node — a draft saved before it existed
-    // is treated as stale and replaced, the same way `demo-crypto` works.
-    if (parsed && hasNode(parsed.tree, 'demo-crypto') && hasNode(parsed.tree, 'demo-1-4')) {
+    if (parsed && parsed.seed === DEMO_SEED_VERSION) {
       return {
         title: parsed.title,
         tree: normalizeDemoLayout(parsed.tree, isMobileView),
@@ -396,7 +396,7 @@ export default function App() {
   }, [mode, primaryColor]);
 
   const persistSnapshot = useCallback((nextTitle: string, nextTree: MindMapTree) => {
-    const snapshot: DemoSnapshot = { title: nextTitle, tree: nextTree };
+    const snapshot: DemoSnapshot = { title: nextTitle, tree: nextTree, seed: DEMO_SEED_VERSION };
     localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(snapshot));
   }, []);
 
@@ -431,7 +431,7 @@ export default function App() {
     const nextTree = normalizeDemoLayout(createStarterTree(), isMobileView);
     const nextTitle = 'FOSS Canvas Playground';
     seedDemoLabelLibrary();
-    localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify({ title: nextTitle, tree: nextTree }));
+    localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify({ title: nextTitle, tree: nextTree, seed: DEMO_SEED_VERSION }));
     setInitialTree(nextTree);
     setCurrentTree(nextTree);
     setTitle(nextTitle);

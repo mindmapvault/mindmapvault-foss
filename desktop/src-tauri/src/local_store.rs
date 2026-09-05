@@ -16,6 +16,7 @@
 //! the renderer.
 
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
@@ -452,12 +453,23 @@ fn existing_blob_path(app: &AppHandle, id: &str) -> Result<PathBuf, LocalStoreEr
 }
 
 fn write_bytes_atomic(path: &PathBuf, data: &[u8]) -> Result<(), LocalStoreError> {
-    if let Some(parent) = path.parent() {
+    let parent = path.parent().map(PathBuf::from);
+    if let Some(ref parent) = parent {
         fs::create_dir_all(parent)?;
     }
 
     let tmp_path = path.with_extension(format!("tmp-{}", Uuid::new_v4()));
-    fs::write(&tmp_path, data)?;
+    {
+        let mut file = fs::File::create(&tmp_path)?;
+        file.write_all(data)?;
+        // The rename below decides which name points at which inode. It does
+        // not decide whether that inode's blocks have reached the disk. Without
+        // this sync a power loss can leave the new name in place over a file
+        // whose contents were never written — and the old contents are already
+        // gone. This is a local-only app: there is no server-side copy to fall
+        // back on, so the cost of the sync is worth paying on every write.
+        file.sync_all()?;
+    }
 
     // std::fs::rename uses rename(2) on POSIX (atomic replace) and
     // MoveFileExW(MOVEFILE_REPLACE_EXISTING) on Windows. Both replace the
@@ -469,6 +481,18 @@ fn write_bytes_atomic(path: &PathBuf, data: &[u8]) -> Result<(), LocalStoreError
         let _ = fs::remove_file(&tmp_path);
         return Err(e.into());
     }
+
+    // The rename is itself a directory update and needs the same treatment,
+    // or the entry can be lost even though the file's own data was synced.
+    // Unix only: Windows gives no directory handle to sync, and MoveFileExW
+    // is already ordered against the file's data.
+    #[cfg(unix)]
+    if let Some(ref parent) = parent {
+        if let Ok(dir) = fs::File::open(parent) {
+            let _ = dir.sync_all();
+        }
+    }
+
     Ok(())
 }
 
@@ -1151,6 +1175,7 @@ pub fn apply_local_password_rotation(
 
     Ok(())
 }
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 /// These cover the parts of this file that can lose or corrupt a user's data

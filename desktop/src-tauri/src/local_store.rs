@@ -1151,3 +1151,295 @@ pub fn apply_local_password_rotation(
 
     Ok(())
 }
+// ── Tests ────────────────────────────────────────────────────────────────────
+
+/// These cover the parts of this file that can lose or corrupt a user's data
+/// and do not need an `AppHandle`: the atomic write, the index MAC, the size
+/// accounting and the username check that decides a directory name. In a
+/// local-only app there is no server-side copy, so these are the operations
+/// where a bug is unrecoverable.
+///
+/// Everything reached through `AppHandle` — `migrate_if_needed` above all — is
+/// not covered here; testing it means standing up a Tauri app, which is a
+/// larger piece of work than this file's own arithmetic.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A directory of our own under the system temp dir, removed on drop.
+    /// Avoids a `tempfile` dev-dependency in a shipped desktop app.
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new() -> Self {
+            let dir = std::env::temp_dir().join(format!("mmv-local-store-test-{}", Uuid::new_v4()));
+            fs::create_dir_all(&dir).expect("temp dir");
+            TempDir(dir)
+        }
+        fn path(&self, name: &str) -> PathBuf {
+            self.0.join(name)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn meta(id: &str) -> LocalVaultMeta {
+        LocalVaultMeta {
+            id: id.to_string(),
+            title_encrypted: "title-ct".into(),
+            eph_classical_public: "eph-classical".into(),
+            eph_pq_ciphertext: "eph-pq".into(),
+            wrapped_dek: "wrapped-dek".into(),
+            vault_color: None,
+            vault_note_encrypted: None,
+            vault_sharing_mode: default_vault_sharing_mode(),
+            vault_encryption_mode: default_vault_encryption_mode(),
+            max_versions: 50,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            updated_at: "2026-01-01T00:00:00Z".into(),
+            entry_mac: None,
+        }
+    }
+
+    // ── The index MAC ────────────────────────────────────────────────────
+
+    #[test]
+    fn entry_mac_is_stable_for_the_same_entry_and_key() {
+        let key = [7u8; 32];
+        assert_eq!(compute_entry_mac(&key, &meta("v1")), compute_entry_mac(&key, &meta("v1")));
+    }
+
+    /// Every field the MAC covers has to change it, or tampering with that
+    /// field goes unnoticed.
+    #[test]
+    fn every_covered_field_changes_the_mac() {
+        let key = [7u8; 32];
+        let base = compute_entry_mac(&key, &meta("v1"));
+
+        let mut m = meta("v1");
+        m.id = "v2".into();
+        assert_ne!(base, compute_entry_mac(&key, &m), "id");
+
+        let mut m = meta("v1");
+        m.title_encrypted = "other".into();
+        assert_ne!(base, compute_entry_mac(&key, &m), "title_encrypted");
+
+        let mut m = meta("v1");
+        m.eph_classical_public = "other".into();
+        assert_ne!(base, compute_entry_mac(&key, &m), "eph_classical_public");
+
+        let mut m = meta("v1");
+        m.eph_pq_ciphertext = "other".into();
+        assert_ne!(base, compute_entry_mac(&key, &m), "eph_pq_ciphertext");
+
+        let mut m = meta("v1");
+        m.wrapped_dek = "other".into();
+        assert_ne!(base, compute_entry_mac(&key, &m), "wrapped_dek");
+    }
+
+    /// The MAC covers the wrapping of the key, so swapping one vault's
+    /// `wrapped_dek` for another's is detected rather than silently pointing a
+    /// vault at a key it was not encrypted with.
+    #[test]
+    fn swapping_two_entries_wrapped_keys_is_detected() {
+        let key = [7u8; 32];
+        let (a, mut b) = (meta("a"), meta("b"));
+        b.wrapped_dek = "b-dek".into();
+        let a_mac = compute_entry_mac(&key, &a);
+
+        let mut tampered = a.clone();
+        tampered.wrapped_dek = b.wrapped_dek.clone();
+        assert_ne!(a_mac, compute_entry_mac(&key, &tampered));
+    }
+
+    /// The fields are joined with `|` and not length-prefixed, so a value
+    /// containing `|` could in principle shift the boundary between two
+    /// fields. Nothing that reaches here can: ids are UUIDs and the rest are
+    /// base64, whose alphabet has no `|`. This pins that it would otherwise
+    /// matter, so the day a free-text field joins the MAC it is noticed.
+    #[test]
+    fn a_separator_inside_a_field_would_shift_the_boundary() {
+        let key = [7u8; 32];
+        let mut left = meta("v1");
+        left.title_encrypted = "a|b".into();
+        left.eph_classical_public = "c".into();
+
+        let mut right = meta("v1");
+        right.title_encrypted = "a".into();
+        right.eph_classical_public = "b|c".into();
+
+        assert_eq!(
+            compute_entry_mac(&key, &left),
+            compute_entry_mac(&key, &right),
+            "unseparated fields collide — keep non-base64 values out of the MAC",
+        );
+    }
+
+    #[test]
+    fn a_different_key_gives_a_different_mac() {
+        assert_ne!(
+            compute_entry_mac(&[7u8; 32], &meta("v1")),
+            compute_entry_mac(&[8u8; 32], &meta("v1")),
+        );
+    }
+
+    /// `vault_color` and the note are deliberately outside the MAC — the index
+    /// drops the colour before stamping, so covering it would fail every
+    /// verification.
+    #[test]
+    fn colour_and_note_are_outside_the_mac() {
+        let key = [7u8; 32];
+        let base = compute_entry_mac(&key, &meta("v1"));
+
+        let mut m = meta("v1");
+        m.vault_color = Some("#ff0000".into());
+        m.vault_note_encrypted = Some("note-ct".into());
+        assert_eq!(base, compute_entry_mac(&key, &m));
+    }
+
+    // ── The atomic write ─────────────────────────────────────────────────
+
+    #[test]
+    fn atomic_write_creates_missing_parent_directories() {
+        let dir = TempDir::new();
+        let path = dir.path("a/b/c/index.json");
+        write_bytes_atomic(&path, b"hello").expect("write");
+        assert_eq!(fs::read(&path).expect("read"), b"hello");
+    }
+
+    #[test]
+    fn atomic_write_replaces_existing_content_whole() {
+        let dir = TempDir::new();
+        let path = dir.path("index.json");
+        write_bytes_atomic(&path, b"a-long-first-value").expect("first");
+        write_bytes_atomic(&path, b"short").expect("second");
+        // Not truncated-and-appended: the shorter value replaced the longer one
+        // outright, with no tail of the old content left behind.
+        assert_eq!(fs::read(&path).expect("read"), b"short");
+    }
+
+    /// A leftover temp file would accumulate one per write, forever, in the
+    /// same directory the index lives in.
+    #[test]
+    fn atomic_write_leaves_no_temp_file_behind() {
+        let dir = TempDir::new();
+        let path = dir.path("index.json");
+        write_bytes_atomic(&path, b"one").expect("write");
+        write_bytes_atomic(&path, b"two").expect("write");
+
+        let names: Vec<String> = fs::read_dir(&dir.0)
+            .expect("read_dir")
+            .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec!["index.json".to_string()]);
+    }
+
+    /// The point of writing through a temp file and renaming: a reader either
+    /// sees the whole old value or the whole new one, never a partial write.
+    #[test]
+    fn concurrent_writers_leave_one_whole_value_not_a_mixture() {
+        let dir = TempDir::new();
+        let path = dir.path("index.json");
+        write_bytes_atomic(&path, &vec![b'a'; 4096]).expect("seed");
+
+        let threads: Vec<_> = (0..8)
+            .map(|i| {
+                let path = path.clone();
+                std::thread::spawn(move || {
+                    let byte = b'a' + (i % 8) as u8;
+                    write_bytes_atomic(&path, &vec![byte; 4096]).expect("write");
+                })
+            })
+            .collect();
+        for t in threads {
+            t.join().expect("thread");
+        }
+
+        let got = fs::read(&path).expect("read");
+        assert_eq!(got.len(), 4096);
+        assert!(
+            got.iter().all(|b| *b == got[0]),
+            "file mixes two writers' bytes — the write was not atomic",
+        );
+    }
+
+    #[test]
+    fn json_round_trips_through_the_atomic_write() {
+        let dir = TempDir::new();
+        let path = dir.path("index.json");
+        let index = VaultIndex { vaults: vec![meta("v1"), meta("v2")] };
+        write_json_atomic(&path, &index).expect("write");
+
+        let read: VaultIndex =
+            serde_json::from_str(&fs::read_to_string(&path).expect("read")).expect("parse");
+        assert_eq!(read.vaults.len(), 2);
+        assert_eq!(read.vaults[0].id, "v1");
+        assert_eq!(read.vaults[1].wrapped_dek, "wrapped-dek");
+    }
+
+    /// The two `#[serde(default)]` fields have to survive an index written
+    /// before they existed, or every vault in it changes mode on upgrade.
+    #[test]
+    fn an_index_missing_the_newer_fields_still_parses() {
+        let json = r#"{"vaults":[{
+            "id":"v1","title_encrypted":"t","eph_classical_public":"e",
+            "eph_pq_ciphertext":"p","wrapped_dek":"w","vault_color":null,
+            "vault_note_encrypted":null,"max_versions":50,
+            "created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"
+        }]}"#;
+        let index: VaultIndex = serde_json::from_str(json).expect("parse");
+        assert_eq!(index.vaults[0].vault_sharing_mode, "private");
+        assert_eq!(index.vaults[0].vault_encryption_mode, "standard");
+        assert_eq!(index.vaults[0].entry_mac, None);
+    }
+
+    // ── Size accounting ──────────────────────────────────────────────────
+
+    #[test]
+    fn directory_size_is_zero_for_a_path_that_is_not_there() {
+        let dir = TempDir::new();
+        assert_eq!(dir_size_recursive(&dir.path("nope")).expect("size"), 0);
+    }
+
+    #[test]
+    fn directory_size_adds_up_every_file_at_every_depth() {
+        let dir = TempDir::new();
+        write_bytes_atomic(&dir.path("a.bin"), &[0u8; 100]).expect("write");
+        write_bytes_atomic(&dir.path("nested/b.bin"), &[0u8; 200]).expect("write");
+        write_bytes_atomic(&dir.path("nested/deeper/c.bin"), &[0u8; 300]).expect("write");
+        assert_eq!(dir_size_recursive(&dir.0).expect("size"), 600);
+    }
+
+    #[test]
+    fn directory_size_of_a_single_file_is_that_file() {
+        let dir = TempDir::new();
+        let path = dir.path("only.bin");
+        write_bytes_atomic(&path, &[0u8; 42]).expect("write");
+        assert_eq!(dir_size_recursive(&path).expect("size"), 42);
+    }
+
+    // ── The username that becomes a directory name ───────────────────────
+
+    #[test]
+    fn ordinary_usernames_are_accepted() {
+        for name in ["default", "kornelko", "user.name", "a-b_c", "użytkownik"] {
+            assert!(validate_username(name).is_ok(), "{name} should be accepted");
+        }
+    }
+
+    /// This name is joined onto the storage root to make a directory, so
+    /// anything that can climb out of it has to be refused here.
+    #[test]
+    fn names_that_could_escape_the_storage_root_are_refused() {
+        for name in ["", ".", "..", "../etc", "a/b", "a\\b", "a\0b", "/absolute"] {
+            assert!(
+                validate_username(name).is_err(),
+                "{name:?} should be refused",
+            );
+        }
+    }
+}

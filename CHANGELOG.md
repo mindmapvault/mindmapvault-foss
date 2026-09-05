@@ -14,6 +14,22 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Removed
 
+## [0.3.36] - 2026-09-06
+
+### Changed
+- **One source for the node geometry.** The band arithmetic — where the date badge, the meta strip, the tags, the picture, the text and the footer links sit — lived in three places: the layout engine, the editor's renderer, and the vault-list thumbnail. It now lives in `packages/mindmap-core`, and the layout hands each node's measurement to whatever draws it, so measuring and drawing cannot disagree. `MindMapEditor.tsx` draws a node from seven band components (`components/mindmap/NodeBands.tsx`) rather than 300 lines of inline SVG.
+- **One source for the vault list's state.** A vault's colour, labels, sharing state and rename-comparison were derived separately in the grid card and the table row. Both now call `pages/vaults/vaultState.ts`, and each view moved to its own file.
+- **Import and export are tables, not branches.** Four import handlers and five export handlers each differed in two or three things — the parser or serializer, the extension, and which of three state variables to set. Adding a format is now one entry in `pages/vaults/importFormats.ts` or `utils/exportFormats.ts`. The import menu keeps five entries for four readers, because FreeMind and FreePlane are two names people look for and one `.mm` parser.
+- **The editor's tree operations are testable on their own.** Add, delete, duplicate, reparent, move, the multi-select edits and the undo stack moved to `components/mindmap/`, along with the drag thresholds and the marquee hit test. `MindMapEditor.tsx` is 3,702 lines down to 3,278; `VaultsPage.tsx` 1,814 down to 1,052.
+- Frontend unit tests went from 67 to 189, and the desktop host from none to 17.
+
+### Fixed
+- **Markdown exports were named after the day of the month.** The filename's version token was worked out in two places and only one of them anchored its match. This app keeps no server-side version history, so the version label is always a date — and the unanchored copy read `v 9/5/2026` as version 9, stamping `-v9` onto every export.
+- **Text sat outside its own node.** The renderer decided a node had a note without trimming it, and counted attachments the layout could not see, so a node whose note was a single space — or whose only file was attached rather than stored in the map — got an 18px strip drawn into space nothing had reserved, pushing the text past the bottom of its box.
+- **Vault thumbnails put labels where the editor did not.** The preview drew the tag strip at 16px against the layout's 18 and ignored the meta strip entirely. Cached previews are redrawn once on upgrade.
+- **A saved vault could survive a crash but not a power cut.** Files were written to a temp path and renamed, which is atomic — but the rename only decides which name points at which file, not whether that file's contents reached the disk. A power loss could leave the new name over a file that was never written, with the old one already gone. Writes now sync before the rename and sync the directory after it.
+- Auto-aligning a branch that was no longer in the map pushed an identical copy onto the undo stack, costing an undo step that undid nothing.
+
 ## [0.3.35] - 2026-09-02
 
 ### Added

@@ -12,7 +12,7 @@
  * equal `CHANGELOG[0].version`.
  */
 
-export const APP_VERSION = '0.3.35';
+export const APP_VERSION = '0.3.36';
 
 /**
  * localStorage key recording the last version whose "What's New" the user saw.
@@ -36,6 +36,38 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.3.36',
+    date: '2026-09-06',
+    highlights: 'Housekeeping under the canvas, and four things it turned out to be hiding.',
+    items: [
+      {
+        kind: 'fix',
+        title: 'Exports were named after the date',
+        desc: 'A Markdown export picked up a version number from the day of the month — "my map-v9.md" on the ninth. Exports are named after the map again.',
+      },
+      {
+        kind: 'fix',
+        title: 'Text could sit outside its node',
+        desc: 'A node whose note was blank space, or whose only file was attached rather than stored in the map, reserved a strip it did not need and pushed its own text past the bottom edge.',
+      },
+      {
+        kind: 'fix',
+        title: 'Vault thumbnails were off',
+        desc: 'Labels on the vault-list previews sat a couple of pixels from where the editor draws them. Cached thumbnails redraw once.',
+      },
+      {
+        kind: 'fix',
+        title: 'A saved vault now survives a power cut',
+        desc: 'Saves were written safely against a crash, but not against losing power mid-write. They are now flushed to disk before the file is put in place.',
+      },
+      {
+        kind: 'improvement',
+        title: 'Groundwork',
+        desc: 'The canvas, the vault list and the desktop storage layer were reorganised so the same thing is no longer worked out in three places. Unit tests went from 67 to 206 across the app and its desktop host.',
+      },
+    ],
+  },
   {
     version: '0.3.35',
     date: '2026-09-02',

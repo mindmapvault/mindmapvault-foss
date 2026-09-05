@@ -8,7 +8,9 @@
     "moduleResolution": "bundler",
     "paths": {
       "@mindmapvault/connectors": ["../packages/connectors/src/index.ts"],
-      "@mindmapvault/connectors/*": ["../packages/connectors/src/*"]
+      "@mindmapvault/connectors/*": ["../packages/connectors/src/*"],
+      "@mindmapvault/mindmap-core": ["../packages/mindmap-core/src/index.ts"],
+      "@mindmapvault/mindmap-core/*": ["../packages/mindmap-core/src/*"]
     },
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,

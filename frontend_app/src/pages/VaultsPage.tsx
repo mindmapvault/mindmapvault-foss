@@ -1,5 +1,4 @@
-import { memo, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import encryptedVaultApi from '../api/encryptedVault';
 import { mindmapsApi } from '../api/mindmaps';
@@ -19,68 +18,47 @@ import { useUserLabels } from '../hooks/useUserLabels';
 import type {
   MindMapTree,
   MindMapTreeNode,
-  MindMapListItem,
   StorageSummary,
-  VaultEncryptionMode,
-  VaultSharingMode,
   VersionDetail,
 } from '../types';
 import { getPlanErrorPrompt, type PlanErrorPrompt } from '../utils/planErrors';
-import { obsidianMarkdownToTree } from '../utils/markdownImport';
-import { freemindToTree } from '../utils/freemindImport';
-import { wisemappingToTree } from '../utils/wisemappingImport';
 import {
   getVaultPreviewStats,
   getVaultPreviewTheme,
   isVaultPreviewAttachmentMeta,
   loadCachedVaultPreview,
   saveTreeVaultPreview,
-  type VaultPreviewSummary,
 } from '../utils/vaultPreview';
 import { decryptAttachmentForOwner } from '../crypto/encryptedVault';
+import {
+  IMPORT_FORMATS,
+  IMPORT_MENU_ITEMS,
+  vaultTitleFromFileName,
+  type ImportFormat,
+  type ImportFormatId,
+} from './vaults/importFormats';
+import { VaultCard } from './vaults/VaultCard';
+import { VaultTableRow } from './vaults/VaultTableRow';
+import type { MapWithTitle, PendingVaultDeletion, VaultPreviewState } from './vaults/types';
+import { fmtBytes } from './vaults/format';
+import {
+  buildVaultDrafts,
+  normalizeHexColor,
+  normalizeVaultLabels,
+  vaultColorStorageKey,
+  vaultLabelsStorageKey,
+} from './vaults/vaultState';
 // packageJson intentionally omitted when not used in this view
 
-interface MapWithTitle extends MindMapListItem {
-  title: string | null;
-  vaultNote: string;
-  draftNote: string;
-  draftLabels: string[];
-  draftColor: string;
-  draftSharingMode: VaultSharingMode;
-  draftEncryptionMode: VaultEncryptionMode;
-  draftMaxVersions: number;
-  metaSaving: boolean;
-}
 
-interface VaultPreviewState {
-  loading: boolean;
-  summary?: VaultPreviewSummary;
-  error?: string;
-}
-
-interface PendingVaultDeletion {
-  id: string;
-  title: string | null;
-}
-
-function fmtBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
-}
-
-function formatDateShort(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function normalizeHexColor(input?: string): string {
-  const fallback = '#334155';
-  if (!input) return fallback;
-  return /^#[0-9a-fA-F]{6}$/.test(input) ? input : fallback;
-}
-
-function vaultColorStorageKey(vaultId: string): string {
-  return `vault-color-${vaultId}`;
+/** The labels this device holds for a vault, for the local-only case. */
+function localVaultLabels(vaultId: string): string[] {
+  try {
+    const stored = JSON.parse(localStorage.getItem(vaultLabelsStorageKey(vaultId)) ?? '[]');
+    return Array.isArray(stored) ? (stored as string[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 function getLocalVaultColor(vaultId: string, fallback?: string): string {
@@ -92,654 +70,10 @@ function setLocalVaultColor(vaultId: string, color: string): void {
   localStorage.setItem(vaultColorStorageKey(vaultId), normalizeHexColor(color));
 }
 
-function normalizeSharingMode(input?: string): VaultSharingMode {
-  return input === 'shared' ? 'shared' : 'private';
-}
 
-function normalizeEncryptionMode(input?: string): VaultEncryptionMode {
-  return input === 're-encrypted' ? 're-encrypted' : 'standard';
-}
-
-function normalizeVaultLabels(input?: string[]): string[] {
-  if (!Array.isArray(input)) return [];
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of input) {
-    if (typeof raw !== 'string') continue;
-    const label = raw.trim().toLowerCase();
-    if (!label || seen.has(label)) continue;
-    seen.add(label);
-    out.push(label);
-  }
-  return out;
-}
-
-function labelsEqual(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  return a.every((label, idx) => label === b[idx]);
-}
-
-function VaultLabelInput({ draftLabels, onAdd }: { draftLabels: string[]; onAdd: (label: string, color?: string) => void }) {
-  const [value, setValue] = useState('');
-  const [color, setColor] = useState('#7c3aed');
-  const submit = () => {
-    const t = value.trim().toLowerCase();
-    if (!t || draftLabels.includes(t)) return;
-    onAdd(t, color);
-    setValue('');
-  };
-  return (
-    <div className="inline-flex items-center gap-1">
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            submit();
-            e.preventDefault();
-          }
-        }}
-        placeholder="Add label…"
-        className="h-6 rounded border border-slate-600 bg-surface px-2 text-xs text-white placeholder-slate-500 focus:border-accent focus:outline-none"
-      />
-      <label title="Label color" className="inline-flex cursor-pointer items-center">
-        <span className="h-3 w-3 rounded-full border border-white/50" style={{ backgroundColor: color }} />
-        <input
-          type="color"
-          value={color}
-          className="sr-only"
-          onChange={(e) => setColor(e.target.value)}
-        />
-      </label>
-      <button
-        type="button"
-        onClick={submit}
-        disabled={!value.trim()}
-        className="h-6 rounded border border-slate-600 bg-surface px-2 text-[11px] text-slate-200 disabled:opacity-40"
-      >
-        Add
-      </button>
-    </div>
-  );
-}
-
-interface VaultCardProps {
-  map: MapWithTitle;
-  usage?: StorageSummary['vaults'][number];
-  isLocalMode: boolean;
-  renamingId: string | null;
-  renameValue: string;
-  renaming: boolean;
-  userLabels: Array<{ name: string; color: string }>;
-  activeShareCount: number;
-  previewState?: VaultPreviewState;
-  previewPanelStyle: CSSProperties;
-  previewOverlayStyle: CSSProperties;
-  previewOverlayBadgeStyle: CSSProperties;
-  onNavigate: (path: string) => void;
-  onStartRename: (map: MapWithTitle) => void;
-  onRenameValueChange: (value: string) => void;
-  onRenameConfirm: (id: string) => Promise<void>;
-  onRenameCancel: () => void;
-  onOpenHistory: (id: string) => void;
-  onDeleteRequest: (id: string, title: string | null) => void;
-  onSetDraftColor: (id: string, color: string) => void;
-  onSetDraftNote: (id: string, note: string) => void;
-  onSetDraftLabels: (id: string, labels: string[]) => void;
-  onSetDraftMaxVersions: (id: string, value: number) => void;
-  onUpdateUserLabelColor: (name: string, color: string) => void;
-  onAddUserLabel: (name: string, color?: string) => void;
-  onSaveMeta: (map: MapWithTitle) => Promise<void>;
-}
-
-const VaultCard = memo(function VaultCard({
-  map,
-  usage,
-  isLocalMode,
-  renamingId,
-  renameValue,
-  renaming,
-  userLabels,
-  activeShareCount,
-  previewState,
-  previewPanelStyle,
-  previewOverlayStyle,
-  previewOverlayBadgeStyle,
-  onNavigate,
-  onStartRename,
-  onRenameValueChange,
-  onRenameConfirm,
-  onRenameCancel,
-  onOpenHistory,
-  onDeleteRequest,
-  onSetDraftColor,
-  onSetDraftNote,
-  onSetDraftLabels,
-  onSetDraftMaxVersions,
-  onUpdateUserLabelColor,
-  onAddUserLabel,
-  onSaveMeta,
-}: VaultCardProps) {
-  const persistedColor = normalizeHexColor(map.vault_color);
-  const persistedMax = Math.max(1, map.max_versions ?? 50);
-  const persistedSharingMode = normalizeSharingMode(map.vault_sharing_mode);
-  const persistedEncryptionMode = normalizeEncryptionMode(map.vault_encryption_mode);
-  const persistedLabels = normalizeVaultLabels(map.vault_labels);
-  const isSharedVault = activeShareCount > 0 || persistedSharingMode === 'shared';
-  const blurPreview = isSharedVault;
-  const dirty =
-    map.draftNote !== map.vaultNote ||
-    map.draftColor !== persistedColor ||
-    !labelsEqual(map.draftLabels, persistedLabels) ||
-    (!isLocalMode && map.draftMaxVersions !== persistedMax);
-
-  return (
-    <article
-      key={map.id}
-      className="overflow-hidden rounded-xl border bg-surface-1"
-      style={{ borderColor: map.draftColor }}
-    >
-      <div className="h-1" style={{ backgroundColor: map.draftColor }} />
-      <div className="space-y-4 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            {renamingId === map.id ? (
-              <div className="flex items-center gap-2">
-                <input
-                  autoFocus
-                  value={renameValue}
-                  onChange={(e) => onRenameValueChange(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void onRenameConfirm(map.id);
-                    if (e.key === 'Escape') onRenameCancel();
-                  }}
-                  className="flex-1 rounded-md border border-accent bg-surface px-3 py-1.5 text-base font-semibold text-white focus:outline-none focus:ring-1 focus:ring-accent"
-                />
-                <button
-                  onClick={() => void onRenameConfirm(map.id)}
-                  disabled={renaming || !renameValue.trim()}
-                  className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-                >
-                  {renaming ? '...' : 'OK'}
-                </button>
-                <button
-                  onClick={onRenameCancel}
-                  className="rounded-md border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:border-slate-500"
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button
-                className="min-w-0 w-full text-left"
-                onClick={() => onNavigate(`/vaults/${map.id}`)}
-              >
-                <p className="truncate text-lg font-semibold text-white">
-                  {map.title ?? <span className="italic text-slate-500">Decrypting...</span>}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Updated {formatDateShort(map.updated_at)}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {isSharedVault && (
-                    <span className="rounded-full border border-accent/40 bg-accent/10 px-2 py-1 text-[11px] font-medium text-slate-100">
-                      {activeShareCount > 0 ? `${activeShareCount} live share${activeShareCount === 1 ? '' : 's'}` : 'Shared vault'}
-                    </span>
-                  )}
-                  {persistedEncryptionMode === 're-encrypted' && (
-                    <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-1 text-[11px] font-medium text-amber-200">
-                      Differently encrypted
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1 text-xs text-slate-500">
-                  {usage?.version_count ?? 0} stored versions{(usage?.attachment_count ?? 0) > 0 ? ` · ${usage?.attachment_count ?? 0} file${(usage?.attachment_count ?? 0) === 1 ? '' : 's'}` : ''} · {fmtBytes(usage?.total_bytes ?? 0)} total{(usage?.attachment_bytes ?? 0) > 0 ? ` incl. ${fmtBytes(usage?.attachment_bytes ?? 0)} files` : ''}{!isLocalMode && ` · max kept ${persistedMax}`}
-                </p>
-              </button>
-            )}
-          </div>
-
-          <div className="flex shrink-0 gap-1">
-            <button
-              onClick={() => onStartRename(map)}
-              className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-700 hover:text-slate-300"
-              title="Rename vault"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </button>
-            {!isLocalMode && (
-              <button
-                onClick={() => onOpenHistory(map.id)}
-                className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-700 hover:text-slate-300"
-                title="Version history"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-                </svg>
-              </button>
-            )}
-            {dirty && (
-              <button
-                onClick={() => { void onSaveMeta(map); }}
-                disabled={map.metaSaving}
-                className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-700 hover:text-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
-                title="Save settings"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                  <polyline points="17 21 17 13 7 13 7 21"/>
-                  <polyline points="7 3 7 8 15 8"/>
-                </svg>
-              </button>
-            )}
-            <button
-              onClick={() => onDeleteRequest(map.id, map.title)}
-              className="rounded-lg p-2 text-slate-500 transition hover:bg-red-900/30 hover:text-red-400"
-              title="Delete vault"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <div className="rounded-xl border p-3" style={previewPanelStyle}>
-          <div className="mb-2 flex items-center justify-between gap-2 text-xs text-slate-400">
-            <span>Vault preview</span>
-            <span>
-              {previewState?.summary
-                ? `${previewState.summary.nodeCount} node${previewState.summary.nodeCount === 1 ? '' : 's'}`
-                : previewState?.error
-                  ? 'Unavailable'
-                  : 'Open to preview'}
-            </span>
-          </div>
-
-          {previewState?.summary ? (
-            <div>
-              <button
-                type="button"
-                onClick={() => onNavigate(`/vaults/${map.id}`)}
-                className="block w-full cursor-pointer rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                title={`Open ${map.title ?? 'vault'}`}
-              >
-                <div className="relative overflow-hidden rounded-lg transition-opacity hover:opacity-90">
-                  <div className={blurPreview ? 'select-none blur-sm opacity-60' : ''}>
-                    <img
-                      src={previewState.summary.image_data_url}
-                      alt={`Preview of ${map.title ?? 'vault'}`}
-                      className="aspect-video w-full object-contain"
-                      loading="lazy"
-                    />
-                  </div>
-                  {blurPreview && (
-                    <div className="absolute inset-0 flex items-center justify-center" style={previewOverlayStyle}>
-                      <span className="rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em]" style={previewOverlayBadgeStyle}>
-                        Blurred for shared vaults
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </button>
-              <p className="mt-2 text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                {previewState.summary.format} screenshot
-                {previewState.summary.noteCount > 0 ? ` | ${previewState.summary.noteCount} notes` : ''}
-                {previewState.summary.attachmentCount > 0 ? ` | ${previewState.summary.attachmentCount} files` : ''}
-              </p>
-            </div>
-          ) : previewState?.error ? (
-            <p className="text-xs text-slate-500">Preview unavailable for this vault yet.</p>
-          ) : (
-            <button
-              type="button"
-              onClick={() => onNavigate(`/vaults/${map.id}`)}
-              className="flex h-56 w-full items-center justify-center rounded-lg border border-dashed border-slate-700 bg-slate-900/60 px-6 text-center text-sm text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
-            >
-              Open and save this vault to create its encrypted screenshot preview.
-            </button>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="text-xs text-slate-400">
-            Card color
-            <input
-              type="color"
-              value={map.draftColor}
-              onChange={(e) => onSetDraftColor(map.id, e.target.value)}
-              className="mt-1 h-10 w-full cursor-pointer rounded-md border border-slate-600 bg-transparent p-1"
-              title="Vault card color"
-            />
-          </label>
-
-          {!isLocalMode && (
-            <label className="text-xs text-slate-400">
-              Max versions kept
-              <input
-                type="number"
-                min={1}
-                step={1}
-                value={map.draftMaxVersions}
-                onChange={(e) => onSetDraftMaxVersions(map.id, Number(e.target.value))}
-                className="mt-1 w-full rounded-md border border-slate-600 bg-surface px-3 py-2 text-sm text-white focus:border-accent focus:outline-none"
-              />
-            </label>
-          )}
-        </div>
-
-        <label className="block text-xs text-slate-400">
-          Vault note
-          <textarea
-            key={`note-${map.id}`}
-            defaultValue={map.draftNote}
-            onBlur={(e) => onSetDraftNote(map.id, e.target.value)}
-            rows={3}
-            placeholder="Optional note for this vault"
-            className="mt-1 w-full resize-y rounded-md border border-slate-600 bg-surface px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-accent focus:outline-none"
-          />
-        </label>
-
-        <label className="block text-xs text-slate-400">
-          Vault labels
-          <div className="mt-1 flex flex-wrap gap-1">
-            {map.draftLabels.map((lbl) => (
-              <span
-                key={lbl}
-                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-white"
-                style={{
-                  backgroundColor: userLabels.find((item) => item.name === lbl)?.color ?? 'var(--accent)',
-                }}
-              >
-                {lbl}
-                <label title="Change label color" className="inline-flex cursor-pointer items-center">
-                  <span className="h-2 w-2 rounded-full border border-white/60" style={{ backgroundColor: userLabels.find((item) => item.name === lbl)?.color ?? 'var(--accent)' }} />
-                  <input
-                    type="color"
-                    value={userLabels.find((item) => item.name === lbl)?.color ?? '#7c3aed'}
-                    className="sr-only"
-                    onChange={(e) => onUpdateUserLabelColor(lbl, e.target.value)}
-                  />
-                </label>
-                <button type="button" className="ml-0.5 opacity-60 hover:opacity-100" onClick={() => onSetDraftLabels(map.id, map.draftLabels.filter((l) => l !== lbl))}>×</button>
-              </span>
-            ))}
-            <VaultLabelInput
-              draftLabels={map.draftLabels}
-              onAdd={(t, c) => {
-                onAddUserLabel(t, c);
-                onSetDraftLabels(map.id, [...map.draftLabels, t]);
-              }}
-            />
-          </div>
-        </label>
-
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {dirty && <span className="text-xs text-amber-300">Unsaved settings</span>}
-        </div>
-      </div>
-    </article>
-  );
-}, (prev, next) => {
-  const sameRenameContext = prev.renamingId !== prev.map.id
-    ? prev.renamingId === next.renamingId
-    : prev.renamingId === next.renamingId && prev.renameValue === next.renameValue && prev.renaming === next.renaming;
-  return prev.map === next.map
-    && prev.usage === next.usage
-    && prev.isLocalMode === next.isLocalMode
-    && sameRenameContext
-    && prev.activeShareCount === next.activeShareCount
-    && prev.previewState === next.previewState
-    && prev.userLabels === next.userLabels
-    && prev.previewPanelStyle === next.previewPanelStyle
-    && prev.previewOverlayStyle === next.previewOverlayStyle
-    && prev.previewOverlayBadgeStyle === next.previewOverlayBadgeStyle;
-});
 
 // ─── Table row (compact view) ────────────────────────────────────────────────
 
-interface VaultTableRowProps {
-  map: MapWithTitle;
-  usage?: StorageSummary['vaults'][number];
-  isLocalMode: boolean;
-  renamingId: string | null;
-  renameValue: string;
-  renaming: boolean;
-  userLabels: Array<{ name: string; color: string }>;
-  activeShareCount: number;
-  previewState?: VaultPreviewState;
-  onNavigate: (path: string) => void;
-  onStartRename: (map: MapWithTitle) => void;
-  onRenameValueChange: (value: string) => void;
-  onRenameConfirm: (id: string) => Promise<void>;
-  onRenameCancel: () => void;
-  onOpenHistory: (id: string) => void;
-  onDeleteRequest: (id: string, title: string | null) => void;
-}
-
-const VaultTableRow = memo(function VaultTableRow({
-  map,
-  usage,
-  isLocalMode,
-  renamingId,
-  renameValue,
-  renaming,
-  userLabels,
-  activeShareCount,
-  previewState,
-  onNavigate,
-  onStartRename,
-  onRenameValueChange,
-  onRenameConfirm,
-  onRenameCancel,
-  onOpenHistory,
-  onDeleteRequest,
-}: VaultTableRowProps) {
-  const persistedSharingMode = normalizeSharingMode(map.vault_sharing_mode);
-  const isSharedVault = activeShareCount > 0 || persistedSharingMode === 'shared';
-  const hasTooltip = (map.draftLabels.length > 0 || !!map.draftNote) && renamingId !== map.id;
-  const [tooltipVisible, setTooltipVisible] = useState(false);
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-  const tooltipTdRef = useRef<HTMLTableCellElement>(null);
-
-  return (
-    <>
-    <tr className="border-b border-slate-800 transition-colors last:border-0 hover:bg-white/[0.025]">
-      {/* Color stripe */}
-      <td className="w-1 p-0" style={{ backgroundColor: map.draftColor }} />
-      {/* Thumbnail */}
-      <td className="w-[88px] p-2 pl-2">
-        <button
-          className="block overflow-hidden rounded"
-          onClick={() => onNavigate(`/vaults/${map.id}`)}
-          title={`Open ${map.title ?? 'vault'}`}
-        >
-          {previewState?.summary ? (
-            <img
-              src={previewState.summary.image_data_url}
-              alt=""
-              className="h-[46px] w-20 rounded object-cover"
-              style={isSharedVault ? { filter: 'blur(3px)', opacity: 0.5 } : {}}
-              loading="lazy"
-            />
-          ) : (
-            <div
-              className="flex h-[46px] w-20 items-center justify-center rounded"
-              style={{ background: `${map.draftColor}1a`, border: `1px solid ${map.draftColor}44` }}
-            >
-              <div className="h-2 w-2 rounded-full" style={{ backgroundColor: map.draftColor }} />
-            </div>
-          )}
-        </button>
-      </td>
-
-      {/* Name + labels (inline) — note and full label list appear in a portal tooltip above the row */}
-      <td
-        ref={tooltipTdRef}
-        className="relative min-w-0 px-3 py-2"
-        onMouseEnter={() => {
-          if (!hasTooltip || !tooltipTdRef.current) return;
-          const rect = tooltipTdRef.current.getBoundingClientRect();
-          setTooltipPos({ x: rect.left, y: rect.top });
-          setTooltipVisible(true);
-        }}
-        onMouseLeave={() => setTooltipVisible(false)}
-      >
-        {renamingId === map.id ? (
-          <div className="flex items-center gap-2">
-            <input
-              autoFocus
-              value={renameValue}
-              onChange={(e) => onRenameValueChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void onRenameConfirm(map.id);
-                if (e.key === 'Escape') onRenameCancel();
-              }}
-              className="w-full rounded border border-accent bg-surface px-2 py-1 text-sm font-medium text-white focus:outline-none"
-            />
-            <button
-              onClick={() => void onRenameConfirm(map.id)}
-              disabled={renaming || !renameValue.trim()}
-              className="rounded bg-accent px-2 py-1 text-xs text-white disabled:opacity-50"
-            >
-              {renaming ? '…' : 'OK'}
-            </button>
-            <button
-              onClick={onRenameCancel}
-              className="rounded border border-slate-600 px-2 py-1 text-xs text-slate-300 hover:border-slate-500"
-            >
-              ✕
-            </button>
-          </div>
-        ) : (
-          <button className="block w-full text-left" onClick={() => onNavigate(`/vaults/${map.id}`)}>
-            <span className="block truncate text-sm font-medium text-white">
-              {map.title ?? <span className="italic text-slate-500">Decrypting…</span>}
-            </span>
-            {map.draftLabels.length > 0 && (
-              <span className="mt-1 flex flex-wrap gap-1">
-                {map.draftLabels.slice(0, 6).map((lbl) => (
-                  <span
-                    key={lbl}
-                    className="rounded-full px-1.5 py-0.5 text-[10px] leading-none text-white"
-                    style={{ backgroundColor: userLabels.find((ul) => ul.name === lbl)?.color ?? 'var(--accent)' }}
-                  >
-                    {lbl}
-                  </span>
-                ))}
-              </span>
-            )}
-          </button>
-        )}
-      </td>
-
-      {/* Updated date */}
-      <td className="hidden whitespace-nowrap px-3 py-2 text-xs text-slate-500 sm:table-cell">
-        {formatDateShort(map.updated_at)}
-      </td>
-
-      {/* Stats */}
-      <td className="hidden whitespace-nowrap px-3 py-2 text-xs text-slate-500 lg:table-cell">
-        {previewState?.summary != null
-          ? `${previewState.summary.nodeCount} node${previewState.summary.nodeCount === 1 ? '' : 's'}`
-          : '—'}
-        {!isLocalMode && usage != null && usage.version_count > 0 ? ` · ${usage.version_count} ver` : ''}
-      </td>
-
-      {/* Actions */}
-      <td className="py-2 pr-2">
-        <div className="flex items-center justify-end gap-0.5">
-          <button
-            onClick={() => onNavigate(`/vaults/${map.id}`)}
-            className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-700 hover:text-slate-200"
-            title="Open vault"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-          <button
-            onClick={() => onStartRename(map)}
-            className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-700 hover:text-slate-300"
-            title="Rename vault"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-          </button>
-          {!isLocalMode && (
-            <button
-              onClick={() => onOpenHistory(map.id)}
-              className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-700 hover:text-slate-300"
-              title="Version history"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-              </svg>
-            </button>
-          )}
-          <button
-            onClick={() => onDeleteRequest(map.id, map.title)}
-            className="rounded-lg p-1.5 text-slate-500 transition hover:bg-red-900/30 hover:text-red-400"
-            title="Delete vault"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
-        </div>
-      </td>
-    </tr>
-    {/* Rendered at document.body so the table wrapper's overflow:hidden cannot clip it. */}
-    {hasTooltip && tooltipVisible && createPortal(
-      <div
-        className="pointer-events-none fixed z-[9999] w-72 max-w-[85vw] rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-2xl"
-        style={{ left: tooltipPos.x, top: tooltipPos.y, transform: 'translateY(-100%) translateY(-8px)' }}
-      >
-        {map.draftLabels.length > 0 && (
-          <div>
-            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">Labels</p>
-            <div className="flex flex-wrap gap-1">
-              {map.draftLabels.map((lbl) => (
-                <span
-                  key={lbl}
-                  className="rounded-full px-2 py-0.5 text-xs text-white"
-                  style={{ backgroundColor: userLabels.find((ul) => ul.name === lbl)?.color ?? 'var(--accent)' }}
-                >
-                  {lbl}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-        {map.draftNote && (
-          <div className={map.draftLabels.length > 0 ? 'mt-2' : ''}>
-            <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">Note</p>
-            <p className="text-xs leading-relaxed text-slate-300">{map.draftNote}</p>
-          </div>
-        )}
-      </div>,
-      document.body,
-    )}
-    </>
-  );
-}, (prev, next) => {
-  const sameRenameContext = prev.renamingId !== prev.map.id
-    ? prev.renamingId === next.renamingId
-    : prev.renamingId === next.renamingId && prev.renameValue === next.renameValue && prev.renaming === next.renaming;
-  return (
-    prev.map === next.map &&
-    prev.usage === next.usage &&
-    prev.isLocalMode === next.isLocalMode &&
-    sameRenameContext &&
-    prev.activeShareCount === next.activeShareCount &&
-    prev.previewState === next.previewState &&
-    prev.userLabels === next.userLabels
-  );
-});
 
 export function VaultsPage() {
   const navigate = useNavigate();
@@ -763,21 +97,17 @@ export function VaultsPage() {
   const [createError, setCreateError] = useState('');
   const [createPlanPrompt, setCreatePlanPrompt] = useState<PlanErrorPrompt | null>(null);
 
-  const [importing, setImporting] = useState(false);
-  const [importError, setImportError] = useState('');
+  /** Which format is importing right now, or null. */
+  const [importBusy, setImportBusy] = useState<ImportFormatId | null>(null);
+  /** Kept per format: each format shows its own failure, in its own wording. */
+  const [importErrors, setImportErrors] = useState<Partial<Record<ImportFormatId, string>>>({});
   const mdImportRef = useRef<HTMLInputElement>(null);
-
-  const [mmImporting, setMmImporting] = useState(false);
-  const [mmImportError, setMmImportError] = useState('');
   const mmImportRef = useRef<HTMLInputElement>(null);
-
-  const [wxmlImporting, setWxmlImporting] = useState(false);
-  const [wxmlImportError, setWxmlImportError] = useState('');
   const wxmlImportRef = useRef<HTMLInputElement>(null);
-
-  const [xmindImporting, setXmindImporting] = useState(false);
-  const [xmindImportError, setXmindImportError] = useState('');
   const xmindImportRef = useRef<HTMLInputElement>(null);
+  const importRefs: Record<ImportFormatId, RefObject<HTMLInputElement | null>> = {
+    md: mdImportRef, mm: mmImportRef, wxml: wxmlImportRef, xmind: xmindImportRef,
+  };
 
   const [showImportMenu, setShowImportMenu] = useState(false);
   const importMenuRef = useRef<HTMLDivElement>(null);
@@ -926,22 +256,15 @@ export function VaultsPage() {
             const color = isLocalMode
               ? getLocalVaultColor(m.id, m.vault_color)
               : normalizeHexColor(m.vault_color);
-            const maxVersions = Math.max(1, m.max_versions ?? 50);
-            const note = decryptedNotes[i] ?? '';
             return {
               ...m,
               vault_color: color,
-              title: decryptedTitles[i],
-              vaultNote: note,
-              draftNote: note,
-              draftLabels: normalizeVaultLabels(
-                m.vault_labels ?? (isLocalMode ? (JSON.parse(localStorage.getItem(`vault-labels-${m.id}`) ?? '[]') as string[]) : []),
-              ),
-              draftColor: color,
-              draftSharingMode: normalizeSharingMode(m.vault_sharing_mode),
-              draftEncryptionMode: normalizeEncryptionMode(m.vault_encryption_mode),
-              draftMaxVersions: maxVersions,
-              metaSaving: false,
+              ...buildVaultDrafts(m, {
+                title: decryptedTitles[i],
+                note: decryptedNotes[i] ?? '',
+                localLabels: isLocalMode ? localVaultLabels(m.id) : [],
+                color,
+              }),
             };
           }),
         );
@@ -954,17 +277,12 @@ export function VaultsPage() {
             return {
               ...m,
               vault_color: color,
-              title: null,
-              vaultNote: '',
-              draftNote: '',
-              draftLabels: normalizeVaultLabels(
-                m.vault_labels ?? (isLocalMode ? (JSON.parse(localStorage.getItem(`vault-labels-${m.id}`) ?? '[]') as string[]) : []),
-              ),
-              draftColor: color,
-              draftSharingMode: normalizeSharingMode(m.vault_sharing_mode),
-              draftEncryptionMode: normalizeEncryptionMode(m.vault_encryption_mode),
-              draftMaxVersions: Math.max(1, m.max_versions ?? 50),
-              metaSaving: false,
+              ...buildVaultDrafts(m, {
+                title: null,
+                note: '',
+                localLabels: isLocalMode ? localVaultLabels(m.id) : [],
+                color,
+              }),
             };
           }),
         );
@@ -1214,70 +532,28 @@ export function VaultsPage() {
     navigate(`/vaults/${created.id}`);
   };
 
-  const handleImportMarkdown = async (file: File) => {
+  /**
+   * Imports one file as a new vault.
+   *
+   * Everything but `format.parse` was the same in all four handlers, down to
+   * clearing the file input so re-picking the same file fires `change` again.
+   */
+  const handleImport = async (format: ImportFormat, file: File) => {
     if (!sessionKeys) return;
-    setImporting(true);
-    setImportError('');
+    setImportBusy(format.id);
+    setImportErrors((prev) => ({ ...prev, [format.id]: undefined }));
     try {
-      const text = await file.text();
-      const vaultTitle = file.name.replace(/\.md$/i, '') || 'Imported vault';
-      await createVaultFromImportedTree(obsidianMarkdownToTree(text, vaultTitle), vaultTitle);
+      const vaultTitle = vaultTitleFromFileName(file.name, format.extensions);
+      await createVaultFromImportedTree(await format.parse(file, vaultTitle), vaultTitle);
     } catch (err) {
-      setImportError(err instanceof Error ? err.message : 'Import failed');
+      setImportErrors((prev) => ({
+        ...prev,
+        [format.id]: err instanceof Error ? err.message : 'Import failed',
+      }));
     } finally {
-      setImporting(false);
-      if (mdImportRef.current) mdImportRef.current.value = '';
-    }
-  };
-
-  /** Handles both FreeMind and FreePlane — the parser detects which by <map version>. */
-  const handleImportFreemind = async (file: File) => {
-    if (!sessionKeys) return;
-    setMmImporting(true);
-    setMmImportError('');
-    try {
-      const text = await file.text();
-      const vaultTitle = file.name.replace(/\.mm$/i, '') || 'Imported vault';
-      await createVaultFromImportedTree(freemindToTree(text, vaultTitle), vaultTitle);
-    } catch (err) {
-      setMmImportError(err instanceof Error ? err.message : 'Import failed');
-    } finally {
-      setMmImporting(false);
-      if (mmImportRef.current) mmImportRef.current.value = '';
-    }
-  };
-
-  const handleImportWisemapping = async (file: File) => {
-    if (!sessionKeys) return;
-    setWxmlImporting(true);
-    setWxmlImportError('');
-    try {
-      const text = await file.text();
-      const vaultTitle = file.name.replace(/\.(wxml|xml)$/i, '') || 'Imported vault';
-      await createVaultFromImportedTree(wisemappingToTree(text, vaultTitle), vaultTitle);
-    } catch (err) {
-      setWxmlImportError(err instanceof Error ? err.message : 'Import failed');
-    } finally {
-      setWxmlImporting(false);
-      if (wxmlImportRef.current) wxmlImportRef.current.value = '';
-    }
-  };
-
-  const handleImportXmind = async (file: File) => {
-    if (!sessionKeys) return;
-    setXmindImporting(true);
-    setXmindImportError('');
-    try {
-      const fileData = await file.arrayBuffer();
-      const vaultTitle = file.name.replace(/\.xmind$/i, '') || 'Imported vault';
-      // Loaded on demand — the zip decoder is only needed for this format.
-      const { xmindToTree } = await import('../utils/xmindImport');
-      await createVaultFromImportedTree(xmindToTree(fileData, vaultTitle), vaultTitle);
-    } catch (err) {
-      setXmindImportError(err instanceof Error ? err.message : 'Import failed');
-    } finally {
-      setXmindImporting(false);
-      if (xmindImportRef.current) xmindImportRef.current.value = '';
+      setImportBusy(null);
+      const input = importRefs[format.id].current;
+      if (input) input.value = '';
     }
   };
 
@@ -1435,68 +711,45 @@ export function VaultsPage() {
             </div>
             <div className="flex items-center gap-2">
               {/* Hidden file inputs */}
-              <input ref={mdImportRef} type="file" accept=".md" style={{ display: 'none' }}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleImportMarkdown(f); }} />
-              <input ref={mmImportRef} type="file" accept=".mm" style={{ display: 'none' }}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleImportFreemind(f); }} />
-              <input ref={wxmlImportRef} type="file" accept=".wxml,.xml" style={{ display: 'none' }}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleImportWisemapping(f); }} />
-              <input ref={xmindImportRef} type="file" accept=".xmind" style={{ display: 'none' }}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleImportXmind(f); }} />
+              {IMPORT_FORMATS.map((format) => (
+                <input
+                  key={format.id}
+                  ref={importRefs[format.id]}
+                  type="file"
+                  accept={format.accept}
+                  style={{ display: 'none' }}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleImport(format, f); }}
+                />
+              ))}
 
               {/* Import dropdown */}
               <div ref={importMenuRef} style={{ position: 'relative' }}>
                 <button
                   onClick={() => setShowImportMenu((v) => !v)}
-                  disabled={!hasKeys || importing || mmImporting || wxmlImporting || xmindImporting}
+                  disabled={!hasKeys || importBusy !== null}
                   title="Import a vault from a file"
                   className="flex items-center gap-2 rounded-lg border border-slate-600 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                   </svg>
-                  {(importing || mmImporting || wxmlImporting || xmindImporting) ? 'Importing…' : 'Import'}
+                  {importBusy !== null ? 'Importing…' : 'Import'}
                   <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
                 {showImportMenu && (
                   <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 4px)', zIndex: 200, minWidth: 200, background: 'var(--color-surface-1, #1e293b)', border: '1px solid var(--color-border, #334155)', borderRadius: 8, padding: '4px 0', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
-                    <button
-                      className="w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white"
-                      onClick={() => { mdImportRef.current?.click(); setShowImportMenu(false); }}
-                    >
-                      <span className="font-medium">Markdown</span>
-                      <span className="ml-2 text-xs text-slate-500">.md</span>
-                    </button>
-                    <button
-                      className="w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white"
-                      onClick={() => { mmImportRef.current?.click(); setShowImportMenu(false); }}
-                    >
-                      <span className="font-medium">FreeMind</span>
-                      <span className="ml-2 text-xs text-slate-500">.mm</span>
-                    </button>
-                    <button
-                      className="w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white"
-                      onClick={() => { mmImportRef.current?.click(); setShowImportMenu(false); }}
-                    >
-                      <span className="font-medium">FreePlane</span>
-                      <span className="ml-2 text-xs text-slate-500">.mm</span>
-                    </button>
-                    <button
-                      className="w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white"
-                      onClick={() => { wxmlImportRef.current?.click(); setShowImportMenu(false); }}
-                    >
-                      <span className="font-medium">WiseMapping</span>
-                      <span className="ml-2 text-xs text-slate-500">.wxml</span>
-                    </button>
-                    <button
-                      className="w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white"
-                      onClick={() => { xmindImportRef.current?.click(); setShowImportMenu(false); }}
-                    >
-                      <span className="font-medium">XMind</span>
-                      <span className="ml-2 text-xs text-slate-500">.xmind</span>
-                    </button>
+                    {IMPORT_MENU_ITEMS.map((item) => (
+                      <button
+                        key={`${item.format}-${item.label}`}
+                        className="w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-white/5 hover:text-white"
+                        onClick={() => { importRefs[item.format].current?.click(); setShowImportMenu(false); }}
+                      >
+                        <span className="font-medium">{item.label}</span>
+                        <span className="ml-2 text-xs text-slate-500">{item.extension}</span>
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1513,26 +766,11 @@ export function VaultsPage() {
               </button>
             </div>
           </div>
-          {importError && (
-            <div className="mb-4 rounded-lg border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-400">
-              Import failed: {importError}
+          {IMPORT_FORMATS.map((format) => importErrors[format.id] && (
+            <div key={format.id} className="mb-4 rounded-lg border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-400">
+              {format.errorLabel}: {importErrors[format.id]}
             </div>
-          )}
-          {mmImportError && (
-            <div className="mb-4 rounded-lg border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-400">
-              .mm import failed: {mmImportError}
-            </div>
-          )}
-          {wxmlImportError && (
-            <div className="mb-4 rounded-lg border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-400">
-              WiseMapping import failed: {wxmlImportError}
-            </div>
-          )}
-          {xmindImportError && (
-            <div className="mb-4 rounded-lg border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-400">
-              XMind import failed: {xmindImportError}
-            </div>
-          )}
+          ))}
 
           {storageError && (
             <div className="mb-4 rounded-lg border border-amber-700/60 bg-amber-900/20 px-4 py-3 text-xs text-amber-300">

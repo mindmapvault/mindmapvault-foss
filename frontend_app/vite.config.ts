@@ -9,6 +9,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@mindmapvault/connectors': fileURLToPath(new URL('../packages/connectors/src/index.ts', import.meta.url)),
+      '@mindmapvault/mindmap-core': fileURLToPath(new URL('../packages/mindmap-core/src/index.ts', import.meta.url)),
     },
   },
   optimizeDeps: {

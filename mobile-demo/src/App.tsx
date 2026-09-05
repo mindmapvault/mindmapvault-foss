@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DesktopMindMapEditor } from '../../frontend_app/src/components/MindMapEditor';
 import { encryptTree } from '../../frontend_app/src/crypto/vault';
 import { randomBytes, toBase64 } from '../../frontend_app/src/crypto/utils';
-import { treeToMarkdown } from '../../frontend_app/src/utils/markdownExport';
+import { EXPORT_FORMATS, type ExportFormat } from '../../frontend_app/src/utils/exportFormats';
 import { useThemeStore } from '../../frontend_app/src/store/theme';
 import type { MindMapTree } from '../../frontend_app/src/types';
 
@@ -301,6 +301,9 @@ function normalizeFileBaseName(input: string): string {
   return clean || 'mindmapvault-mobile-demo';
 }
 
+/** The demo offers Markdown and nothing else. */
+const MARKDOWN_ONLY = EXPORT_FORMATS.filter((format) => format.id === 'md');
+
 export default function App() {
   const mode = useThemeStore((state) => state.mode);
   const primaryColor = useThemeStore((state) => state.primaryColor);
@@ -393,11 +396,15 @@ export default function App() {
     downloadJsonFile({ title: treeTitle, exported_at: new Date().toISOString(), tree }, `${safeName}.json`);
   }, [title]);
 
-  const exportMarkdown = useCallback((tree: MindMapTree, treeTitle: string) => {
-    const safeName = normalizeFileBaseName(treeTitle ?? title);
-    const markdown = treeToMarkdown(tree.root, treeTitle ?? 'Untitled mind map');
-    const payload = new TextEncoder().encode(markdown);
-    downloadBytes(payload, `${safeName}.md`, 'text/markdown');
+  const exportMarkdown = useCallback(async (
+    format: ExportFormat,
+    tree: MindMapTree,
+    baseName: string,
+  ) => {
+    const safeName = normalizeFileBaseName(baseName ?? title);
+    const blob = await format.serialize(tree.root, baseName ?? 'Untitled mind map');
+    const payload = new Uint8Array(await blob.arrayBuffer());
+    downloadBytes(payload, `${safeName}${format.extension}`, blob.type);
   }, [title]);
 
   return (
@@ -417,7 +424,8 @@ export default function App() {
         renamingTitle={renamingTitle}
         onDownloadEncrypted={(fileBaseName) => void exportEncryptedBlob(fileBaseName)}
         onDownloadJson={downloadJson}
-        onExportMarkdown={exportMarkdown}
+        exportFormats={MARKDOWN_ONLY}
+        onExport={exportMarkdown}
         onTreeChange={handleTreeChange}
       />
     </div>

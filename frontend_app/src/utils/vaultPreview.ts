@@ -1,10 +1,11 @@
-import { bezierPath, layoutTree } from '../components/MindMapLayout';
-import { NODE_IMAGE_PAD } from '../components/MindMapConstants';
+import { bezierPath, layoutTree, nodeGeometry } from '@mindmapvault/mindmap-core';
 import { resolveLucideIcon, type LucideIconNode } from '../components/lucideIconRegistry';
 import type { MindMapGraph, MindMapTree, MindMapTreeNode } from '../types';
 import type { ThemeMode } from '../store/theme';
 
-const CACHE_KEY = 'cryptmind-vault-preview-cache-v3';
+// v4: thumbnails are laid out from the shared geometry now, so anything
+// cached under v3 was drawn with the old, off-centre arithmetic.
+const CACHE_KEY = 'cryptmind-vault-preview-cache-v4';
 const MAX_CACHE_ENTRIES = 80;
 const PREVIEW_WIDTH = 760;
 const PREVIEW_HEIGHT = 260;
@@ -287,18 +288,25 @@ function renderTreeSvgSync(
       `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${Math.max(0.8, scale)}"/>`,
     );
 
+    // The bands come from the parts the node was measured with, worked out in
+    // map coordinates and then scaled — so the thumbnail puts the text where
+    // the editor puts it. This used to be a third, and wrongest, copy of the
+    // arithmetic: it had the tag strip at 16px rather than 18 and ignored the
+    // meta strip entirely, so the label sat off-centre.
+    const geom = nodeGeometry(entry, entry.parts);
+    const toY = (mapY: number) => mapY * scale + offsetY;
+
     const tags = Array.isArray(node.tags) ? node.tags.slice(0, 4) : [];
     const hasTagStrip = tags.length > 0;
-    const topTagH = hasTagStrip ? 16 * scale : 0;
 
     if (hasTagStrip) {
       parts.push(
-        `<line x1="${x + 4 * scale}" y1="${y + topTagH}" x2="${x + w - 4 * scale}" y2="${y + topTagH}" stroke="${ownColor ? '#ffffff22' : palette.nodeStroke}" stroke-width="${Math.max(0.35, 0.6 * scale)}"/>`,
+        `<line x1="${x + 4 * scale}" y1="${toY(geom.tagBottomY)}" x2="${x + w - 4 * scale}" y2="${toY(geom.tagBottomY)}" stroke="${ownColor ? '#ffffff22' : palette.nodeStroke}" stroke-width="${Math.max(0.35, 0.6 * scale)}"/>`,
       );
 
       const tagGap = 3 * scale;
       let tagCursor = x + 6 * scale;
-      const tagY = y + 2 * scale;
+      const tagY = toY(geom.tagTopY) + 2 * scale;
       const tagH = 11 * scale;
       for (const tag of tags) {
         const txt = clampLabel(tag, 12);
@@ -316,13 +324,12 @@ function renderTreeSvgSync(
     // Node image. `layoutTree` already reserved the band for it, so this has to
     // draw it or the preview shows a node with an unexplained gap. The data URI
     // is inside the tree, so the preview needs no request to render it.
-    const nodeImage = node.image?.thumb ? node.image : null;
-    const imageBandH = nodeImage ? (nodeImage.h + NODE_IMAGE_PAD) * scale : 0;
+    const nodeImage = entry.parts.image ? node.image! : null;
     if (nodeImage) {
       const imageW = nodeImage.w * scale;
       const imageH = nodeImage.h * scale;
       parts.push(
-        `<image href="${escapeXml(nodeImage.thumb)}" x="${x + (w - imageW) / 2}" y="${y + topTagH + (NODE_IMAGE_PAD / 2) * scale}" width="${imageW}" height="${imageH}" style="clip-path:inset(0 round ${Math.max(1, 5 * scale)}px)"/>`,
+        `<image href="${escapeXml(nodeImage.thumb)}" x="${x + (w - imageW) / 2}" y="${toY(geom.imageY)}" width="${imageW}" height="${imageH}" style="clip-path:inset(0 round ${Math.max(1, 5 * scale)}px)"/>`,
       );
     }
 
@@ -331,7 +338,7 @@ function renderTreeSvgSync(
     const scaledIconSize = ICON_SIZE * scale;
     if (iconKeys.length > 0) {
       let iconX = x + 4 * scale;
-      const iconY = y + topTagH + imageBandH + (h - topTagH - imageBandH - scaledIconSize) / 2;
+      const iconY = toY(geom.centreY) - scaledIconSize / 2;
       for (const rawKey of iconKeys.slice(0, 4)) {
         const iconData = resolveLucideIcon(rawKey)?.iconNode;
         if (iconData) {
@@ -349,20 +356,20 @@ function renderTreeSvgSync(
     // Label text — centred, accounts for icon offset.
     const iconXOffset = iconKeys.length > 0 ? (iconKeys.slice(0, 4).length * (ICON_SIZE + 2) * scale) / 2 : 0;
     parts.push(
-      `<text x="${x + w / 2 + iconXOffset / 2}" y="${y + topTagH + imageBandH + (h - topTagH - imageBandH) / 2}" text-anchor="middle" dominant-baseline="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="${fontSize}" font-weight="${fontWeight}" fill="${textColor}">${escapeXml(clampLabel(node.text, isRoot ? 22 : 18))}</text>`,
+      `<text x="${x + w / 2 + iconXOffset / 2}" y="${toY(geom.centreY)}" text-anchor="middle" dominant-baseline="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="${fontSize}" font-weight="${fontWeight}" fill="${textColor}">${escapeXml(clampLabel(node.text, isRoot ? 22 : 18))}</text>`,
     );
 
     // Note dot (amber) — top-right of node, matching live editor.
-    const hasNote = !!normalizePreviewText(node.notes);
+    const hasNote = entry.parts.hasNote;
     if (hasNote) {
       const dotR = Math.max(2, 3.5 * scale);
       parts.push(
-        `<circle cx="${x + w - dotR - 2 * scale}" cy="${y + dotR + 2 * scale}" r="${dotR}" fill="${NOTE_DOT_COLOR}"/>`,
+        `<circle cx="${x + w - dotR - 2 * scale}" cy="${toY(geom.metaCentreY)}" r="${dotR}" fill="${NOTE_DOT_COLOR}"/>`,
       );
     }
 
     // Attachment badge (paperclip) — small badge below note dot if any attachments.
-    const attachCount = node.attachments?.length ?? 0;
+    const attachCount = entry.parts.attachmentCount;
     if (attachCount > 0) {
       const badgeR = Math.max(1.5, 2.8 * scale);
       const badgeX = x + w - badgeR - 2 * scale;

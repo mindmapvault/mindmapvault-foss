@@ -33,7 +33,6 @@ import { ThemePanel } from './ThemePanel';
 import { MindMapIconPicker } from './MindMapIconPicker.tsx';
 import { MindMapColorPicker } from './MindMapColorPicker';
 import { MindMapDateDialog } from './MindMapDateDialog';
-import DynamicLucideIcon from './DynamicLucideIcon.tsx';
 import { MindMapNotesDialog } from './MindMapNotesDialog';
 import type { NoteEditorHandle } from './notes/NoteEditor';
 import { useUserLabels } from '../hooks/useUserLabels';
@@ -41,33 +40,63 @@ import type { MindMapEditorProps } from './MindMapEditor.types';
 import {
   NODE_COLORS,
   PROGRESS_PRESETS,
-  CHECKBOX_SIZE,
-  ICON_SIZE,
-  PROGRESS_PIE_SIZE,
-  NODE_LINE_H,
-  NODE_PAD_X,
-  LINK_STRIP_H,
-  TAG_STRIP_H,
-  TOP_META_STRIP_H,
-  NODE_IMAGE_PAD,
 } from './MindMapConstants';
 import {
-  uid,
   cloneTree,
   findNode,
-  isDescendant,
   countChecked,
   flattenTree,
   flattenAll,
   defaultRoot,
   migrateNode,
 } from './MindMapHelpers';
-import { layoutTree, bezierPath } from './MindMapLayout';
+import { layoutTree, bezierPath, describeNode, nodeGeometry } from '@mindmapvault/mindmap-core';
 import { appendAttachmentMarkdownLinks, getVisibleNodeTextLines } from '../utils/nodeAttachments';
 import { exportSvgAsPdf, renderSvgToCanvas } from '../utils/pdfExport';
 import { downloadBlob, downloadDataUrl } from '../utils/download';
-import { handleDelegatedLinkClick, openExternalUrl } from '../utils/openExternal';
+import { handleDelegatedLinkClick } from '../utils/openExternal';
 import { createNodeImageGlyph, type NodeImageGlyph } from '../utils/filePreview';
+import { buildExportFileBaseName as buildExportName } from '../utils/exportFileName';
+import {
+  BodyBand,
+  CollapseControls,
+  DateBadge,
+  FooterBand,
+  ImageBand,
+  MetaBand,
+  TagBand,
+  type BodyActions,
+  type NodeVisual,
+} from './mindmap/NodeBands';
+import {
+  addChild as addChildOp,
+  addSibling as addSiblingOp,
+  addUrl,
+  cloneSubtreeWithNewIds,
+  editNode,
+  editNodes,
+  insertAfter,
+  moveSibling,
+  nextInCycle,
+  removeNode as removeNodeOp,
+  removeNodes,
+  removeUrl,
+  reparentNode as reparentNodeOp,
+  resetPositions,
+  toggleChecked,
+  toggleIcon,
+} from './mindmap/treeOps';
+import { useMindMapHistory } from './mindmap/useMindMapHistory';
+import {
+  dragDelta,
+  findDropTarget,
+  marqueeBounds,
+  nodesInMarquee,
+  passedDragThreshold,
+} from './mindmap/dragSelection';
+
+/** null closes the cycle: 0 → 25 → 50 → 75 → 100 → no dial → 0. */
+const PROGRESS_CYCLE: (number | null)[] = [...PROGRESS_PRESETS, null];
 import { useEffectiveKeyboardLayout, useUiStore, useResolvedDensity, type TrayPosition } from '../store/ui';
 import { ColorTray } from './ColorTray';
 import { IconTray } from './IconTray';
@@ -104,7 +133,7 @@ function toolbarGroup(label: string, children: ReactNode, ribbonTab?: string) {
 // ── Component ─────────────────────────────────────────────────────────────────
 export function DesktopMindMapEditor({
   initialTree, initialShowShortcuts, disableAutoPanToSelection, externalNodeAttachments, title, onSave, onTitleChange, saving, saveMsg, error, onBack,
-  onExportMarkdown, onExportFreemind, onExportFreeplane, onExportWisemapping, onExportXmind, titleChanged, onRenameTitle, renamingTitle,
+  exportFormats, onExport, titleChanged, onRenameTitle, renamingTitle,
   versionLabel, versionTooltip,
   onTreeChange, onSelectionChange, onNodeFileDrop, onOpenNodeAttachment,
   onFetchNodeAttachmentContent,
@@ -421,10 +450,10 @@ export function DesktopMindMapEditor({
   }, []);
 
   // ── History (undo/redo) ────────────────────────────────────────────────────
-  const historyRef = useRef<MindMapTreeNode[]>([migrateNode(initialTree?.root ?? defaultRoot())]);
-  const historyIdxRef = useRef(0);
-  const [history, setHistoryState] = useState<MindMapTreeNode[]>(() => historyRef.current);
-  const [historyIdx, setHistoryIdx] = useState(0);
+  const history = useMindMapHistory(
+    migrateNode(initialTree?.root ?? defaultRoot()),
+    useCallback((restored: MindMapTreeNode) => { setRoot(restored); setIsDirty(true); }, []),
+  );
 
   // ── Refs ───────────────────────────────────────────────────────────────────
   const svgRef = useRef<SVGSVGElement>(null);
@@ -462,10 +491,7 @@ export function DesktopMindMapEditor({
     setRoot(r);
     setRootLeftCollapsed(false);
     setRootRightCollapsed(false);
-    historyRef.current = [cloneTree(r)];
-    historyIdxRef.current = 0;
-    setHistoryState([cloneTree(r)]);
-    setHistoryIdx(0);
+    history.reset(r);
     setSelectedId(nextSelectedId);
     const nextPanX = typeof savedView?.pan_x === 'number' && Number.isFinite(savedView.pan_x) ? savedView.pan_x : 160;
     const nextPanY = typeof savedView?.pan_y === 'number' && Number.isFinite(savedView.pan_y) ? savedView.pan_y : 300;
@@ -482,19 +508,10 @@ export function DesktopMindMapEditor({
 
   useEffect(() => {
     if (!onTreeChange) return;
-    const tree: MindMapTree = {
-      version: 'tree',
-      root: cloneTree(root),
-      view_state: {
-        pan_x: Math.round(pan.x),
-        pan_y: Math.round(pan.y),
-        zoom: Number(zoom.toFixed(3)),
-        focus_mode: focusMode,
-        focus_anchor_id: focusAnchorId,
-        selected_node_id: selectedId,
-      },
-    };
-    onTreeChange(tree);
+    onTreeChange(currentTreeSnapshot());
+    // currentTreeSnapshot is read when the effect runs, not while rendering,
+    // so it stays out of the deps: adding it would fire on every pan and zoom.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onTreeChange, root]);
 
   useEffect(() => {
@@ -572,8 +589,35 @@ export function DesktopMindMapEditor({
     }
   }, []);
 
+  const getNodeAttachments = useCallback((nodeId: string, inlineAttachments?: NodeAttachmentRef[]) => {
+    const inline = inlineAttachments ?? [];
+    const external = externalNodeAttachments?.[nodeId] ?? [];
+    if (inline.length === 0) return external;
+    if (external.length === 0) return inline;
+
+    const merged = new Map<string, NodeAttachmentRef>();
+    for (const attachment of external) merged.set(attachment.attachment_id, attachment);
+    for (const attachment of inline) {
+      merged.set(attachment.attachment_id, {
+        ...merged.get(attachment.attachment_id),
+        ...attachment,
+      });
+    }
+    return Array.from(merged.values()).sort((left, right) => right.uploaded_at.localeCompare(left.uploaded_at));
+  }, [externalNodeAttachments]);
+
   // ── Layout ────────────────────────────────────────────────────────────────
-  const layout = useMemo(() => layoutTree(root), [root]);
+  /**
+   * The editor knows more about a node's attachments than the node does: some
+   * arrive through `externalNodeAttachments` rather than inside the tree. The
+   * layout has to measure with the same count the renderer draws with, or the
+   * meta strip is drawn in space nothing reserved and the text loses 18px.
+   */
+  const layout = useMemo(
+    () => layoutTree(root, 0, 0, (node) =>
+      describeNode(node, { attachmentCount: getNodeAttachments(node.id, node.attachments).length })),
+    [root, getNodeAttachments],
+  );
 
   const loadAttachmentPreview = useCallback(async (attachment: NodeAttachmentRef) => {
     const isImage = (attachment.content_type ?? '').startsWith('image/');
@@ -610,300 +654,159 @@ export function DesktopMindMapEditor({
     }
   }, [attachmentById, loadAttachmentPreview, onLoadNodeAttachmentPreview]);
 
-  // ── History helpers ───────────────────────────────────────────────────────
-  const pushHistory = useCallback((newRoot: MindMapTreeNode) => {
-    const idx = historyIdxRef.current;
-    const next = [...historyRef.current.slice(0, idx + 1), cloneTree(newRoot)].slice(-50);
-    historyRef.current = next;
-    historyIdxRef.current = next.length - 1;
-    setHistoryState(next);
-    setHistoryIdx(next.length - 1);
-  }, []);
-
   const mutate = useCallback((newRoot: MindMapTreeNode) => {
     setRoot(newRoot);
-    pushHistory(newRoot);
+    history.push(newRoot);
     setIsDirty(true);
-  }, [pushHistory]);
+  }, [history]);
 
-  const undo = useCallback(() => {
-    if (historyIdxRef.current <= 0) return;
-    const idx = historyIdxRef.current - 1;
-    historyIdxRef.current = idx;
-    setHistoryIdx(idx);
-    setRoot(cloneTree(historyRef.current[idx]));
-    setIsDirty(true);
-  }, []);
-
-  const redo = useCallback(() => {
-    if (historyIdxRef.current >= historyRef.current.length - 1) return;
-    const idx = historyIdxRef.current + 1;
-    historyIdxRef.current = idx;
-    setHistoryIdx(idx);
-    setRoot(cloneTree(historyRef.current[idx]));
-    setIsDirty(true);
-  }, []);
+  const { undo, redo } = history;
 
   // ══════════════════════════════════════════════════════════════════════════
   //  TREE MUTATIONS
   // ══════════════════════════════════════════════════════════════════════════
 
-  const clearBranchCustomPositions = (node: MindMapTreeNode) => {
-    node.customX = undefined;
-    node.customY = undefined;
-    node.children.forEach(clearBranchCustomPositions);
-  };
-
   const addChild = useCallback((parentId: string, side?: 'left' | 'right') => {
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, parentId);
-    if (!found) return;
-    const newNode: MindMapTreeNode = {
-      id: uid(), text: '', children: [], collapsed: false, notes: '',
-      color: null, icons: [], checked: null, progress: null,
-      startDate: null, endDate: null, urls: [], tags: [],
-      ...(parentId === 'root' && side ? { side } : {}),
-    };
-    found.node.children.push(newNode);
-    found.node.collapsed = false;
-
-    // Keep freshly inserted nodes in clean branch spacing instead of inheriting dragged offsets.
-    clearBranchCustomPositions(found.node);
-    if (parentId === 'root') {
-      if (side === 'left') setRootLeftCollapsed(false);
-      if (side !== 'left') setRootRightCollapsed(false);
-    }
-
-    mutate(newRoot);
-    setTimeout(() => { setSelectedId(newNode.id); startEditing(newNode); }, 30);
+    const inserted = addChildOp(root, parentId, side);
+    if (!inserted) return;
+    if (inserted.side === 'left') setRootLeftCollapsed(false);
+    if (inserted.side === 'right') setRootRightCollapsed(false);
+    mutate(inserted.root);
+    setTimeout(() => { setSelectedId(inserted.node.id); startEditing(inserted.node); }, 30);
   }, [root, mutate]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const addSibling = useCallback((nodeId: string) => {
-    if (nodeId === 'root') return;
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, nodeId);
-    if (!found || !found.parent) return;
-    const newNode: MindMapTreeNode = {
-      id: uid(), text: '', children: [], collapsed: false, notes: '',
-      color: null, icons: [], checked: null, progress: null,
-      startDate: null, endDate: null, urls: [], tags: [],
-    };
-    found.parent.children.splice(found.index + 1, 0, newNode);
-
-    // Realign the whole sibling branch after insertion for predictable spacing.
-    clearBranchCustomPositions(found.parent);
-    if (found.parent.id === 'root') {
-      if (found.node.side === 'left') setRootLeftCollapsed(false);
-      else setRootRightCollapsed(false);
-    }
-
-    mutate(newRoot);
-    setTimeout(() => { setSelectedId(newNode.id); startEditing(newNode); }, 30);
+    const inserted = addSiblingOp(root, nodeId);
+    if (!inserted) return;
+    if (inserted.side === 'left') setRootLeftCollapsed(false);
+    if (inserted.side === 'right') setRootRightCollapsed(false);
+    mutate(inserted.root);
+    setTimeout(() => { setSelectedId(inserted.node.id); startEditing(inserted.node); }, 30);
   }, [root, mutate]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const deleteNode = useCallback((nodeId: string) => {
-    if (nodeId === 'root') return;
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, nodeId);
-    if (!found || !found.parent) return;
-    found.parent.children.splice(found.index, 1);
-    setSelectedId(found.parent.id);
-    mutate(newRoot);
+    const removed = removeNodeOp(root, nodeId);
+    if (!removed) return;
+    setSelectedId(removed.parentId);
+    mutate(removed.root);
   }, [root, mutate]);
 
   const toggleCollapse = useCallback((nodeId: string) => {
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, nodeId);
-    if (!found || found.node.children.length === 0) return;
-    found.node.collapsed = !found.node.collapsed;
-    mutate(newRoot);
+    const next = editNode(root, nodeId, (node) => {
+      if (node.children.length === 0) return false;
+      node.collapsed = !node.collapsed;
+    });
+    if (next) mutate(next);
   }, [root, mutate]);
 
   // ── Node color ────────────────────────────────────────────────────────────
   const setNodeColor = useCallback((nodeId: string, color: string | null) => {
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, nodeId);
-    if (!found) return;
-    found.node.color = color;
-    mutate(newRoot);
+    const next = editNode(root, nodeId, (node) => { node.color = color; });
+    if (next) mutate(next);
   }, [root, mutate]);
 
   // ── Checkbox ──────────────────────────────────────────────────────────────
   const toggleCheckbox = useCallback((nodeId: string) => {
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, nodeId);
-    if (!found) return;
-    const cur = found.node.checked;
-    if (cur == null) found.node.checked = false;
-    else if (cur === false) found.node.checked = true;
-    else found.node.checked = false;
-    mutate(newRoot);
+    const next = editNode(root, nodeId, (node) => { node.checked = toggleChecked(node.checked); });
+    if (next) mutate(next);
   }, [root, mutate]);
 
   const addCheckbox = useCallback((nodeId: string) => {
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, nodeId);
-    if (!found) return;
-    found.node.checked = false;
-    mutate(newRoot);
+    const next = editNode(root, nodeId, (node) => { node.checked = false; });
+    if (next) mutate(next);
   }, [root, mutate]);
 
   const removeCheckbox = useCallback((nodeId: string) => {
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, nodeId);
-    if (!found) return;
-    found.node.checked = null;
-    mutate(newRoot);
+    const next = editNode(root, nodeId, (node) => { node.checked = null; });
+    if (next) mutate(next);
   }, [root, mutate]);
 
   // ── Progress ──────────────────────────────────────────────────────────────
   const setNodeProgress = useCallback((nodeId: string, value: number | null) => {
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, nodeId);
-    if (!found) return;
-    found.node.progress = value;
-    mutate(newRoot);
+    const next = editNode(root, nodeId, (node) => { node.progress = value; });
+    if (next) mutate(next);
   }, [root, mutate]);
 
   const cycleProgress = useCallback((nodeId: string) => {
     const found = findNode(root, nodeId);
     if (!found) return;
-    const cycle: (number | null)[] = [...PROGRESS_PRESETS, null];
-    const cur = cycle.indexOf(found.node.progress ?? null);
-    const next = cycle[(cur + 1) % cycle.length];
-    setNodeProgress(nodeId, next);
+    setNodeProgress(nodeId, nextInCycle(PROGRESS_CYCLE, found.node.progress ?? null));
   }, [root, setNodeProgress]);
 
   // ── Icons ─────────────────────────────────────────────────────────────────
   const setNodeIcon = useCallback((nodeId: string, iconName: string | null) => {
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, nodeId);
-    if (!found) return;
-    if (!found.node.icons) found.node.icons = [];
-    if (iconName === null) {
-      found.node.icons = [];
-    } else {
-      const idx = found.node.icons.indexOf(iconName);
-      if (idx >= 0) found.node.icons.splice(idx, 1);
-      else found.node.icons.push(iconName);
-    }
-    mutate(newRoot);
+    const next = editNode(root, nodeId, (node) => { node.icons = toggleIcon(node.icons, iconName); });
+    if (next) mutate(next);
   }, [root, mutate]);
 
   // ── Dates ─────────────────────────────────────────────────────────────────
   const setNodeDates = useCallback((nodeId: string, startDate: string | null, endDate: string | null) => {
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, nodeId);
-    if (!found) return;
-    found.node.startDate = startDate;
-    found.node.endDate = endDate;
-    mutate(newRoot);
+    const next = editNode(root, nodeId, (node) => { node.startDate = startDate; node.endDate = endDate; });
+    if (next) mutate(next);
   }, [root, mutate]);
 
   // ── URLs ──────────────────────────────────────────────────────────────────
   const addNodeUrl = useCallback((nodeId: string, entry: UrlEntry) => {
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, nodeId);
-    if (!found) return;
-    if (!found.node.urls) found.node.urls = [];
-    found.node.urls.push(entry);
-    mutate(newRoot);
+    const next = editNode(root, nodeId, (node) => { node.urls = addUrl(node.urls, entry); });
+    if (next) mutate(next);
   }, [root, mutate]);
 
   const removeNodeUrl = useCallback((nodeId: string, urlIndex: number) => {
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, nodeId);
-    if (!found || !found.node.urls) return;
-    found.node.urls.splice(urlIndex, 1);
-    mutate(newRoot);
+    const next = editNode(root, nodeId, (node) => {
+      if (!node.urls) return false;
+      node.urls = removeUrl(node.urls, urlIndex);
+    });
+    if (next) mutate(next);
   }, [root, mutate]);
 
   // ── Move siblings ─────────────────────────────────────────────────────────
   const moveNode = useCallback((nodeId: string, direction: 'up' | 'down') => {
-    if (nodeId === 'root') return;
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, nodeId);
-    if (!found || !found.parent) return;
-    const siblings = found.parent.children;
-    const idx = found.index;
-    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (targetIdx < 0 || targetIdx >= siblings.length) return;
-    [siblings[idx], siblings[targetIdx]] = [siblings[targetIdx], siblings[idx]];
-    mutate(newRoot);
+    const next = moveSibling(root, nodeId, direction);
+    if (next) mutate(next);
   }, [root, mutate]);
 
   // ── Duplicate ─────────────────────────────────────────────────────────────
   const duplicateNode = useCallback((nodeId: string) => {
     if (nodeId === 'root') return;
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, nodeId);
-    if (!found || !found.parent) return;
-    const clone = cloneTree(found.node);
-    const reassignIds = (n: MindMapTreeNode) => { n.id = uid(); n.children.forEach(reassignIds); };
-    reassignIds(clone);
-    found.parent.children.splice(found.index + 1, 0, clone);
-    mutate(newRoot);
+    const found = findNode(root, nodeId);
+    if (!found) return;
+    const clone = cloneSubtreeWithNewIds(found.node);
+    const next = insertAfter(root, nodeId, clone);
+    if (!next) return;
+    mutate(next);
     setSelectedId(clone.id);
   }, [root, mutate]);
 
   // ── Reparent (drag-drop) ──────────────────────────────────────────────────
   const reparentNode = useCallback((nodeId: string, newParentId: string) => {
-    if (nodeId === 'root' || nodeId === newParentId) return;
-    if (isDescendant(root, nodeId, newParentId)) return;
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, nodeId);
-    if (!found || !found.parent) return;
-    const [removed] = found.parent.children.splice(found.index, 1);
-    removed.customX = undefined;
-    removed.customY = undefined;
-    const target = findNode(newRoot, newParentId);
-    if (!target) return;
-    target.node.children.push(removed);
-    target.node.collapsed = false;
-    mutate(newRoot);
+    const next = reparentNodeOp(root, nodeId, newParentId);
+    if (!next) return;
+    mutate(next);
     setSelectedId(nodeId);
   }, [root, mutate]);
 
   // ── Reset position ────────────────────────────────────────────────────────
   const resetNodePosition = useCallback((nodeId: string) => {
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, nodeId);
-    if (!found) return;
-    found.node.customX = undefined;
-    found.node.customY = undefined;
-    mutate(newRoot);
+    // This node only. `autoAlignSubtree` is the one that clears the branch.
+    const next = editNode(root, nodeId, (node) => { node.customX = undefined; node.customY = undefined; });
+    if (next) mutate(next);
   }, [root, mutate]);
 
   const resetAllPositions = useCallback(() => {
-    const newRoot = cloneTree(root);
-    const walk = (n: MindMapTreeNode) => { n.customX = undefined; n.customY = undefined; n.children.forEach(walk); };
-    walk(newRoot);
-    mutate(newRoot);
+    const next = resetPositions(root, null);
+    if (next) mutate(next);
   }, [root, mutate]);
 
   // ── Auto-align subtree ────────────────────────────────────────────────────
   const autoAlignSubtree = useCallback((nodeId: string) => {
-    const newRoot = cloneTree(root);
-    const clearPositions = (n: MindMapTreeNode) => {
-      n.customX = undefined; n.customY = undefined;
-      n.children.forEach(clearPositions);
-    };
-    if (nodeId === 'root') {
-      clearPositions(newRoot);
-    } else {
-      const found = findNode(newRoot, nodeId);
-      if (found) clearPositions(found.node);
-    }
-    mutate(newRoot);
+    const next = resetPositions(root, nodeId);
+    if (next) mutate(next);
   }, [root, mutate]);
 
   // ── Tags ──────────────────────────────────────────────────────────────────
   const setNodeTags = useCallback((nodeId: string, tags: string[]) => {
-    const newRoot = cloneTree(root);
-    const found = findNode(newRoot, nodeId);
-    if (!found) return;
-    found.node.tags = tags;
-    mutate(newRoot);
+    const next = editNode(root, nodeId, (node) => { node.tags = tags; });
+    if (next) mutate(next);
   }, [root, mutate]);
 
   // ── Bulk helpers: apply an action to all selected nodes in one clone ─────
@@ -914,84 +817,39 @@ export function DesktopMindMapEditor({
   }, [selectedId, multiSelect]);
 
   const bulkToggleCheckbox = useCallback(() => {
-    const newRoot = cloneTree(root);
-    for (const id of getTargetIds()) {
-      const f = findNode(newRoot, id); if (!f) continue;
-      const cur = f.node.checked;
-      if (cur == null) f.node.checked = false;
-      else if (cur === false) f.node.checked = true;
-      else f.node.checked = false;
-    }
-    mutate(newRoot);
+    mutate(editNodes(root, getTargetIds(), (node) => { node.checked = toggleChecked(node.checked); }));
   }, [root, mutate, getTargetIds]);
 
   const bulkCycleProgress = useCallback(() => {
-    const newRoot = cloneTree(root);
-    for (const id of getTargetIds()) {
-      const f = findNode(newRoot, id); if (!f) continue;
-      const cycle: (number | null)[] = [...PROGRESS_PRESETS, null];
-      const cur = cycle.indexOf(f.node.progress ?? null);
-      f.node.progress = cycle[(cur + 1) % cycle.length];
-    }
-    mutate(newRoot);
+    mutate(editNodes(root, getTargetIds(), (node) => {
+      node.progress = nextInCycle(PROGRESS_CYCLE, node.progress ?? null);
+    }));
   }, [root, mutate, getTargetIds]);
 
   const bulkSetColor = useCallback((color: string | null) => {
-    const newRoot = cloneTree(root);
-    for (const id of getTargetIds()) {
-      const f = findNode(newRoot, id); if (!f) continue;
-      f.node.color = color;
-    }
-    mutate(newRoot);
+    mutate(editNodes(root, getTargetIds(), (node) => { node.color = color; }));
   }, [root, mutate, getTargetIds]);
 
   const bulkDelete = useCallback(() => {
-    const ids = getTargetIds();
-    ids.delete('root');
-    if (ids.size === 0) return;
-    const newRoot = cloneTree(root);
-    let fallback = 'root';
-    for (const id of ids) {
-      const f = findNode(newRoot, id);
-      if (f?.parent) { fallback = f.parent.id; f.parent.children.splice(f.index, 1); }
-    }
-    setSelectedId(fallback);
+    const removed = removeNodes(root, getTargetIds());
+    if (!removed) return;
+    setSelectedId(removed.parentId);
     setMultiSelect(new Set());
-    mutate(newRoot);
+    mutate(removed.root);
   }, [root, mutate, getTargetIds]);
 
   const bulkToggleCollapse = useCallback(() => {
-    const newRoot = cloneTree(root);
-    for (const id of getTargetIds()) {
-      const f = findNode(newRoot, id); if (!f || f.node.children.length === 0) continue;
-      f.node.collapsed = !f.node.collapsed;
-    }
-    mutate(newRoot);
+    mutate(editNodes(root, getTargetIds(), (node) => {
+      if (node.children.length > 0) node.collapsed = !node.collapsed;
+    }));
   }, [root, mutate, getTargetIds]);
 
   const bulkResetPosition = useCallback(() => {
-    const newRoot = cloneTree(root);
-    for (const id of getTargetIds()) {
-      const f = findNode(newRoot, id); if (!f) continue;
-      f.node.customX = undefined; f.node.customY = undefined;
-    }
-    mutate(newRoot);
+    mutate(editNodes(root, getTargetIds(), (node) => { node.customX = undefined; node.customY = undefined; }));
   }, [root, mutate, getTargetIds]);
 
   const bulkSetIcon = useCallback((iconName: string | null) => {
-    const newRoot = cloneTree(root);
-    for (const id of getTargetIds()) {
-      const f = findNode(newRoot, id); if (!f) continue;
-      if (!f.node.icons) f.node.icons = [];
-      if (iconName === null) {
-        f.node.icons = [];
-      } else {
-        const idx = f.node.icons.indexOf(iconName);
-        if (idx >= 0) f.node.icons.splice(idx, 1);
-        else f.node.icons.push(iconName);
-      }
-    }
-    mutate(newRoot);
+    mutate(editNodes(root, getTargetIds(), (node) => { node.icons = toggleIcon(node.icons, iconName); }));
   }, [root, mutate, getTargetIds]);
 
   const hasBulk = multiSelect.size > 0;
@@ -1264,42 +1122,37 @@ export function DesktopMindMapEditor({
   }, [disableAutoPanToSelection, selectedId, layout]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Save handler ──────────────────────────────────────────────────────────
+  /**
+   * The tree as it stands, view state and all.
+   *
+   * This literal was written out seven times — save, autosave, and once per
+   * export format — and every one of them had to agree about what the view
+   * state contains.
+   */
+  const currentTreeSnapshot = useCallback((): MindMapTree => ({
+    version: 'tree',
+    root: cloneTree(root),
+    view_state: {
+      pan_x: Math.round(pan.x),
+      pan_y: Math.round(pan.y),
+      zoom: Number(zoom.toFixed(3)),
+      focus_mode: focusMode,
+      focus_anchor_id: focusAnchorId,
+      selected_node_id: selectedId,
+    },
+  }), [root, pan, zoom, focusMode, focusAnchorId, selectedId]);
+
   const handleSave = useCallback(() => {
     if (saving) return;
-    onSave({
-      version: 'tree',
-      root: cloneTree(root),
-      view_state: {
-        pan_x: Math.round(pan.x),
-        pan_y: Math.round(pan.y),
-        zoom: Number(zoom.toFixed(3)),
-        focus_mode: focusMode,
-        focus_anchor_id: focusAnchorId,
-        selected_node_id: selectedId,
-      },
-    }, title);
+    onSave(currentTreeSnapshot(), title);
     setIsDirty(false);
-  }, [focusAnchorId, focusMode, onSave, pan.x, pan.y, root, saving, selectedId, title, zoom]);
+  }, [currentTreeSnapshot, onSave, saving, title]);
 
-  const buildExportFileBaseName = useCallback((baseTitle?: string) => {
-    const normalizedTitle = (baseTitle || title || 'mindmap').trim();
-    const safeTitle = normalizedTitle
-      .replace(/[\\/:*?"<>|]+/g, '-')
-      .replace(/\s+/g, ' ')
-      .trim();
-    // Only a real sequential version label ("v12") becomes a filename token.
-    // Anchored deliberately: local mode has no server-side version history and
-    // falls back to a date label ("v 6. 8. 2026"), which an unanchored match
-    // would read as version 6 — stamping the day of the month onto every
-    // export as "-v6".
-    const versionMatch = (versionLabel ?? '').trim().match(/^v\s*(\d+)$/i);
-    const versionToken = versionMatch ? `v${versionMatch[1]}` : null;
-    // Don't append the version token when the title already ends with it
-    // (e.g. title "guide-v3" + versionLabel "v3" → "guide-v3", not "guide-v3-v3")
-    const alreadyEndsWithVersion =
-      versionToken != null && new RegExp(`[-_ ]${versionToken}$`, 'i').test(safeTitle);
-    return (versionToken && !alreadyEndsWithVersion) ? `${safeTitle}-${versionToken}` : safeTitle;
-  }, [title, versionLabel]);
+  const buildExportFileBaseName = useCallback(
+    (baseTitle?: string) =>
+      buildExportName({ baseTitle, title, fallback: 'mindmap', versionLabel }),
+    [title, versionLabel],
+  );
 
   // ── PNG export ────────────────────────────────────────────────────────────
   const exportPng = useCallback(async () => {
@@ -1612,9 +1465,12 @@ export function DesktopMindMapEditor({
     }
     if (dragRef.current) {
       const d = dragRef.current;
-      const dx = (e.clientX - d.startClientX) / zoom;
-      const dy = (e.clientY - d.startClientY) / zoom;
-      if (!d.moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) { d.moved = true; setIsDragging(true); }
+      const { x: dx, y: dy } = dragDelta(
+        { x: d.startClientX, y: d.startClientY },
+        { x: e.clientX, y: e.clientY },
+        zoom,
+      );
+      if (!d.moved && passedDragThreshold({ x: dx, y: dy })) { d.moved = true; setIsDragging(true); }
       if (d.moved) {
         d.currentX = d.origX + dx;
         d.currentY = d.origY + dy;
@@ -1631,14 +1487,7 @@ export function DesktopMindMapEditor({
         }
         // Drop target detection (only when dragging a single node)
         if (multiSelect.size <= 1) {
-          let newTarget: string | null = null;
-          for (const [nid, entry] of Object.entries(layout)) {
-            if (nid === d.nodeId) continue;
-            const cx = entry.x + entry.w / 2;
-            const cy = entry.y + entry.h / 2;
-            if (Math.sqrt((d.currentX - cx) ** 2 + (d.currentY - cy) ** 2) < 40) { newTarget = nid; break; }
-          }
-          setDropTargetId(newTarget);
+          setDropTargetId(findDropTarget(layout, d.nodeId, { x: d.currentX, y: d.currentY }));
         }
       }
       return;
@@ -1907,16 +1756,7 @@ export function DesktopMindMapEditor({
   const onMouseUpSvg = useCallback(() => {
     // Finish rectangle selection
     if (rectSel) {
-      const x1 = Math.min(rectSel.startX, rectSel.curX);
-      const x2 = Math.max(rectSel.startX, rectSel.curX);
-      const y1 = Math.min(rectSel.startY, rectSel.curY);
-      const y2 = Math.max(rectSel.startY, rectSel.curY);
-      const ids = new Set<string>();
-      for (const [id, entry] of Object.entries(layout)) {
-        const cx = entry.x + entry.w / 2;
-        const cy = entry.y + entry.h / 2;
-        if (cx >= x1 && cx <= x2 && cy >= y1 && cy <= y2) ids.add(id);
-      }
+      const ids = nodesInMarquee(layout, rectSel);
       setMultiSelect(ids);
       if (ids.size > 0) {
         const first = [...ids][0];
@@ -2084,34 +1924,6 @@ export function DesktopMindMapEditor({
   //  SVG RENDERING
   // ══════════════════════════════════════════════════════════════════════════
 
-  const renderProgressPie = (cx: number, cy: number, pct: number, size: number, onClickPie?: () => void) => {
-    const r = size / 2 - 2;
-    const inner = pct >= 100
-      ? (<g><circle cx={cx} cy={cy} r={r} fill="#16a34a" /><path d={`M ${cx - 4} ${cy} l 3 3 5 -5`} fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" /></g>)
-      : (() => {
-        const angle = (pct / 100) * 360;
-        const rad = (angle - 90) * (Math.PI / 180);
-        const ex = cx + r * Math.cos(rad);
-        const ey = cy + r * Math.sin(rad);
-        const large = angle > 180 ? 1 : 0;
-        const piePath = pct > 0 ? `M ${cx} ${cy} L ${cx} ${cy - r} A ${r} ${r} 0 ${large} 1 ${ex} ${ey} Z` : '';
-        return (
-          <g>
-            <circle cx={cx} cy={cy} r={r} fill="var(--mm-node-fill)" stroke="var(--mm-node-stroke)" strokeWidth={1} />
-            {piePath && <path d={piePath} fill="var(--accent)" opacity={0.8} />}
-            <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle" fontSize={11} fontWeight="bold" fill="var(--mm-node-text)">{pct}%</text>
-          </g>
-        );
-      })();
-    if (!onClickPie) return inner;
-    return (
-      <g style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); onClickPie(); }}>
-        {inner}
-        <circle cx={cx} cy={cy} r={r} fill="transparent" />
-      </g>
-    );
-  };
-
   const renderConnections = useCallback((node: MindMapTreeNode): JSX.Element[] => {
     const paths: JSX.Element[] = [];
     if (node.collapsed) return paths;
@@ -2154,49 +1966,6 @@ export function DesktopMindMapEditor({
     }
     return paths;
   }, [layout, focusMode, focusedIds, rootLeftCollapsed, rootRightCollapsed]);
-
-  const renderAttachmentIndicator = (x: number, y: number, count: number, ownColor: string | null) => {
-    const indicatorWidth = count > 1 ? 28 : 18;
-    const iconX = x - indicatorWidth / 2 + 5;
-    const textX = x + indicatorWidth / 2 - 6;
-    const stroke = ownColor ? '#ffffffcc' : '#cbd5e1';
-    const fill = ownColor ? 'rgba(15, 23, 42, 0.34)' : 'rgba(15, 23, 42, 0.82)';
-    return (
-      <g className="mm-attachment-indicator">
-        <rect x={x - indicatorWidth / 2} y={y - 7} width={indicatorWidth} height={14} rx={7} fill={fill} stroke={stroke} strokeWidth={1} />
-        <path
-          d={`M ${iconX} ${y + 1.5} l 4.1 -4.1 a 2.2 2.2 0 1 1 3.1 3.1 l -4.8 4.8 a 3.3 3.3 0 1 1 -4.7 -4.7 l 4.2 -4.2`}
-          fill="none"
-          stroke={stroke}
-          strokeWidth={1.1}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        {count > 1 && (
-          <text x={textX} y={y + 0.5} textAnchor="middle" dominantBaseline="middle" fontSize={8.5} fontWeight="700" fill={ownColor ? '#ffffff' : '#f8fafc'}>
-            {count}
-          </text>
-        )}
-      </g>
-    );
-  };
-
-  const getNodeAttachments = useCallback((nodeId: string, inlineAttachments?: NodeAttachmentRef[]) => {
-    const inline = inlineAttachments ?? [];
-    const external = externalNodeAttachments?.[nodeId] ?? [];
-    if (inline.length === 0) return external;
-    if (external.length === 0) return inline;
-
-    const merged = new Map<string, NodeAttachmentRef>();
-    for (const attachment of external) merged.set(attachment.attachment_id, attachment);
-    for (const attachment of inline) {
-      merged.set(attachment.attachment_id, {
-        ...merged.get(attachment.attachment_id),
-        ...attachment,
-      });
-    }
-    return Array.from(merged.values()).sort((left, right) => right.uploaded_at.localeCompare(left.uploaded_at));
-  }, [externalNodeAttachments]);
 
   /** Opens the full-resolution original behind a node's glyph. */
   const openNodeImage = useCallback(async (node: MindMapTreeNode) => {
@@ -2248,6 +2017,15 @@ export function DesktopMindMapEditor({
     }, 140);
   }, [cancelHoverPopupClose, hoveringNotePopup]);
 
+  /**
+   * What the body band can do. Grouped rather than sprayed: a band that takes
+   * its callbacks one prop at a time grows a signature nobody reads.
+   */
+  const bodyActions: BodyActions = useMemo(
+    () => ({ onToggleCheckbox: toggleCheckbox, onCycleProgress: cycleProgress }),
+    [toggleCheckbox, cycleProgress],
+  );
+
   const renderNodes = useCallback((node: MindMapTreeNode, depth = 0): JSX.Element[] => {
     const box = layout[node.id];
     if (!box) return [];
@@ -2271,41 +2049,18 @@ export function DesktopMindMapEditor({
         : (ownColor ?? (isRoot ? 'var(--mm-root-stroke)' : 'var(--mm-node-stroke)'));
     const textColor = ownColor ? '#ffffff' : (isRoot ? 'var(--mm-root-text)' : 'var(--mm-node-text)');
 
-    const lines = getVisibleNodeTextLines(node.text);
     const fontSize = isRoot ? 15 : 13;
     const fontWeight = isRoot ? 'bold' : 'normal';
-    const attachments = getNodeAttachments(node.id, node.attachments);
 
-    const iconCount = (node.icons ?? []).length;
-    const hasCheckbox = node.checked != null;
-    const hasProgress = node.progress != null;
-    const leftPad = (hasCheckbox ? CHECKBOX_SIZE + 6 : 0) + (iconCount > 0 ? (ICON_SIZE + 4) * iconCount + 2 : 0) + (hasProgress ? PROGRESS_PIE_SIZE + 6 : 0);
-
-    const urlCount = (node.urls ?? []).length;
-    const linkId = node.link?.id || null;
-    const footerLinks = (linkId ? 1 : 0) + urlCount;
-    const previewHeight = 0;
-    const footerHeight = footerLinks > 0 ? LINK_STRIP_H * footerLinks : 0;
-    const tagCount = (node.tags ?? []).length;
-    const topTagH = tagCount > 0 ? TAG_STRIP_H : 0;
-    const topMetaH = (attachments.length > 0 || Boolean(node.notes)) ? TOP_META_STRIP_H : 0;
-    // The picture gets a band of its own between the tag strip and the text, so
-    // the text stays centred in what is left rather than being pushed off-centre.
+    // What the node is made of, and where each band starts, both come from the
+    // entry the layout produced. Working either out again here is how the
+    // renderer and the layout used to disagree — over whitespace-only notes,
+    // and over attachments held outside the tree — and draw an 18px strip in
+    // space nothing had reserved.
+    const parts = box.parts;
+    const geom = nodeGeometry(box, parts);
     const nodeImage = node.image?.thumb ? node.image : null;
-    const imageBandH = nodeImage ? nodeImage.h + NODE_IMAGE_PAD : 0;
-    const imageY = box.y + topMetaH + topTagH + NODE_IMAGE_PAD / 2;
-    const bodyTopY = box.y + topMetaH + topTagH + imageBandH;
-    const bodyH = box.h - footerHeight - previewHeight - topTagH - topMetaH - imageBandH;
-    const textX = box.x + NODE_PAD_X + leftPad;
-    const lineStartY = bodyTopY + bodyH / 2 - ((lines.length - 1) * NODE_LINE_H) / 2;
-
-    const formatDate = (d: string) => {
-      const dt = new Date(d);
-      return `${dt.getDate().toString().padStart(2, '0')}.${(dt.getMonth() + 1).toString().padStart(2, '0')}.${String(dt.getFullYear()).slice(2)} ${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`;
-    };
-    const hasDate = !!(node.startDate || node.endDate);
-    const startLabel = node.startDate ? formatDate(node.startDate) : '–';
-    const endLabel = node.endDate ? formatDate(node.endDate) : '–';
+    const visual: NodeVisual = { ownColor, fillColor, strokeColor, textColor, fontSize, fontWeight };
     const checkedInfo = (node.children.length > 0 && node.checked != null) ? countChecked(node) : null;
 
     const isMulti = multiSelect.has(node.id);
@@ -2339,211 +2094,51 @@ export function DesktopMindMapEditor({
           dragRef.current = { nodeId: node.id, startClientX: e.clientX, startClientY: e.clientY, origX: box.x, origY: box.y, currentX: box.x, currentY: box.y, moved: false };
         }}
       >
-        {hasDate && (
-          <g className="mm-date-badge">
-            <svg x={box.x + box.w / 2 - 52} y={box.y - 32} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth={2}>
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
-            <text x={box.x + box.w / 2 - 33} y={box.y - 25} fontSize={11} fill="var(--accent)" fontWeight="500">{startLabel}</text>
-            <text x={box.x + box.w / 2 - 33} y={box.y - 12} fontSize={11} fill="var(--mm-statusbar-text)">{endLabel}</text>
-          </g>
-        )}
+        {parts.hasDate && <DateBadge box={box} node={node} />}
 
         <rect x={box.x} y={box.y} width={box.w} height={box.h} rx={rx} ry={rx} fill={fillColor} stroke={strokeColor}
           strokeWidth={isSelected ? 2.5 : isDrop ? 3 : 1.5} className={isSelected ? 'mm-node-selected' : ''} />
 
-        {topMetaH > 0 && (
-          <line
-            x1={box.x + 6}
-            y1={box.y + topMetaH}
-            x2={box.x + box.w - 6}
-            y2={box.y + topMetaH}
-            stroke={ownColor ? '#ffffff22' : 'var(--mm-node-stroke)'}
-            strokeWidth={0.5}
-          />
-        )}
+        <MetaBand box={box} geom={geom} parts={parts} visual={visual} />
 
-        {/* An SVG <image>, deliberately not a foreignObject: the PDF export
-            strips every foreignObject before serializing, and a data: URI in an
-            <image> survives into the standalone SVG and rasterizes. The bitmap
-            was encoded at exactly these dimensions, so it maps 1:1 and there is
-            no crop-versus-letterbox question to answer. */}
         {nodeImage && (
-          <image
-            href={nodeImage.thumb}
-            x={box.x + (box.w - nodeImage.w) / 2}
-            y={imageY}
-            width={nodeImage.w}
-            height={nodeImage.h}
-            className="mm-node-image"
-            // Inline, not in the stylesheet: the export serializes this element
-            // into a standalone SVG where no class rule follows it, and a glyph
-            // with square corners in the PDF would not match the canvas.
-            style={{ clipPath: 'inset(0 round 5px)' }}
-            onClick={(e) => { e.stopPropagation(); setSelectedId(node.id); void openNodeImage(node); }}
-          >
-            <title>{nodeImage.name ?? 'Image'}</title>
-          </image>
+          <ImageBand box={box} geom={geom} image={nodeImage} onOpen={() => { setSelectedId(node.id); void openNodeImage(node); }} />
         )}
 
-        {hasCheckbox && (
-          <g className="mm-checkbox-g" onClick={(e) => { e.stopPropagation(); toggleCheckbox(node.id); }} style={{ cursor: 'pointer' }}>
-            <rect x={box.x + NODE_PAD_X - 2} y={bodyTopY + bodyH / 2 - CHECKBOX_SIZE / 2} width={CHECKBOX_SIZE} height={CHECKBOX_SIZE}
-              rx={3} fill={node.checked ? 'var(--accent)' : 'transparent'} stroke={node.checked ? 'var(--accent)' : (ownColor ? '#ffffff88' : 'var(--mm-node-stroke)')} strokeWidth={1.5} />
-            {node.checked && <path d={`M ${box.x + NODE_PAD_X + 2} ${bodyTopY + bodyH / 2} l 3 3 5 -6`} fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />}
-          </g>
-        )}
+        <TagBand box={box} geom={geom} parts={parts} visual={visual} userLabels={userLabels} />
 
-        {iconCount > 0 && !isEditing && (
-          <g
-            transform={`translate(${box.x + NODE_PAD_X + (hasCheckbox ? CHECKBOX_SIZE + 6 : 0) - 2}, ${bodyTopY + bodyH / 2 - ICON_SIZE / 2})`}
-            style={{ pointerEvents: 'none' }}
-          >
-            {(node.icons ?? []).map((iconName, ii) => (
-              <g key={`${iconName}-${ii}`} transform={`translate(${ii * (ICON_SIZE + 4)}, 0)`}>
-                <DynamicLucideIcon name={iconName} size={ICON_SIZE} color={textColor} />
-              </g>
-            ))}
-          </g>
-        )}
+        <BodyBand
+          box={box}
+          geom={geom}
+          parts={parts}
+          visual={visual}
+          node={node}
+          actions={bodyActions}
+          isSearchHit={searchResults.includes(node.id)}
+          checkedInfo={checkedInfo}
+          editor={isEditing ? (
+            <foreignObject x={box.x + 2} y={geom.bodyTopY + 2} width={box.w - 4} height={Math.max(0, geom.bodyH - 4)}>
+              <textarea ref={editRef} value={editText} onChange={(e) => setEditText(e.target.value)} onBlur={commitEdit}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit(); } if (e.key === 'Escape') cancelEdit(); e.stopPropagation(); }}
+                className="mm-edit-textarea" style={{ color: textColor, background: fillColor }} />
+            </foreignObject>
+          ) : null}
+        />
 
-        {hasProgress && renderProgressPie(
-          box.x + NODE_PAD_X + (hasCheckbox ? CHECKBOX_SIZE + 6 : 0) + (iconCount > 0 ? (ICON_SIZE + 4) * iconCount + 2 : 0) + PROGRESS_PIE_SIZE / 2,
-          bodyTopY + bodyH / 2, node.progress!, PROGRESS_PIE_SIZE, () => cycleProgress(node.id))}
+        <FooterBand box={box} geom={geom} node={node} visual={visual} />
 
-        {isEditing ? (
-          <foreignObject x={box.x + 2} y={bodyTopY + 2} width={box.w - 4} height={Math.max(0, bodyH - 4)}>
-            <textarea ref={editRef} value={editText} onChange={(e) => setEditText(e.target.value)} onBlur={commitEdit}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit(); } if (e.key === 'Escape') cancelEdit(); e.stopPropagation(); }}
-              className="mm-edit-textarea" style={{ color: textColor, background: fillColor }} />
-          </foreignObject>
-        ) : (
-          lines.map((line, li) => (
-            <text key={li} x={textX + (box.w - NODE_PAD_X * 2 - leftPad) / 2} y={lineStartY + li * NODE_LINE_H}
-              textAnchor="middle" dominantBaseline="middle" fontSize={fontSize} fontWeight={fontWeight} fill={textColor}
-              className={`mm-node-text${searchResults.includes(node.id) ? ' mm-search-highlight' : ''}`}>{line}</text>
-          ))
-        )}
-
-        {attachments.length > 0 && renderAttachmentIndicator(box.x + box.w - (node.notes ? 26 : 11), box.y + topMetaH / 2, attachments.length, ownColor)}
-
-        {node.notes && <circle cx={box.x + box.w - 7} cy={box.y + topMetaH / 2} r={5} fill="#f59e0b" className="mm-indicator" />}
-
-        {(node.tags ?? []).length > 0 && (() => {
-          const tags = (node.tags ?? []).slice(0, 5);
-          const gap = 3;
-          const tagH = 13;
-          const tagY = box.y + topMetaH + (TAG_STRIP_H - tagH) / 2;
-          const compact = tags.map((tag) => {
-            const txt = tag.length > 14 ? `${tag.slice(0, 13)}…` : tag;
-            const width = Math.min(box.w - 8, Math.max(18, 8 + txt.length * 5.5));
-            const color = userLabels.find((l) => l.name === tag)?.color ?? 'var(--accent)';
-            return { tag, txt, width, color };
-          });
-          const totalW = compact.reduce((sum, item) => sum + item.width, 0) + (compact.length - 1) * gap;
-          let cursorX = box.x + Math.max(4, (box.w - totalW) / 2);
-          return (
-            <>
-              <line x1={box.x + 6} y1={box.y + topMetaH + topTagH} x2={box.x + box.w - 6} y2={box.y + topMetaH + topTagH}
-                stroke={ownColor ? '#ffffff22' : 'var(--mm-node-stroke)'} strokeWidth={0.5} />
-              {compact.map((item) => {
-                const x = cursorX;
-                cursorX += item.width + gap;
-                return (
-                  <g key={item.tag} pointerEvents="none">
-                    <rect x={x} y={tagY} width={item.width} height={tagH} rx={6.5} fill={item.color} opacity={0.92} />
-                    <text
-                      x={x + item.width / 2}
-                      y={tagY + tagH / 2 + 0.5}
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      fontSize={8.5}
-                      fontWeight={700}
-                      fill="#fff"
-                    >
-                      {item.txt}
-                    </text>
-                  </g>
-                );
-              })}
-            </>
-          );
-        })()}
-
-        {checkedInfo && checkedInfo.total > 0 && (
-          <text x={box.x + box.w - 8} y={bodyTopY + bodyH - 6} textAnchor="end" fontSize={9} fill={ownColor ? '#ffffff99' : 'var(--mm-statusbar-text)'}>{checkedInfo.checked}/{checkedInfo.total}</text>
-        )}
-
-        {(node.urls ?? []).map((urlItem, ui) => {
-          const fy = bodyTopY + bodyH + previewHeight + ui * LINK_STRIP_H;
-          const rawUrl = (urlItem.url ?? '').trim();
-          const openUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
-          return (
-            <g key={`url-${ui}`}>
-              <line x1={box.x + 4} y1={fy} x2={box.x + box.w - 4} y2={fy} stroke={ownColor ? '#ffffff33' : 'var(--mm-node-stroke)'} strokeWidth={0.5} />
-              <text
-                x={box.x + 8}
-                y={fy + LINK_STRIP_H / 2 + 1.5}
-                fontSize={10.5}
-                fontWeight={600}
-                fill={ownColor ? '#ffffff' : 'var(--accent)'}
-                dominantBaseline="middle"
-                className={`mm-url-link${ownColor ? ' mm-url-link--on-color' : ''}`}
-                style={{ cursor: 'pointer', textDecoration: 'underline' }}
-                onMouseDown={(e) => { e.stopPropagation(); }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void openExternalUrl(openUrl);
-                }}
-              >
-                {urlItem.label || rawUrl}
-              </text>
-            </g>
-          );
-        })}
-
-        {node.children.length > 0 && node.id !== 'root' && (
-          <g className="mm-collapse-btn"
-            transform={`translate(${box.direction === 'left' ? box.x - 1 : box.x + box.w + 1}, ${box.y + box.h / 2})`}
-            onClick={(e) => { e.stopPropagation(); toggleCollapse(node.id); }}>
-            <circle r={8} fill="var(--mm-collapse-fill)" stroke="var(--mm-collapse-stroke)" strokeWidth={1.5} />
-            <text textAnchor="middle" dominantBaseline="middle" fontSize={11} fill="var(--mm-collapse-text)" fontWeight="bold" y={0.5}>
-              {node.collapsed ? `+${node.children.length}` : '−'}</text>
-          </g>
-        )}
-
-        {node.id === 'root' && (() => {
-          const leftChildren = node.children.filter((ch) => ch.side === 'left');
-          const rightChildren = node.children.filter((ch) => ch.side !== 'left');
-          return (
-            <>
-              {leftChildren.length > 0 && (
-                <g
-                  className="mm-collapse-btn"
-                  transform={`translate(${box.x - 1}, ${box.y + box.h / 2})`}
-                  onClick={(e) => { e.stopPropagation(); setRootLeftCollapsed((current) => !current); }}
-                >
-                  <circle r={8} fill="var(--mm-collapse-fill)" stroke="var(--mm-collapse-stroke)" strokeWidth={1.5} />
-                  <text textAnchor="middle" dominantBaseline="middle" fontSize={11} fill="var(--mm-collapse-text)" fontWeight="bold" y={0.5}>
-                    {rootLeftCollapsed ? `+${leftChildren.length}` : '−'}
-                  </text>
-                </g>
-              )}
-              {rightChildren.length > 0 && (
-                <g
-                  className="mm-collapse-btn"
-                  transform={`translate(${box.x + box.w + 1}, ${box.y + box.h / 2})`}
-                  onClick={(e) => { e.stopPropagation(); setRootRightCollapsed((current) => !current); }}
-                >
-                  <circle r={8} fill="var(--mm-collapse-fill)" stroke="var(--mm-collapse-stroke)" strokeWidth={1.5} />
-                  <text textAnchor="middle" dominantBaseline="middle" fontSize={11} fill="var(--mm-collapse-text)" fontWeight="bold" y={0.5}>
-                    {rootRightCollapsed ? `+${rightChildren.length}` : '−'}
-                  </text>
-                </g>
-              )}
-            </>
-          );
-        })()}
+        <CollapseControls
+          box={box}
+          node={node}
+          // The old branch keyed the fold bubbles off the id, not the depth.
+          // They agree today; keep the one that was there.
+          isRoot={node.id === 'root'}
+          rootLeftCollapsed={rootLeftCollapsed}
+          rootRightCollapsed={rootRightCollapsed}
+          onToggleCollapse={toggleCollapse}
+          onToggleRootLeft={() => setRootLeftCollapsed((current) => !current)}
+          onToggleRootRight={() => setRootRightCollapsed((current) => !current)}
+        />
       </g>,
     ];
 
@@ -2743,8 +2338,8 @@ export function DesktopMindMapEditor({
           <div className="mm-toolbar-group" data-ribbon-tab="home">
             <span className="mm-toolbar-group-label">Edit</span>
             <div className="mm-toolbar-group-btns">
-              <button className="mm-btn mm-essential" data-label="Undo" data-shortcut={formatButtonShortcut('edit.undo', keyboardLayout)} onClick={undo} title={`Undo (${formatShortcut('edit.undo', keyboardLayout)})`} disabled={historyIdx <= 0}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a6 6 0 010 12H9m-6-12l4-4m-4 4l4 4"/></svg></button>
-              <button className="mm-btn mm-essential" data-label="Redo" data-shortcut={formatButtonShortcut('edit.redo', keyboardLayout)} onClick={redo} title={`Redo (${formatShortcut('edit.redo', keyboardLayout)})`} disabled={historyIdx >= history.length - 1}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 10H11a6 6 0 000 12h4m6-12l-4-4m4 4l-4 4"/></svg></button>
+              <button className="mm-btn mm-essential" data-label="Undo" data-shortcut={formatButtonShortcut('edit.undo', keyboardLayout)} onClick={undo} title={`Undo (${formatShortcut('edit.undo', keyboardLayout)})`} disabled={!history.canUndo}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a6 6 0 010 12H9m-6-12l4-4m-4 4l4 4"/></svg></button>
+              <button className="mm-btn mm-essential" data-label="Redo" data-shortcut={formatButtonShortcut('edit.redo', keyboardLayout)} onClick={redo} title={`Redo (${formatShortcut('edit.redo', keyboardLayout)})`} disabled={!history.canRedo}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 10H11a6 6 0 000 12h4m6-12l-4-4m4 4l-4 4"/></svg></button>
             </div>
           </div>
           )}
@@ -2835,7 +2430,7 @@ export function DesktopMindMapEditor({
               <button className="mm-btn" data-label="Zoom out" data-shortcut={formatButtonShortcut('view.zoomOut', keyboardLayout)} onClick={() => setZoom((z) => Math.max(0.3, z - 0.15))} title={`Zoom out (${formatShortcut('view.zoomOut', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M8 11h6"/></svg></button>
               <button className="mm-btn" data-label="Fit" data-shortcut={formatButtonShortcut('view.zoomFit', keyboardLayout)} onClick={fitView} title={`Fit view (${formatShortcut('view.zoomFit', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/></svg></button>
             </>, 'view');
-            const outputGroup = onExportMarkdown && (densityPreset !== 'large' || activeRibbonTab === 'export') && toolbarGroup('Output', (
+            const outputGroup = onExport && (densityPreset !== 'large' || activeRibbonTab === 'export') && toolbarGroup('Output', (
               <div style={{ position: 'relative' }}>
                 <button className="mm-btn" data-label="Export" onClick={() => setShowExportMenu((v) => !v)} title="Export">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
@@ -2846,31 +2441,15 @@ export function DesktopMindMapEditor({
                     style={{ position: 'absolute', ...(exportMenuAlign === 'left' ? { left: 0 } : { right: 0 }), top: '100%', zIndex: 300, background: 'var(--mm-node-fill, #1e293b)', border: '1px solid var(--mm-node-stroke, #334155)', borderRadius: 8, padding: '4px 0', minWidth: 150, maxHeight: exportMenuMaxH ?? undefined, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }}
                     onMouseDown={(e) => e.stopPropagation()}
                   >
-                    {onExportMarkdown && (
-                      <button className="mm-context-item" onClick={() => { onExportMarkdown({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
-                        Markdown (.md)
+                    {(exportFormats ?? []).map((format) => (
+                      <button
+                        key={format.id}
+                        className="mm-context-item"
+                        onClick={() => { void onExport?.(format, currentTreeSnapshot(), buildExportFileBaseName(title)); setShowExportMenu(false); }}
+                      >
+                        {format.label}
                       </button>
-                    )}
-                    {onExportFreemind && (
-                      <button className="mm-context-item" onClick={() => { onExportFreemind({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
-                        FreeMind (.mm)
-                      </button>
-                    )}
-                    {onExportFreeplane && (
-                      <button className="mm-context-item" onClick={() => { onExportFreeplane({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
-                        FreePlane (.mm)
-                      </button>
-                    )}
-                    {onExportWisemapping && (
-                      <button className="mm-context-item" onClick={() => { onExportWisemapping({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
-                        WiseMapping (.wxml)
-                      </button>
-                    )}
-                    {onExportXmind && (
-                      <button className="mm-context-item" onClick={() => { onExportXmind({ version: 'tree', root: cloneTree(root), view_state: { pan_x: Math.round(pan.x), pan_y: Math.round(pan.y), zoom: Number(zoom.toFixed(3)), focus_mode: focusMode, focus_anchor_id: focusAnchorId, selected_node_id: selectedId } }, buildExportFileBaseName(title)); setShowExportMenu(false); }}>
-                        XMind (.xmind)
-                      </button>
-                    )}
+                    ))}
                     <button className="mm-context-item" onClick={() => { exportPng(); setShowExportMenu(false); }}>
                       PNG image
                     </button>
@@ -3011,11 +2590,8 @@ export function DesktopMindMapEditor({
             <g className="mm-connections">{renderConnections(root)}</g>
             <g className="mm-nodes">{renderNodes(root)}</g>
             {rectSel && (() => {
-              const rx = Math.min(rectSel.startX, rectSel.curX);
-              const ry = Math.min(rectSel.startY, rectSel.curY);
-              const rw = Math.abs(rectSel.curX - rectSel.startX);
-              const rh = Math.abs(rectSel.curY - rectSel.startY);
-              return <rect x={rx} y={ry} width={rw} height={rh} fill="var(--accent)" fillOpacity={0.08} stroke="var(--accent)" strokeWidth={1 / zoom} strokeDasharray={`${4 / zoom}`} />;
+              const { x, y, w, h } = marqueeBounds(rectSel);
+              return <rect x={x} y={y} width={w} height={h} fill="var(--accent)" fillOpacity={0.08} stroke="var(--accent)" strokeWidth={1 / zoom} strokeDasharray={`${4 / zoom}`} />;
             })()}
           </g>
         </svg>

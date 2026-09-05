@@ -47,20 +47,26 @@ export const PROGRESS_PRESETS: number[] = [0, 25, 50, 75, 100];
 
 // ── Layout constants ────────────────────────────────────────────
 
-export const NODE_LINE_H = 20;
-export const NODE_MIN_H = 36;
-export const NODE_PAD_X = 18;
-export const NODE_PAD_Y = 8;
-export const H_GAP = 40;
-export const V_GAP = 8;
-export const MIN_W = 80;
-export const LINK_STRIP_H = 18;
-export const TAG_STRIP_H = 18;
-export const TOP_META_STRIP_H = 18;
-export const DATE_BADGE_OFFSET_H = 34;
-export const ICON_SIZE = 16;
-export const CHECKBOX_SIZE = 16;
-export const PROGRESS_PIE_SIZE = 32;
-export const NODE_IMAGE_PAD = 6;
-export const ATTACHMENT_PREVIEW_H = 44;
-export const ATTACHMENT_PREVIEW_W = 56;
+/**
+ * The band heights, padding and gaps live in `@mindmapvault/mindmap-core`
+ * alongside the arithmetic that uses them, and are re-exported here so the
+ * rest of the app imports them from the same place it always has.
+ */
+export {
+  NODE_LINE_H,
+  NODE_MIN_H,
+  NODE_PAD_X,
+  NODE_PAD_Y,
+  H_GAP,
+  V_GAP,
+  MIN_W,
+  LINK_STRIP_H,
+  TAG_STRIP_H,
+  TOP_META_STRIP_H,
+  DATE_BADGE_OFFSET_H,
+  ICON_SIZE,
+  CHECKBOX_SIZE,
+  PROGRESS_PIE_SIZE,
+  NODE_IMAGE_BOX,
+  NODE_IMAGE_PAD,
+} from '@mindmapvault/mindmap-core';

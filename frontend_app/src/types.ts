@@ -1,3 +1,6 @@
+import type { NodeLink } from '@mindmapvault/mindmap-core';
+export type { NodeLink };
+
 // ── Shared API/backend types ──────────────────────────────────────────────────
 
 export interface Argon2Params {
@@ -383,7 +386,7 @@ export interface MindMapTreeNode {
   notes?: string;
   collapsed?: boolean;
   color?: string | null;
-  link?: { type: string; id: string } | null;
+  link?: NodeLink | null;
   children: MindMapTreeNode[];
   /** Lucide icon names rendered inside the node (multi-select). */
   icons?: string[];

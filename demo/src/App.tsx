@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DesktopMindMapEditor } from '../../frontend_app/src/components/MindMapEditor';
 import { encryptTree } from '../../frontend_app/src/crypto/vault';
 import { randomBytes, toBase64, fromBase64 } from '../../frontend_app/src/crypto/utils';
-import { treeToMarkdown } from '../../frontend_app/src/utils/markdownExport';
+import { EXPORT_FORMATS, type ExportFormat } from '../../frontend_app/src/utils/exportFormats';
 import { useThemeStore } from '../../frontend_app/src/store/theme';
 import { useUiStore, type DensityPreset } from '../../frontend_app/src/store/ui';
 import type { MindMapTree, NodeAttachmentRef } from '../../frontend_app/src/types';
@@ -326,6 +326,9 @@ function normalizeFileBaseName(input: string): string {
   return clean || 'mindmapvault-demo';
 }
 
+/** The demo offers Markdown and nothing else. */
+const MARKDOWN_ONLY = EXPORT_FORMATS.filter((format) => format.id === 'md');
+
 export default function App() {
   const mode = useThemeStore((state) => state.mode);
   const primaryColor = useThemeStore((state) => state.primaryColor);
@@ -472,11 +475,15 @@ export default function App() {
     return { name: attachment.name, contentType, blob: new Blob([payload], { type: contentType }) };
   }, []);
 
-  const exportMarkdown = useCallback((tree: MindMapTree, treeTitle: string) => {
-    const safeName = normalizeFileBaseName(treeTitle || title);
-    const markdown = treeToMarkdown(tree.root, treeTitle || 'Untitled mind map');
-    const payload = new TextEncoder().encode(markdown);
-    downloadBytes(payload, `${safeName}.md`, 'text/markdown');
+  const exportMarkdown = useCallback(async (
+    format: ExportFormat,
+    tree: MindMapTree,
+    baseName: string,
+  ) => {
+    const safeName = normalizeFileBaseName(baseName || title);
+    const blob = await format.serialize(tree.root, baseName || 'Untitled mind map');
+    const payload = new Uint8Array(await blob.arrayBuffer());
+    downloadBytes(payload, `${safeName}${format.extension}`, blob.type);
   }, [title]);
 
   return (
@@ -543,7 +550,7 @@ export default function App() {
             </svg>
             <span className="demo-btn-label">Export encrypted blob</span>
           </button>
-          <button type="button" onClick={() => { exportMarkdown(currentTree, title); }} className="demo-reset">
+          <button type="button" onClick={() => { void exportMarkdown(MARKDOWN_ONLY[0], currentTree, title); }} className="demo-reset">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
               <path strokeLinecap="round" strokeLinejoin="round" d="M14 2v6h6" />
@@ -576,7 +583,8 @@ export default function App() {
           titleChanged={title.trim() !== savedTitle}
           onRenameTitle={() => void handleRename()}
           renamingTitle={renamingTitle}
-          onExportMarkdown={exportMarkdown}
+          exportFormats={MARKDOWN_ONLY}
+          onExport={exportMarkdown}
           onTreeChange={handleTreeChange}
           onFetchNodeAttachmentContent={fetchNodeAttachmentContent}
         />

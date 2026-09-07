@@ -170,3 +170,43 @@ describe('markdown editing behaviours', () => {
     expect(v.state.doc.toString()).toBe('word');
   });
 });
+
+describe('task checkboxes in the live editor', () => {
+  const boxes = (v: EditorView) =>
+    Array.from(v.dom.querySelectorAll<HTMLInputElement>('input.mm-cm-task'));
+
+  it('draws a box for the bulleted form', () => {
+    const v = mount('- [ ] a\n- [x] b', 0);
+    expect(boxes(v).length).toBe(2);
+    expect(boxes(v)[1].checked).toBe(true);
+  });
+
+  it('draws a box for the bare form people type', () => {
+    const v = mount('[x] one\n[ ] two', 0);
+    expect(boxes(v).length).toBe(2);
+    expect(boxes(v)[0].checked).toBe(true);
+    expect(boxes(v)[1].checked).toBe(false);
+  });
+
+  it('ticks the source when a box is clicked', () => {
+    const v = mount('- [ ] a', 0);
+    boxes(v)[0].dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    expect(v.state.doc.toString()).toBe('- [x] a');
+  });
+
+  it('unticks a bare box when clicked', () => {
+    const v = mount('[x] one', 0);
+    boxes(v)[0].dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    expect(v.state.doc.toString()).toBe('[ ] one');
+  });
+
+  it('leaves bracket syntax inside a code fence as text', () => {
+    const v = mount('```\n[ ] literal\n```', 0);
+    expect(boxes(v).length).toBe(0);
+  });
+
+  it('does not turn a link whose text is x into a box', () => {
+    const v = mount('[x](https://example.com)', 0);
+    expect(boxes(v).length).toBe(0);
+  });
+});

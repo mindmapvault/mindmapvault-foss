@@ -143,10 +143,48 @@ export const markdownKeymap: KeyBinding[] = [
   { key: 'Mod-k', run: insertLink },
 ];
 
-/** A GFM task item: indent, a list bullet, then the `[ ]` / `[x]` box. */
-const TASK_LINE_RE = /^(\s*(?:[-*+]|\d+[.)])\s+\[)([ xX])(\])/;
+/**
+ * A task box at the head of a line, bulleted or not.
+ *
+ * GFM only calls the bulleted form (`- [ ]`) a task, but people write the bare
+ * `[ ]` too, so both count as one here and both are drawn as a checkbox. The
+ * trailing lookahead keeps `[x](https://…)` — a link whose text is "x" — out.
+ */
+const TASK_LINE_RE = /^(\s*(?:[-*+]|\d+[.)])?[ \t]*\[)([ xX])(\])(?=\s|$)/;
+/** The bare form on its own: indent, then the box, with no list bullet. */
+export const BARE_TASK_RE = /^([ \t]*)\[[ xX]\](?=\s|$)/;
 /** An opening or closing ``` / ~~~ fence. */
 const FENCE_RE = /^\s*(```+|~~~+)/;
+
+/**
+ * Give every bare `[ ]` line the list bullet GFM wants, so the markdown
+ * renderer draws it as a checkbox like any other task.
+ *
+ * Applied when rendering, never to what is stored: the note keeps the text as
+ * it was typed. Fenced code is left alone — the syntax is literal in there.
+ */
+export function normalizeBareTasks(markdown: string): string {
+  const lines = markdown.split('\n');
+  let fence: string | null = null;
+  let touched = false;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const fenceMatch = FENCE_RE.exec(lines[i]);
+    if (fenceMatch) {
+      if (fence === null) fence = fenceMatch[1][0];
+      else if (fenceMatch[1][0] === fence) fence = null;
+      continue;
+    }
+    if (fence !== null) continue;
+
+    const bare = BARE_TASK_RE.exec(lines[i]);
+    if (!bare) continue;
+    lines[i] = `${bare[1]}- ${lines[i].slice(bare[1].length)}`;
+    touched = true;
+  }
+
+  return touched ? lines.join('\n') : markdown;
+}
 
 /**
  * Flip the `index`-th task checkbox in a markdown document, counting in

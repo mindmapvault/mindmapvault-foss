@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { isTauri } from '../storage';
+import { applyCanvasPalette } from '../utils/canvasPalette';
 import { useAuthStore } from '../store/auth';
 import { useThemeStore } from '../store/theme';
 
@@ -30,10 +31,11 @@ export default function AppRoot() {
     root.classList.toggle('light', mode === 'light');
     root.style.setProperty('--accent', primaryColor);
     root.style.setProperty('--accent-hover', darken(primaryColor));
-    // Removing the property, rather than writing a default, is what lets the
-    // light/dark stylesheets take the canvas back when the override is cleared.
-    if (canvasColor) root.style.setProperty('--mm-canvas-bg', canvasColor);
-    else root.style.removeProperty('--mm-canvas-bg');
+    // The whole editor surface is derived from the canvas, not just the canvas
+    // itself — otherwise a green background leaves slate-blue nodes floating
+    // on it. Passing null clears the lot, handing the palette back to the
+    // light/dark stylesheets.
+    applyCanvasPalette(root, canvasColor);
   }, [mode, primaryColor, canvasColor]);
 
   useEffect(() => {

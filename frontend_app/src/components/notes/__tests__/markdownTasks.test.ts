@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toggleTaskAtIndex } from '../markdownEditing';
+import { normalizeBareTasks, toggleTaskAtIndex } from '../markdownEditing';
 
 describe('toggleTaskAtIndex', () => {
   it('ticks an unchecked box', () => {
@@ -46,7 +46,49 @@ describe('toggleTaskAtIndex', () => {
     expect(toggleTaskAtIndex('- [ ] a', -1)).toBeNull();
   });
 
-  it('ignores a bare bracket that is not a task item', () => {
-    expect(toggleTaskAtIndex('[ ] no bullet', 0)).toBeNull();
+
+  it('accepts the bare form people actually type', () => {
+    expect(toggleTaskAtIndex('[x] sdafsadf', 0)).toBe('[ ] sdafsadf');
+    expect(toggleTaskAtIndex('[ ] sdfsdf', 0)).toBe('[x] sdfsdf');
+  });
+
+  it('counts bare and bulleted tasks as one sequence', () => {
+    const md = '[x] one\n- [ ] two\n[ ] three';
+    expect(toggleTaskAtIndex(md, 2)).toBe('[x] one\n- [ ] two\n[x] three');
+  });
+
+  it('does not mistake a link whose text is x for a task', () => {
+    expect(toggleTaskAtIndex('[x](https://example.com)', 0)).toBeNull();
+  });
+});
+
+describe('normalizeBareTasks', () => {
+  it('gives a bare box the bullet GFM needs', () => {
+    expect(normalizeBareTasks('[x] a\n[ ] b')).toBe('- [x] a\n- [ ] b');
+  });
+
+  it('leaves already-bulleted tasks alone', () => {
+    expect(normalizeBareTasks('- [x] a')).toBe('- [x] a');
+  });
+
+  it('keeps indentation', () => {
+    expect(normalizeBareTasks('   [ ] a')).toBe('   - [ ] a');
+  });
+
+  it('leaves fenced code alone', () => {
+    const md = ['```', '[ ] literal', '```', '[ ] real'].join('\n');
+    expect(normalizeBareTasks(md)).toBe(['```', '[ ] literal', '```', '- [ ] real'].join('\n'));
+  });
+
+  it('returns the input untouched when there is nothing to do', () => {
+    const md = '# Title\n\nplain text';
+    expect(normalizeBareTasks(md)).toBe(md);
+  });
+
+  it('renders the same number of boxes as the toggler counts', () => {
+    const md = '[x] one\n- [ ] two\n[ ] three';
+    const boxes = (normalizeBareTasks(md).match(/\[[ xX]\]/g) ?? []).length;
+    expect(boxes).toBe(3);
+    expect(toggleTaskAtIndex(md, 3)).toBeNull();
   });
 });

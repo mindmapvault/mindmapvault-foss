@@ -1,4 +1,5 @@
 import { Decoration, EditorView, ViewPlugin, WidgetType } from '@codemirror/view';
+import { BARE_TASK_RE } from './markdownEditing';
 import type { DecorationSet, ViewUpdate } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
 import { RangeSetBuilder } from '@codemirror/state';
@@ -80,6 +81,15 @@ const LINK_RE = /^(!?)\[([^\]]*)\]\(([^)]*)\)$/;
  * it to a decrypted blob URL.
  */
 export type ResolveImageUrl = (url: string) => string | undefined;
+
+/** True when this position sits inside fenced or indented code. */
+function inCode(state: EditorState, pos: number): boolean {
+  for (let node = syntaxTree(state).resolveInner(pos, 1); node; node = node.parent as never) {
+    if (/Code|FencedCode/.test(node.name)) return true;
+    if (!node.parent) return false;
+  }
+  return false;
+}
 
 function buildDecorations(view: EditorView, resolveImageUrl: ResolveImageUrl): DecorationSet {
   const marks: Range<Decoration>[] = [];
@@ -198,6 +208,25 @@ function buildDecorations(view: EditorView, resolveImageUrl: ResolveImageUrl): D
         }
       },
     });
+  }
+
+  // The parser only makes a TaskMarker for the bulleted form, so the bare
+  // `[ ]` lines are found by scanning instead — skipping code, where the
+  // brackets are literal text rather than a control.
+  for (const { from, to } of view.visibleRanges) {
+    for (let pos = from; pos <= to;) {
+      const line = state.doc.lineAt(pos);
+      const bare = BARE_TASK_RE.exec(line.text);
+      if (bare && !inCode(state, line.from)) {
+        const boxFrom = line.from + bare[1].length;
+        marks.push(
+          Decoration.replace({ widget: new TaskWidget(/x/i.test(bare[0]), boxFrom) })
+            .range(boxFrom, boxFrom + 3),
+        );
+      }
+      if (line.to >= to) break;
+      pos = line.to + 1;
+    }
   }
 
   // RangeSetBuilder requires document order.

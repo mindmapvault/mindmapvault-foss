@@ -36,7 +36,7 @@ import { MindMapDateDialog } from './MindMapDateDialog';
 import { MindMapNotesDialog } from './MindMapNotesDialog';
 import { MindMapVaultLinkDialog, type LinkableVault } from './MindMapVaultLinkDialog';
 import type { NoteEditorHandle } from './notes/NoteEditor';
-import { toggleTaskAtIndex } from './notes/markdownEditing';
+import { normalizeBareTasks, toggleTaskAtIndex } from './notes/markdownEditing';
 import { useUserLabels } from '../hooks/useUserLabels';
 import type { MindMapEditorProps } from './MindMapEditor.types';
 import {
@@ -388,7 +388,7 @@ export function DesktopMindMapEditor({
         || (attachment.preview_content_type ?? '').startsWith('image/')
         || (attachment.content_type ?? '').startsWith('image/');
     };
-    const raw = marked.parse(markdown, { async: false }) as string;
+    const raw = marked.parse(normalizeBareTasks(markdown), { async: false }) as string;
     const container = document.createElement('div');
     container.innerHTML = raw;
     const anchors = container.querySelectorAll<HTMLAnchorElement>('a[href^="attachment://"]');

@@ -581,9 +581,9 @@ function AppearanceTab({
           </button>
         </div>
         <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-          Applies to the mind map canvas in both light and dark mode. Node colours still
-          come from the theme, so a background far from it may read poorly — “Match theme”
-          hands the canvas back.
+          The toolbar, nodes and panels take their colour from this too, so the editor
+          stays of a piece. A pale background gets dark text whichever mode you are in;
+          your accent colour is left alone. “Match theme” hands it all back.
         </p>
       </section>
 

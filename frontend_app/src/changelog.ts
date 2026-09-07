@@ -12,7 +12,7 @@
  * equal `CHANGELOG[0].version`.
  */
 
-export const APP_VERSION = '0.3.36';
+export const APP_VERSION = '0.3.37';
 
 /**
  * localStorage key recording the last version whose "What's New" the user saw.
@@ -36,6 +36,43 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.3.37',
+    date: '2026-09-07',
+    highlights: 'Links between vaults, a canvas colour the whole editor follows, and checkboxes you can actually tick.',
+    items: [
+      {
+        kind: 'feature',
+        title: 'Link a node to another vault',
+        desc: 'Right-click → Link to Vault…, the Link button in the Insert tab, or Ctrl/Cmd+K. The node shows a strip naming the target, and clicking it opens that vault.',
+      },
+      {
+        kind: 'feature',
+        title: 'Pick your own canvas background',
+        desc: 'Settings → Appearance. The nodes, toolbar and panels take their colour from it too, so the editor stays of a piece — and a pale background gets dark text whichever mode you are in. "Match theme" puts it back.',
+      },
+      {
+        kind: 'feature',
+        title: 'A URL button in the toolbar',
+        desc: 'Adding a web link to a node no longer means going through the right-click menu. Insert is now grouped Content, Links and Files.',
+      },
+      {
+        kind: 'fix',
+        title: 'Checkboxes in a note can be ticked while reading',
+        desc: 'They were drawn but did nothing outside the editor. Ticking one now updates the note, and the change survives switching back to writing.',
+      },
+      {
+        kind: 'fix',
+        title: 'A plain [x] is a checkbox too',
+        desc: 'Only the list form "- [x]" used to count. Typing "[x]" on its own line now draws a checkbox as well, and your text is left exactly as written.',
+      },
+      {
+        kind: 'improvement',
+        title: 'A reveal toggle when changing your password',
+        desc: 'This password is the encryption key and nobody can reset it, so checking what you typed is worth the click.',
+      },
+    ],
+  },
   {
     version: '0.3.36',
     date: '2026-09-06',

@@ -14,6 +14,22 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Removed
 
+## [0.3.37] - 2026-09-07
+
+Links from a node to another vault, a canvas colour the rest of the editor
+follows, and task checkboxes that can be ticked wherever they appear.
+
+### Added
+- **Link a node to another vault.** Right-click → Link to Vault…, the Link button in the Insert ribbon's new Links group, or `Ctrl/Cmd+K`. The node draws a strip naming the target, and clicking it opens that vault. The node model and the layout already reserved room for this — nothing in the app could set one, and the footer drew URL strips over the space it had reserved, so a link would have overlapped them.
+- **A canvas background of your choosing**, in Settings → Appearance: ten presets, a colour picker, and "Match theme" to hand it back. The rest of the editor follows it — nodes, toolbar, status bar, notes and shortcut panels are all mixed from the canvas colour, so a green canvas no longer leaves slate-blue nodes floating on it. The canvas decides light or dark, not the app theme: a pale background gets dark text in either mode. Your accent colour is left alone, and PNG/PDF exports pick the background up automatically.
+- **A URL button in the toolbar.** Adding a web link to a node was reachable only from the context menu. Insert is now grouped Content / Links / Files across every density.
+- **A reveal toggle on the password-rotation fields.** This password is the encryption key, it cannot be reset, and a typo is only discovered at the next sign-in.
+
+### Fixed
+- **Task checkboxes could not be ticked in read mode.** The markdown renderer draws GFM task lists as disabled checkboxes, so they were visible but inert; only the live editor's own boxes worked. Clicking one now rewrites the source, and the editor is kept in step so switching back to write mode does not show — and then save — the older text.
+- **A bare `[x]` or `[ ]` was not a checkbox.** GFM only recognises the bulleted form (`- [x]`), so a line typed without a list marker rendered as plain text in both modes. Both forms are now drawn and toggled, in the live editor and in read mode, while the note keeps the text exactly as typed. Task syntax inside a fenced code block stays literal, and a link whose text is `x` is not mistaken for a task.
+- **A node's vault-link strip overlapped its URLs.** The footer band ignored the strip the geometry had reserved for a link and started the URLs at the top of the footer.
+
 ## [0.3.36] - 2026-09-06
 
 ### Changed

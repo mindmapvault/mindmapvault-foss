@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { buildPasswordRotationBundle } from '../crypto/keyRotation';
 import type { LocalProfileForRotation, VaultEntryForRotation } from '../crypto/keyRotation';
 import { useAuthStore } from '../store/auth';
+import { PasswordInput } from './PasswordInput';
 
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
@@ -168,8 +169,7 @@ export function PasswordRotationForm({ secondaryAction, onDone, doneAction }: Pa
       <div className="space-y-3">
         <label className="block text-sm text-[var(--fg-muted)]">
           Current password
-          <input
-            type="password"
+          <PasswordInput
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             autoComplete="current-password"
@@ -181,8 +181,7 @@ export function PasswordRotationForm({ secondaryAction, onDone, doneAction }: Pa
 
         <label className="block text-sm text-[var(--fg-muted)]">
           New password
-          <input
-            type="password"
+          <PasswordInput
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             autoComplete="new-password"
@@ -194,8 +193,7 @@ export function PasswordRotationForm({ secondaryAction, onDone, doneAction }: Pa
 
         <label className="block text-sm text-[var(--fg-muted)]">
           Confirm new password
-          <input
-            type="password"
+          <PasswordInput
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             autoComplete="new-password"

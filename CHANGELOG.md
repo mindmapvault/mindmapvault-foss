@@ -14,6 +14,11 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Removed
 
+## [0.3.38] - 2026-09-08
+
+### Fixed
+- **The 0.3.37 installers were published as 0.3.36.** `desktop/src-tauri/tauri.conf.json` and its crate carry their own version, which the release names artifacts from, and only the frontend's was bumped. The binaries were built from 0.3.37 — the naming alone was wrong — but a download called 0.3.36 cannot be told apart from the real one, so this reissues them.
+
 ## [0.3.37] - 2026-09-07
 
 Links from a node to another vault, a canvas colour the rest of the editor

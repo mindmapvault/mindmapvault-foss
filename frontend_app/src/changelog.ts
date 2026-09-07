@@ -12,7 +12,7 @@
  * equal `CHANGELOG[0].version`.
  */
 
-export const APP_VERSION = '0.3.37';
+export const APP_VERSION = '0.3.38';
 
 /**
  * localStorage key recording the last version whose "What's New" the user saw.
@@ -36,6 +36,18 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.3.38',
+    date: '2026-09-08',
+    highlights: 'Corrects the installer naming in 0.3.37.',
+    items: [
+      {
+        kind: 'fix',
+        title: 'The 0.3.37 installers were named 0.3.36',
+        desc: 'The desktop app carries its own version number, which was not bumped with the rest, so the download files claimed the previous release. The app inside them was 0.3.37; only the naming was wrong.',
+      },
+    ],
+  },
   {
     version: '0.3.37',
     date: '2026-09-07',

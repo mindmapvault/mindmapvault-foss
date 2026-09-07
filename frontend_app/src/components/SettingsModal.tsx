@@ -34,6 +34,12 @@ const PRESETS = [
   '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6',
 ];
 
+/** Canvas backgrounds: a dark row and a light row, so either theme has options. */
+const CANVAS_PRESETS = [
+  '#0f172a', '#111827', '#1c1917', '#172554', '#134e4a',
+  '#f1f5f9', '#ffffff', '#fefce8', '#f5f3ff', '#ecfdf5',
+];
+
 const autosaveOptions: Array<{ value: AutosaveMode; label: string }> = [
   { value: 'change', label: 'After each change' },
   { value: '30s', label: 'Every 30 seconds' },
@@ -453,17 +459,21 @@ function ChangelogTab() {
 function AppearanceTab({
   mode,
   primaryColor,
+  canvasColor,
   autosaveMode,
   toggleMode,
   setPrimaryColor,
+  setCanvasColor,
   setAutosaveMode,
   onOpenLegal,
 }: {
   mode: 'dark' | 'light';
   primaryColor: string;
+  canvasColor: string | null;
   autosaveMode: AutosaveMode;
   toggleMode: () => void;
   setPrimaryColor: (color: string) => void;
+  setCanvasColor: (color: string | null) => void;
   setAutosaveMode: (mode: AutosaveMode) => void;
   onOpenLegal: (doc: LegalDocument) => void;
 }) {
@@ -528,6 +538,53 @@ function AppearanceTab({
           />
           <span className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>{primaryColor}</span>
         </div>
+      </section>
+      <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
+        <SectionLabel>Canvas background</SectionLabel>
+        <div className="grid grid-cols-5 gap-2 sm:grid-cols-10">
+          {CANVAS_PRESETS.map((c) => (
+            <button
+              key={c}
+              onClick={() => setCanvasColor(c)}
+              className="h-8 w-8 rounded-lg transition-transform hover:scale-110"
+              style={{
+                backgroundColor: c,
+                border: '1px solid var(--border-light)',
+                outline: canvasColor?.toLowerCase() === c ? '2.5px solid var(--accent)' : 'none',
+                outlineOffset: '2px',
+              }}
+              title={c}
+              aria-label={`Use canvas background ${c}`}
+            />
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg px-3 py-2" style={{ background: 'var(--surface-2)' }}>
+          <label className="text-sm" style={{ color: 'var(--text-secondary)' }}>Custom</label>
+          <input
+            type="color"
+            value={canvasColor ?? (mode === 'dark' ? '#0f172a' : '#f1f5f9')}
+            onChange={(e) => setCanvasColor(e.target.value)}
+            aria-label="Custom canvas background"
+            className="h-7 w-10 cursor-pointer rounded border-0 bg-transparent p-0"
+          />
+          <span className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
+            {canvasColor ?? 'theme default'}
+          </span>
+          <button
+            type="button"
+            onClick={() => setCanvasColor(null)}
+            disabled={canvasColor === null}
+            className="ml-auto rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-40"
+            style={{ background: 'var(--surface-1)', color: 'var(--text-secondary)', border: '1px solid var(--border-light)' }}
+          >
+            Match theme
+          </button>
+        </div>
+        <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+          Applies to the mind map canvas in both light and dark mode. Node colours still
+          come from the theme, so a background far from it may read poorly — “Match theme”
+          hands the canvas back.
+        </p>
       </section>
 
       <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
@@ -764,8 +821,8 @@ interface SettingsModalProps {
  */
 export function SettingsModal({ open, onClose, initialTab = 'account', onStorageFolderChanged }: SettingsModalProps) {
   const {
-    mode, primaryColor, autoLogoutMinutes, autosaveMode,
-    toggleMode, setPrimaryColor, setAutoLogoutMinutes, setAutosaveMode,
+    mode, primaryColor, canvasColor, autoLogoutMinutes, autosaveMode,
+    toggleMode, setPrimaryColor, setCanvasColor, setAutoLogoutMinutes, setAutosaveMode,
   } = useThemeStore();
   const username = useAuthStore((s) => s.username);
 
@@ -861,9 +918,11 @@ export function SettingsModal({ open, onClose, initialTab = 'account', onStorage
                 <AppearanceTab
                   mode={mode}
                   primaryColor={primaryColor}
+                  canvasColor={canvasColor}
                   autosaveMode={autosaveMode}
                   toggleMode={toggleMode}
                   setPrimaryColor={setPrimaryColor}
+                  setCanvasColor={setCanvasColor}
                   setAutosaveMode={setAutosaveMode}
                   onOpenLegal={setLegalDocument}
                 />

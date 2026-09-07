@@ -24,6 +24,8 @@ export interface NoteEditorHandle {
   prefixLines(prefix: string, fallback?: string): void;
   /** Insert a block at the caret, guaranteeing blank-line separation. */
   insertBlock(text: string): void;
+  /** Swap the whole document, leaving focus where it is. */
+  replaceAll(text: string): void;
 }
 
 interface NoteEditorProps {
@@ -158,6 +160,19 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
         userEvent: 'input',
       });
       view.focus();
+    },
+
+    // Used when something outside the editor rewrites the note — ticking a
+    // checkbox in read mode. The editor stays mounted across modes, so its
+    // document has to follow or switching back would show stale text and
+    // then save it over the change. No focus(): read mode is not focused.
+    replaceAll(text) {
+      const view = viewRef.current;
+      if (!view || view.state.doc.toString() === text) return;
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: text },
+        userEvent: 'input',
+      });
     },
   }), []);
 

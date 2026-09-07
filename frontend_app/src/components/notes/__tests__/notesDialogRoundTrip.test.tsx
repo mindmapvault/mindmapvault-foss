@@ -64,6 +64,7 @@ async function renderDialog(initialText: string): Promise<Harness> {
       onNotesPaste: () => {},
       onDeleteNotes: () => {},
       resolveImageUrl: () => undefined,
+      onToggleTask: () => {},
     }));
   });
 

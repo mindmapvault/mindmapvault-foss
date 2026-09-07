@@ -4,6 +4,7 @@ import encryptedVaultApi from '../api/encryptedVault';
 import { mindmapsApi } from '../api/mindmaps';
 import { DesktopMindMapEditor } from '../components/MindMapEditor';
 import { UnlockModal } from '../components/UnlockModal';
+import type { LinkableVault } from '../components/MindMapVaultLinkDialog';
 import {
   decryptAttachmentForOwner,
   encryptAttachmentForOwner,
@@ -122,6 +123,43 @@ export function EditorPage() {
   const [versionLabel, setVersionLabel] = useState('');
   const [versionTooltip, setVersionTooltip] = useState('');
   const previewBlobUrlCacheRef = useRef<Record<string, string>>({});
+
+  /**
+   * The vaults a node can link to. Fetched only when the picker asks for
+   * them — every title in the list costs a decryption, and titles are
+   * encrypted at rest, so this is the only place that can produce them.
+   */
+  const [linkableVaults, setLinkableVaults] = useState<LinkableVault[]>([]);
+  const [linkableVaultsLoading, setLinkableVaultsLoading] = useState(false);
+
+  const loadLinkableVaults = useCallback(async () => {
+    if (!sessionKeys) return;
+    setLinkableVaultsLoading(true);
+    try {
+      const items = await storage.listVaults();
+      const titles = await Promise.all(
+        items.map(async (m) => {
+          try {
+            return await decryptTitle(m.title_encrypted, sessionKeys.masterKey);
+          } catch {
+            // A vault this account cannot read is still a vault; it just has
+            // no name to show, and linking to it would be a link to nothing.
+            return null;
+          }
+        }),
+      );
+      setLinkableVaults(
+        items
+          .map((m, i) => ({ id: m.id, title: titles[i] ?? '' }))
+          .filter((v) => v.title !== '')
+          .sort((a, b) => a.title.localeCompare(b.title)),
+      );
+    } catch {
+      setLinkableVaults([]);
+    } finally {
+      setLinkableVaultsLoading(false);
+    }
+  }, [sessionKeys, storage]);
 
   const getVersionCountFromList = useCallback((versions: VersionDetail[], fallback = 0) => {
     const fromSequence = versions.reduce((max, version) => Math.max(max, version.version_number ?? 0), 0);
@@ -701,6 +739,11 @@ export function EditorPage() {
         </div>
       )}
       <DesktopMindMapEditor
+        vaultId={id}
+        linkableVaults={linkableVaults}
+        linkableVaultsLoading={linkableVaultsLoading}
+        onRequestLinkableVaults={() => { void loadLinkableVaults(); }}
+        onOpenVaultLink={(linkedId) => navigate(`/vaults/${linkedId}`)}
         initialTree={initialTree}
         externalNodeAttachments={externalNodeAttachments}
         title={title}

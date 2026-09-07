@@ -25,6 +25,8 @@ interface MindMapNotesDialogProps {
   /** Seeds the editor; not fed back on every keystroke (see NoteEditor). */
   initialNotesText: string;
   notesPreviewHtml: string;
+  /** Ticks the nth task checkbox in the note's markdown. */
+  onToggleTask: (taskIndex: number) => void;
   saveState: 'saved' | 'saving';
   editorRef: RefObject<NoteEditorHandle | null>;
   notesAttachmentInputRef: RefObject<HTMLInputElement | null>;
@@ -65,6 +67,7 @@ export function MindMapNotesDialog({
   notesUploadBusy,
   initialNotesText,
   notesPreviewHtml,
+  onToggleTask,
   saveState,
   editorRef,
   notesAttachmentInputRef,
@@ -214,7 +217,19 @@ export function MindMapNotesDialog({
             <div
               className="mm-notes-preview mm-notes-preview--full"
               dangerouslySetInnerHTML={{ __html: notesPreviewHtml }}
-              onClick={(e) => handleDelegatedLinkClick(e as unknown as MouseEvent)}
+              onClick={(e) => {
+                // The preview is generated HTML, so both the links and the
+                // task boxes inside it are handled by delegation.
+                const box = (e.target as HTMLElement).closest<HTMLInputElement>('input[data-task-index]');
+                if (box) {
+                  // React re-renders from the source; let it own the state
+                  // rather than leaving the DOM box briefly out of step.
+                  e.preventDefault();
+                  onToggleTask(Number(box.dataset.taskIndex));
+                  return;
+                }
+                handleDelegatedLinkClick(e as unknown as MouseEvent);
+              }}
             />
           )}
         </div>

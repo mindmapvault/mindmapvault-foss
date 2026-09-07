@@ -34,7 +34,9 @@ import { MindMapIconPicker } from './MindMapIconPicker.tsx';
 import { MindMapColorPicker } from './MindMapColorPicker';
 import { MindMapDateDialog } from './MindMapDateDialog';
 import { MindMapNotesDialog } from './MindMapNotesDialog';
+import { MindMapVaultLinkDialog, type LinkableVault } from './MindMapVaultLinkDialog';
 import type { NoteEditorHandle } from './notes/NoteEditor';
+import { toggleTaskAtIndex } from './notes/markdownEditing';
 import { useUserLabels } from '../hooks/useUserLabels';
 import type { MindMapEditorProps } from './MindMapEditor.types';
 import {
@@ -139,6 +141,7 @@ export function DesktopMindMapEditor({
   onFetchNodeAttachmentContent,
   onDeleteNodeAttachment,
   onLoadNodeAttachmentPreview,
+  vaultId, linkableVaults, linkableVaultsLoading, onRequestLinkableVaults, onOpenVaultLink,
 }: MindMapEditorProps) {
   const autosaveMode = useThemeStore((s) => s.autosaveMode);
   const themeMode = useThemeStore((s) => s.mode);
@@ -150,6 +153,8 @@ export function DesktopMindMapEditor({
   const { statusBarVisible, toolbarLabels, buttonShortcuts: buttonShortcutsVisible, toolbarMode } = useResolvedDensity();
   const [showToolbarOverflow, setShowToolbarOverflow] = useState(false);
   const [activeRibbonTab, setActiveRibbonTab] = useState<'home' | 'insert' | 'view' | 'export'>('home');
+  /** The node whose vault link is being picked, or null when the dialog is shut. */
+  const [linkTargetNodeId, setLinkTargetNodeId] = useState<string | null>(null);
   const colourTrayEnabled = useUiStore((s) => s.colourTrayEnabled);
   const colourTrayPosition = useUiStore((s) => s.colourTrayPosition);
   const setColourTray = useUiStore((s) => s.setColourTray);
@@ -346,7 +351,15 @@ export function DesktopMindMapEditor({
     }
     return map;
   }, [externalNodeAttachments, root]);
-  const renderNotesPreviewHtml = useCallback((markdown: string) => {
+  /**
+   * Markdown → sanitized HTML for the read-mode pane and the hover popup.
+   *
+   * `interactive` is what separates the two: marked renders GFM task lists as
+   * disabled checkboxes, which is right for a hover preview and wrong for the
+   * note you are reading. When set, the boxes are enabled and numbered so a
+   * click can be mapped back to the nth task in the source.
+   */
+  const renderNotesPreviewHtml = useCallback((markdown: string, interactive = false) => {
     const attachmentMap = attachmentById;
     const attachmentByName = new Map<string, NodeAttachmentRef>();
     for (const attachment of attachmentMap.values()) {
@@ -422,12 +435,22 @@ export function DesktopMindMapEditor({
       fallback.textContent = attachment?.name ? `Image preview unavailable: ${attachment.name}` : 'Image preview unavailable';
       image.replaceWith(fallback);
     });
+    if (interactive) {
+      container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((box, taskIndex) => {
+        box.removeAttribute('disabled');
+        box.classList.add('mm-notes-task');
+        box.setAttribute('data-task-index', String(taskIndex));
+        // Tagged on the <li> rather than matched with :has() so the bullet
+        // is dropped by a plain class selector.
+        box.closest('li')?.classList.add('mm-notes-task-item');
+      });
+    }
     return DOMPurify.sanitize(container.innerHTML, {
       ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel|blob|data|attachment):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
     });
   }, [attachmentById, attachmentPreviewUrls]);
 
-  const notesPreviewHtml = useMemo(() => renderNotesPreviewHtml(notesText), [notesText, renderNotesPreviewHtml]);
+  const notesPreviewHtml = useMemo(() => renderNotesPreviewHtml(notesText, true), [notesText, renderNotesPreviewHtml]);
 
   /**
    * Maps a markdown image target to something the DOM can render. Notes store
@@ -803,6 +826,25 @@ export function DesktopMindMapEditor({
     if (next) mutate(next);
   }, [root, mutate]);
 
+  // ── Vault link ────────────────────────────────────────────────────────────
+  /**
+   * The vault's title is stored on the node alongside its id. Titles are
+   * encrypted, so a node that kept only an id could not draw its own strip
+   * without the vault list to hand — and that list is not available offline,
+   * in a share, or once the linked vault is gone.
+   */
+  const setNodeLink = useCallback((nodeId: string, vault: LinkableVault | null) => {
+    const next = editNode(root, nodeId, (node) => {
+      node.link = vault ? { type: 'vault', id: vault.id, label: vault.title } : null;
+    });
+    if (next) mutate(next);
+  }, [root, mutate]);
+
+  const openVaultLinkPicker = useCallback((nodeId: string) => {
+    onRequestLinkableVaults?.();
+    setLinkTargetNodeId(nodeId);
+  }, [onRequestLinkableVaults]);
+
   // ── Tags ──────────────────────────────────────────────────────────────────
   const setNodeTags = useCallback((nodeId: string, tags: string[]) => {
     const next = editNode(root, nodeId, (node) => { node.tags = tags; });
@@ -950,6 +992,18 @@ export function DesktopMindMapEditor({
   const prefixNotesLines = useCallback((prefix: string, fallback = '') => {
     notesRef.current?.prefixLines(prefix, fallback);
   }, []);
+
+  /**
+   * Tick a checkbox from the read-mode pane. The autosave effect picks the
+   * new text up from `notesText`; the editor is told separately because it
+   * stays mounted across modes and would otherwise hold the old document.
+   */
+  const toggleNotesTask = useCallback((taskIndex: number) => {
+    const next = toggleTaskAtIndex(notesText, taskIndex);
+    if (next === null) return;
+    setNotesText(next);
+    notesRef.current?.replaceAll(next);
+  }, [notesText]);
 
   const insertMarkdownAction = useCallback((action: 'h1' | 'h2' | 'h3' | 'bold' | 'italic' | 'ul' | 'ol' | 'task' | 'quote' | 'code' | 'link') => {
     if (action === 'h1') { prefixNotesLines('# ', 'Heading 1'); return; }
@@ -1320,6 +1374,7 @@ export function DesktopMindMapEditor({
         nodeAttachmentInputRef.current?.click();
         toast('node.attachFile', 'Attach encrypted file');
       },
+      'node.linkVault': () => { openVaultLinkPicker(selectedId); toast('node.linkVault', 'Link to a vault'); },
       'edit.undo': () => { undo(); toast('edit.undo', 'Undo'); },
       'edit.redo': () => { redo(); toast('edit.redo', 'Redo'); },
       'node.fold': () => {
@@ -1367,6 +1422,8 @@ export function DesktopMindMapEditor({
 
     const actionId = matchShortcut(e, keyboardLayout);
     if (!actionId) return;
+    // Nothing to pick from when the page has not wired vault linking up.
+    if (actionId === 'node.linkVault' && !onOpenVaultLink) return;
     const handler = actionHandlers[actionId];
     if (!handler) return;
     e.preventDefault();
@@ -1374,7 +1431,7 @@ export function DesktopMindMapEditor({
   }, [editingId, notesOpen, openNotes, saveNotes, selectedId, root, layout, addChild, addSibling, deleteNode, cancelEdit, cycleProgress,
     toggleCheckbox, undo, redo, toggleCollapse, showToast, resetNodePosition, resetAllPositions, autoAlignSubtree, showIconPicker, showColorPicker, focusMode, focusedIds,
     hasBulk, bulkDelete, bulkToggleCheckbox, bulkCycleProgress, bulkToggleCollapse, bulkResetPosition, keyboardLayout,
-    colourTrayEnabled, setColourTray, iconTrayEnabled, setIconTray]);
+    colourTrayEnabled, setColourTray, iconTrayEnabled, setIconTray, openVaultLinkPicker, onOpenVaultLink]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -2125,7 +2182,7 @@ export function DesktopMindMapEditor({
           ) : null}
         />
 
-        <FooterBand box={box} geom={geom} node={node} visual={visual} />
+        <FooterBand box={box} geom={geom} parts={parts} node={node} visual={visual} onOpenLink={onOpenVaultLink} />
 
         <CollapseControls
           box={box}
@@ -2155,7 +2212,7 @@ export function DesktopMindMapEditor({
     return elems;
     }, [layout, selectedId, multiSelect, editingId, editText, dropTargetId, isDragging, searchResults,
       attachmentPreviewUrls, cancelHoverPopupClose, scheduleHoverPopupClose, commitEdit, cancelEdit, getNodeAttachments, onOpenNodeAttachment, toggleCollapse, toggleCheckbox,
-      focusMode, focusedIds, rootLeftCollapsed, rootRightCollapsed]);  // eslint-disable-line react-hooks/exhaustive-deps
+      focusMode, focusedIds, rootLeftCollapsed, rootRightCollapsed, onOpenVaultLink]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const selNode = findNode(root, selectedId)?.node;
 
@@ -2421,6 +2478,35 @@ export function DesktopMindMapEditor({
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 15l-5-5L5 21"/></svg>
               </button>
             );
+            // Linking lives in the Insert section next to Notes and Image:
+            // a vault link and a plain URL are the same gesture to a user,
+            // they just point at different things.
+            const linkBtn = onOpenVaultLink ? (
+              <button
+                key="link"
+                className={`mm-btn${selNode?.link?.id ? ' mm-btn--active' : ''}`}
+                data-label="Link"
+                data-shortcut={formatButtonShortcut('node.linkVault', keyboardLayout)}
+                onClick={() => openVaultLinkPicker(selectedId)}
+                title={selNode?.link?.label
+                  ? `Linked to ${selNode.link.label} (${formatShortcut('node.linkVault', keyboardLayout)})`
+                  : `Link this node to another vault (${formatShortcut('node.linkVault', keyboardLayout)})`}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round"><path d="M 3 5 L 9 3 L 15 6 L 21 4 L 21 19 L 15 21 L 9 18 L 3 20 Z"/><path d="M 9 3 L 9 18 M 15 6 L 15 21"/></svg>
+              </button>
+            ) : null;
+            const urlBtn = (
+              <button
+                key="url"
+                className={`mm-btn${showUrlDialog ? ' mm-btn--active' : ''}`}
+                data-label="URL"
+                data-shortcut={formatButtonShortcut('node.url', keyboardLayout)}
+                onClick={() => setShowUrlDialog((v) => !v)}
+                title={`Add a web link to the selected node (${formatShortcut('node.url', keyboardLayout)})`}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path strokeLinecap="round" strokeLinejoin="round" d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+              </button>
+            );
             const alignBtn =<button key="align" className="mm-btn" data-label="Align" data-shortcut={formatButtonShortcut('node.autoAlign', keyboardLayout)} onClick={() => autoAlignSubtree(selectedId)} title={`${selectedId === 'root' ? 'Auto-align all nodes' : 'Auto-align subtree'} (${formatShortcut('node.autoAlign', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M3 12h12M3 18h8"/></svg></button>;
             const focusBtn = <button key="focus" className={`mm-btn${focusMode ? ' mm-btn--active' : ''}`} data-label="Focus" data-shortcut={formatButtonShortcut('view.focusMode', keyboardLayout)} onClick={() => { setFocusMode((v) => { if (!v) setFocusAnchorId(selectedId); return !v; }); }} title={`Focus mode (${formatShortcut('view.focusMode', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2m8.66-17.66l-1.41 1.41M4.75 19.25l-1.41 1.41M23 12h-2M3 12H1m17.66 7.66l-1.41-1.41M4.75 4.75L3.34 3.34"/></svg></button>;
             const searchBtn = <button key="search" className="mm-btn mm-essential" data-label="Search" data-shortcut={formatButtonShortcut('find.search', keyboardLayout)} onClick={() => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 50); }} title={`Search (${formatShortcut('find.search', keyboardLayout)})`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>;
@@ -2465,6 +2551,7 @@ export function DesktopMindMapEditor({
               return (
                 <>
                   {activeRibbonTab === 'insert' && toolbarGroup('Content', <>{notesBtn}{datesBtn}{tagsBtn}</>, 'insert')}
+                  {activeRibbonTab === 'insert' && toolbarGroup('Links', <>{linkBtn}{urlBtn}</>, 'insert')}
                   {activeRibbonTab === 'insert' && toolbarGroup('Files', <>{imageBtn}{attachBtn}</>, 'insert')}
                   {zoomGroup}
                   {activeRibbonTab === 'view' && toolbarGroup('Arrange', <>{alignBtn}{focusBtn}</>, 'view')}
@@ -2483,7 +2570,7 @@ export function DesktopMindMapEditor({
               // Large's own name for the same group.
               return (
                 <>
-                  {toolbarGroup('Insert', <>{notesBtn}{datesBtn}{tagsBtn}{imageBtn}{attachBtn}</>)}
+                  {toolbarGroup('Insert', <>{notesBtn}{datesBtn}{tagsBtn}{linkBtn}{urlBtn}{imageBtn}{attachBtn}</>)}
                   {zoomGroup}
                   {toolbarGroup('Navigate', <>{alignBtn}{focusBtn}{searchBtn}{shortcutsBtn}</>)}
                   {outputGroup}
@@ -2502,6 +2589,7 @@ export function DesktopMindMapEditor({
             return (
               <>
                 {toolbarGroup('Content', <>{notesBtn}{datesBtn}{tagsBtn}</>)}
+                {toolbarGroup('Links', <>{linkBtn}{urlBtn}</>)}
                 {toolbarGroup('Files', <>{imageBtn}{attachBtn}</>)}
                 {zoomGroup}
                 {toolbarGroup('Arrange', <>{alignBtn}{focusBtn}</>)}
@@ -2531,9 +2619,12 @@ export function DesktopMindMapEditor({
                     ['node.autoAlign', 'Auto-align', () => autoAlignSubtree(selectedId)],
                     ['view.focusMode', 'Focus mode', () => { setFocusMode((v) => { if (!v) setFocusAnchorId(selectedId); return !v; }); }],
                     ['find.shortcuts', 'Shortcuts', () => setShowShortcuts((v) => !v)],
+                    ['node.url', 'URL', () => setShowUrlDialog((v) => !v)],
                     ['node.addImage', 'Image', () => { nodeImageTargetRef.current = selectedId; nodeImageInputRef.current?.click(); }],
                     ['node.attachFile', 'Attach file', () => nodeAttachmentInputRef.current?.click()],
-                  ] as const).map(([id, label, onClick]) => (
+                  ] as ReadonlyArray<readonly [string, string, () => void]>)
+                    .concat(onOpenVaultLink ? [['node.linkVault', 'Link to vault', () => openVaultLinkPicker(selectedId)]] : [])
+                    .map(([id, label, onClick]) => (
                     <button key={label} className="mm-context-item" onClick={() => { onClick(); setShowToolbarOverflow(false); }}>
                       {label}{id && <kbd>{formatShortcut(id, keyboardLayout)}</kbd>}
                     </button>
@@ -2926,7 +3017,16 @@ export function DesktopMindMapEditor({
             {!cmIsRoot && <button className="mm-context-item" onClick={() => { addSibling(contextMenu.nodeId); setContextMenu(null); }}>Add Sibling <kbd>{formatShortcut('node.addSibling', keyboardLayout)}</kbd></button>}
             <div className="mm-context-divider" />
             {cmHasChildren && <button className="mm-context-item" onClick={() => { toggleCollapse(contextMenu.nodeId); setContextMenu(null); }}>{cmNode.collapsed ? 'Expand' : 'Collapse'} <kbd>{formatShortcut('node.fold', keyboardLayout)}</kbd></button>}
-            <button className="mm-context-item" onClick={() => { openNotes(contextMenu.nodeId); setNotesOpen(true); setContextMenu(null); }}>Notes <kbd>{formatShortcut('node.notesToggle', keyboardLayout)}</kbd></button>
+            <button className="mm-context-item" data-testid="context-notes" onClick={() => { openNotes(contextMenu.nodeId); setNotesOpen(true); setContextMenu(null); }}>Note <kbd>{formatShortcut('node.notesToggle', keyboardLayout)}</kbd></button>
+            {onOpenVaultLink && (
+              <button className="mm-context-item" data-testid="context-link-vault" onClick={() => { openVaultLinkPicker(contextMenu.nodeId); setContextMenu(null); }}>
+                {cmNode.link?.id ? 'Change Vault Link…' : 'Link to Vault…'} <kbd>{formatShortcut('node.linkVault', keyboardLayout)}</kbd>
+              </button>
+            )}
+            {cmNode.link?.id && (
+              <button className="mm-context-item" onClick={() => { setNodeLink(contextMenu.nodeId, null); setContextMenu(null); }}>Remove Vault Link</button>
+            )}
+            <button className="mm-context-item" data-testid="context-add-url" onClick={() => { setShowUrlDialog(true); setContextMenu(null); }}>Add URL… <kbd>{formatShortcut('node.url', keyboardLayout)}</kbd></button>
             <button className="mm-context-item" data-testid="context-add-image" onClick={() => {
               nodeImageTargetRef.current = contextMenu.nodeId;
               nodeImageInputRef.current?.click();
@@ -2935,6 +3035,7 @@ export function DesktopMindMapEditor({
             {cmNode.image?.thumb && (
               <button className="mm-context-item" data-testid="context-remove-image" onClick={() => { removeNodeImage(contextMenu.nodeId); setContextMenu(null); }}>Remove Image</button>
             )}
+            <div className="mm-context-divider" />
             <button className="mm-context-item" onClick={() => { setShowIconPicker(true); setContextMenu(null); }}>Icon <kbd>{formatShortcut('node.icons', keyboardLayout)}</kbd></button>
             <button className="mm-context-item" onClick={() => {
               cmHasCheckbox ? toggleCheckbox(contextMenu.nodeId) : addCheckbox(contextMenu.nodeId);
@@ -2954,7 +3055,6 @@ export function DesktopMindMapEditor({
               </div><kbd>{formatShortcut('node.progress', keyboardLayout)}</kbd>
             </div>
             <button className="mm-context-item" onClick={() => { setShowDateDialog(true); setContextMenu(null); }}>Date Planning <kbd>{formatShortcut('node.dates', keyboardLayout)}</kbd></button>
-            <button className="mm-context-item" onClick={() => { setShowUrlDialog(true); setContextMenu(null); }}>Add URL <kbd>{formatShortcut('node.url', keyboardLayout)}</kbd></button>
             <button className="mm-context-item" onClick={() => { setShowTagDialog(true); setContextMenu(null); }}>Labels <kbd>{formatShortcut('node.labels', keyboardLayout)}</kbd></button>
             <div className="mm-context-divider" />
             {!cmIsRoot && cmCanMoveUp && <button className="mm-context-item" onClick={() => { moveNode(contextMenu.nodeId, 'up'); setContextMenu(null); }}>Move Up</button>}
@@ -3077,6 +3177,7 @@ export function DesktopMindMapEditor({
         nodeId={notesNodeId}
         initialNotesText={notesSeed}
         notesPreviewHtml={notesPreviewHtml}
+        onToggleTask={toggleNotesTask}
         saveState={notesSaveState}
         editorRef={notesRef}
         notesAttachmentInputRef={notesAttachmentInputRef}
@@ -3241,6 +3342,18 @@ export function DesktopMindMapEditor({
       {/* ── Date dialog ─────────────────────────────────────────────── */}
       <MindMapDateDialog open={showDateDialog} startDate={selNode?.startDate ?? null} endDate={selNode?.endDate ?? null}
         onSave={(s, e) => setNodeDates(selectedId, s, e)} onClose={() => setShowDateDialog(false)} />
+
+      {/* ── Vault link dialog ───────────────────────────────────────── */}
+      <MindMapVaultLinkDialog
+        open={linkTargetNodeId !== null}
+        currentVaultId={vaultId}
+        vaults={linkableVaults ?? []}
+        loading={linkableVaultsLoading}
+        linkedVaultId={linkTargetNodeId ? findNode(root, linkTargetNodeId)?.node.link?.id ?? null : null}
+        onPick={(vault) => { if (linkTargetNodeId) setNodeLink(linkTargetNodeId, vault); setLinkTargetNodeId(null); }}
+        onRemove={() => { if (linkTargetNodeId) setNodeLink(linkTargetNodeId, null); setLinkTargetNodeId(null); }}
+        onClose={() => setLinkTargetNodeId(null)}
+      />
 
       {/* ── URL dialog ──────────────────────────────────────────────── */}
       {showUrlDialog && (<>

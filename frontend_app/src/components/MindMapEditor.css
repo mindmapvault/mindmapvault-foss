@@ -1538,6 +1538,9 @@
   font-size: 12px;
 }
 
+/* Read-mode task boxes are the write-mode ones: same control, same feel,
+   whichever side of the note you are on. */
+.mm-notes-task,
 .mm-cm-task {
   appearance: none;
   width: 15px;
@@ -1550,7 +1553,9 @@
   position: relative;
   background: transparent;
 }
+.mm-notes-task:checked,
 .mm-cm-task:checked { background: var(--accent); border-color: var(--accent); }
+.mm-notes-task:checked::after,
 .mm-cm-task:checked::after {
   content: "";
   position: absolute;
@@ -1624,6 +1629,8 @@
 .mm-notes-preview ol { list-style: decimal; }
 .mm-notes-preview ul { list-style: disc; }
 .mm-notes-preview li { margin: 2px 0; }
+/* A task item carries its own box, so it does not also want a bullet. */
+.mm-notes-preview li.mm-notes-task-item { list-style: none; margin-left: -18px; }
 .mm-notes-preview code {
   font-family: ui-monospace, monospace;
   font-size: 12px;
@@ -2836,3 +2843,72 @@
   width: 100%;
   max-width: 340px;
 }
+
+/* ── Vault link dialog ──────────────────────────────────────────
+   Shares the date dialog's frame; only the result list is its own. */
+.mm-vault-link-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  background: var(--mm-notes-bg);
+  border: 1px solid var(--mm-notes-border);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  z-index: 400;
+  overflow: hidden;
+}
+.mm-vault-link-list {
+  margin-top: 10px;
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mm-vault-link-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--mm-node-text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.mm-vault-link-item:hover {
+  background: var(--mm-toolbar-hover);
+  border-color: var(--mm-toolbar-border);
+}
+.mm-vault-link-item.is-linked { border-color: var(--accent); }
+.mm-vault-link-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mm-vault-link-badge {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+.mm-vault-link-empty {
+  padding: 14px 4px;
+  color: var(--mm-statusbar-text);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+/* The link strip on a node, so hovering it reads as clickable. */
+.mm-vault-link text { text-decoration: underline; }
+.mm-vault-link:hover text { opacity: 0.75; }

@@ -142,3 +142,48 @@ export const markdownKeymap: KeyBinding[] = [
   { key: 'Mod-i', run: (v) => toggleWrap(v, '*', 'italic text') },
   { key: 'Mod-k', run: insertLink },
 ];
+
+/** A GFM task item: indent, a list bullet, then the `[ ]` / `[x]` box. */
+const TASK_LINE_RE = /^(\s*(?:[-*+]|\d+[.)])\s+\[)([ xX])(\])/;
+/** An opening or closing ``` / ~~~ fence. */
+const FENCE_RE = /^\s*(```+|~~~+)/;
+
+/**
+ * Flip the `index`-th task checkbox in a markdown document, counting in
+ * document order. Returns the rewritten source, or null when there is no
+ * such task.
+ *
+ * `index` comes from the rendered preview, where the nth `<input>` has to
+ * mean the nth task in the source. Fenced code is skipped for exactly that
+ * reason: `- [ ]` inside a fence renders as code, not as a checkbox, so
+ * counting it here would toggle the wrong line further down.
+ */
+export function toggleTaskAtIndex(markdown: string, index: number): string | null {
+  if (index < 0) return null;
+  const lines = markdown.split('\n');
+  let seen = -1;
+  let fence: string | null = null;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const fenceMatch = FENCE_RE.exec(lines[i]);
+    if (fenceMatch) {
+      if (fence === null) fence = fenceMatch[1][0];
+      else if (fenceMatch[1][0] === fence) fence = null;
+      continue;
+    }
+    if (fence !== null) continue;
+
+    const task = TASK_LINE_RE.exec(lines[i]);
+    if (!task) continue;
+
+    seen += 1;
+    if (seen !== index) continue;
+
+    const [matched, head, box, tail] = task;
+    const next = box === ' ' ? 'x' : ' ';
+    lines[i] = `${head}${next}${tail}${lines[i].slice(matched.length)}`;
+    return lines.join('\n');
+  }
+
+  return null;
+}

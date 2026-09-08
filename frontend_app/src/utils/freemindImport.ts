@@ -33,6 +33,10 @@ function stripHtml(html: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&nbsp;/g, ' ')
+    // Numeric character references — FreePlane writes &#160; for a non-breaking
+    // space inside rich text, and they must decode or words glue together.
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -108,6 +112,17 @@ function parseNode(element: Element): MindMapTreeNode {
       node.notes = stripHtml(bodyEl ? bodyEl.innerHTML : child.innerHTML);
       break;
     }
+  }
+
+  // Encrypted nodes (FreeMind/FreePlane password-protected branches) carry
+  // their children in an ENCRYPTED_CONTENT blob, not as <node> elements.
+  // Decryption is out of scope for this app — it is password-based (PBKDF2/
+  // AES-GCM or legacy DES) and the password is not in the file. Rather than
+  // silently dropping the hidden subtree, mark the node so the user can see
+  // content exists but is locked.
+  if (element.getAttribute('ENCRYPTED_CONTENT') != null) {
+    const marker = '🔒 Encrypted branch (password-protected in the source app — not imported)';
+    node.notes = node.notes ? `${node.notes}\n\n${marker}` : marker;
   }
 
   // Recurse into child <node> elements only; skip FreePlane-specific

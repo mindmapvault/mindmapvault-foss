@@ -29,16 +29,24 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const frontendDir = path.join(repoRoot, 'frontend_app');
 
-// pnpm is the workspace package manager. Go through corepack so the script
-// works on a machine where the pnpm shim is not on PATH (the common case on
-// Windows without an admin shell). On Windows corepack is a .cmd, which
-// requires the shell to spawn; the args are static and trusted, so the
-// resulting DEP0190 concat warning is benign.
+// pnpm is the workspace package manager. In CI it is on PATH (via
+// pnpm/action-setup); on a local Windows machine without an admin shell the
+// shim may be absent, so fall back to corepack with the pinned version.
+// On Windows the launcher is a .cmd, which requires the shell to spawn; the
+// args are static and trusted, so the resulting DEP0190 concat warning is
+// benign.
 const isWin = process.platform === 'win32';
+const hasPnpm = spawnSync(isWin ? 'pnpm.cmd' : 'pnpm', ['--version'], {
+  stdio: 'ignore', shell: false, windowsHide: true,
+}).status === 0;
+const [cmd, args] = hasPnpm
+  ? [isWin ? 'pnpm.cmd' : 'pnpm', ['exec', 'vitest', 'run']]
+  : ['corepack', ['pnpm@10.17.1', 'exec', 'vitest', 'run']];
+
 const result = spawnSync(
-  'corepack',
+  cmd,
   [
-    'pnpm@10.17.1', 'exec', 'vitest', 'run',
+    ...args,
     // Round-trip: our export → our import keeps every claimed field.
     'src/utils/__tests__/roundTrip.test.ts',
     // Compatibility: real source-software files import correctly.

@@ -194,3 +194,9 @@ Our `freemindExport.ts` currently writes a subset. To be FreeMind-faithful:
 The importer (`freemindImport.ts`) already tolerates all of this (it reads
 attributes by name and skips unknown child elements), so the gap is on the
 *export* side only.
+
+> **Encrypted branches are out of scope.** FreeMind/FreePlane password-protected
+> branches store their children encrypted in `ENCRYPTED_CONTENT`. This app does
+> not decrypt them — the password is not in the file. Such nodes import with a
+> `🔒 Encrypted branch` note so the locked content is visible, not silently
+> dropped. See `FREEPLANE_MM_FORMAT_SPEC.md` §8 for the algorithm details.

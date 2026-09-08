@@ -39,6 +39,22 @@ import obsidianReal from './fixtures/obsidian-real.md?raw';
 // <attribute NAME="" VALUE=""/> — none of which our own exporter produces.
 import freemindSample from './fixtures/sample.mm?raw';
 
+// Real FreePlane maps downloaded from freeplane.org/mapsOnline. They span
+// three format versions — 0.9.0 (FreeMind-era), freeplane 1.2.0, and the
+// constructs our spec targets — and carry full XHTML richcontent, map_styles
+// hooks, LOCALIZED_TEXT, BACKGROUND_COLOR, and CREATED/MODIFIED timestamps.
+import fpWhatIsMindMapping from './fixtures/WhatIsMindMapping.mm?raw';
+import fpApplications from './fixtures/freeplaneApplications.mm?raw';
+import fpFunctions from './fixtures/freeplaneFunctions.mm?raw';
+import fpCollectionAdvanced from './fixtures/CollectionAdvanced.mm?raw';
+import fpActionDashboard from './fixtures/Action-dashboard.mm?raw';
+import fpCollectionBeginner from './fixtures/CollectionBeginner.mm?raw';
+import fpMeetingBeginner from './fixtures/MeetingBeginner.mm?raw';
+import fpMeetingAdvanced from './fixtures/MeetingAdvanced.mm?raw';
+import fpVault from './fixtures/Vault.mm?raw';
+import fpSwot from './fixtures/SWOT.mm?raw';
+import fpTutorial from './fixtures/freeplaneTutorial.mm?raw';
+
 // The two .xmind files are ZIP archives. Rather than commit binaries, build
 // them inline with fflate (already a dependency) exactly as the real apps lay
 // them out: Zen/2020+ uses content.json, XMind 8 uses content.xml.
@@ -239,5 +255,50 @@ describe('compatibility: real source-software files', () => {
     // POSITION appears only on the root's direct children (left/right branches).
     const positions = out.match(/POSITION="(left|right)"/g) ?? [];
     expect(positions.length).toBe(7); // 5 right + 2 left in the sample
+  });
+});
+
+// Real maps from freeplane.org/mapsOnline. These are large, rich, and span
+// three format versions; the importer must parse each into a sane tree
+// without throwing and without losing the top-level structure.
+describe('real freeplane.org maps', () => {
+  const cases: Array<[string, string]> = [
+    ['WhatIsMindMapping (0.9.0)', fpWhatIsMindMapping],
+    ['freeplaneApplications (1.2.0)', fpApplications],
+    ['freeplaneFunctions (1.2.0)', fpFunctions],
+    ['CollectionAdvanced (0.9.0)', fpCollectionAdvanced],
+    ['Action-dashboard (1.2.0)', fpActionDashboard],
+    ['CollectionBeginner (0.9.0)', fpCollectionBeginner],
+    ['MeetingBeginner (1.2.0)', fpMeetingBeginner],
+    ['MeetingAdvanced (0.9.0)', fpMeetingAdvanced],
+    ['SWOT (0.9.0)', fpSwot],
+    ['freeplaneTutorial (1.2.0, 214KB)', fpTutorial],
+  ];
+
+  for (const [name, xml] of cases) {
+    it(`imports ${name} into a non-empty tree`, () => {
+      const root = freemindToTree(xml, 'Imported');
+      expect(root.text).toBe('Imported');
+      // Every real map has content under the root.
+      expect(root.children.length).toBeGreaterThan(0);
+      // And every node has non-empty text (richcontent stripped to text).
+      const walk = (n: typeof root): void => {
+        expect(typeof n.text).toBe('string');
+        n.children.forEach(walk);
+      };
+      walk(root);
+    });
+  }
+
+  it('imports an encrypted map (Vault.mm) without decrypting it', () => {
+    // Vault.mm's root carries ENCRYPTED_CONTENT — its real children are
+    // encrypted and not present as <node> elements. Decryption is out of
+    // scope (password-based; the password is not in the file). The importer
+    // must not throw, must not invent children, and must mark the locked
+    // branch so the user can see content exists.
+    const root = freemindToTree(fpVault, 'Vault');
+    expect(root.text).toBe('Vault');
+    expect(root.children).toEqual([]);
+    expect(root.notes).toContain('Encrypted branch');
   });
 });

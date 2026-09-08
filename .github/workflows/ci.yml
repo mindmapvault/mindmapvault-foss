@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+# Concurrency: cancel superseded runs on the same ref so a force-push does not
+# leave stale jobs running.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Frontend app + shared packages (TypeScript / vitest) ──────────────────
+  frontend:
+    name: Frontend & packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        # Must precede setup-node: `cache: 'pnpm'` resolves the store by
+        # shelling out to `pnpm store path`, so pnpm has to exist first.
+        # Version comes from `packageManager` in the root package.json.
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm --dir frontend_app exec tsc --noEmit -p tsconfig.json
+
+      - name: Unit tests (frontend + packages)
+        # The full vitest suite. Its `include` also covers
+        # `packages/*/src/**`, so the shared mindmap-core and connectors tests
+        # run here too — including the import/export round-trip fidelity and
+        # the real-file compatibility suites.
+        run: pnpm --dir frontend_app test
+
+      - name: Import/export round-trip gate
+        # Fails the build if any format drops a field it claims to carry, or
+        # a real source-software file stops importing.
+        run: node scripts/check_import_export_roundtrip.mjs
+
+      - name: Offline parity (FOSS-only)
+        # No cross-repo PAT in this workflow; the strict cross-repo variant
+        # runs in offline-parity.yml.
+        run: node scripts/check_frontend_offline_parity.mjs --foss-root=. --strict=false
+
+  # ── Desktop host (Rust / Tauri) ───────────────────────────────────────────
+  desktop:
+    name: Desktop host (Rust)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        # The Tauri config references the frontend's build output path, so the
+        # workspace deps must be present for cargo to resolve the config.
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend (creates frontend_app/dist)
+        # tauri.conf.json points frontendDist at ../../frontend_app/dist, and
+        # tauri-build reads that path during cargo check/test. Build it so the
+        # directory exists; without it the Rust steps can fail on the missing
+        # path rather than on real errors.
+        run: pnpm --dir frontend_app build
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo check
+        working-directory: desktop/src-tauri
+        run: cargo check --locked
+
+      - name: cargo test
+        working-directory: desktop/src-tauri
+        run: cargo test --locked

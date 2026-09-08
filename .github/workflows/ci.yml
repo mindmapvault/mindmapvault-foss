@@ -87,6 +87,13 @@ jobs:
         # path rather than on real errors.
         run: pnpm --dir frontend_app build
 
+      - name: Install Linux build dependencies
+        # cargo check builds glib-sys/webkit2gtk-sys build scripts, which need
+        # the system libraries present even for a check-only run.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y             libwebkit2gtk-4.1-dev             libgtk-3-dev             libayatana-appindicator3-dev             librsvg2-dev             patchelf
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 

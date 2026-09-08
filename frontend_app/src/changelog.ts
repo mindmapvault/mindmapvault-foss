@@ -12,7 +12,7 @@
  * equal `CHANGELOG[0].version`.
  */
 
-export const APP_VERSION = '0.3.38';
+export const APP_VERSION = '0.6.0';
 
 /**
  * localStorage key recording the last version whose "What's New" the user saw.
@@ -36,6 +36,48 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.6.0',
+    date: '2026-09-08',
+    highlights: 'Choosing a vault folder now works on Linux, the shortcut card can stay open, and version numbers are unified across every MindMapVault edition.',
+    items: [
+      {
+        kind: 'fix',
+        title: 'Choosing a storage folder works on Linux',
+        desc: 'The Browse button never opened a folder chooser on any Linux desktop. It now uses the standard system dialog and works everywhere.',
+      },
+      {
+        kind: 'feature',
+        title: 'Keep the keyboard shortcuts card on screen',
+        desc: 'A new "Always on" switch in the card header keeps it open while you work, and it reopens where you left it the next time you launch.',
+      },
+      {
+        kind: 'fix',
+        title: 'The Attach button icon is back',
+        desc: 'The paperclip on the toolbar was missing its artwork.',
+      },
+      {
+        kind: 'fix',
+        title: 'Note popups stay open under the pointer',
+        desc: 'Hovering a note preview no longer closes it while you are reading.',
+      },
+      {
+        kind: 'improvement',
+        title: 'No privacy or terms notices in the offline app',
+        desc: 'MindMapVault FOSS talks to no server and collects nothing, so it no longer shows notices that only apply to the hosted service.',
+      },
+      {
+        kind: 'improvement',
+        title: 'Linux packages, and a Snap Store release',
+        desc: 'The offline app now ships as a .deb, an AppImage and a snap alongside the Windows build.',
+      },
+      {
+        kind: 'improvement',
+        title: 'Version numbers now match across all editions',
+        desc: 'Every MindMapVault app moves to 0.6.0 together, so a version number means the same thing everywhere.',
+      },
+    ],
+  },
   {
     version: '0.3.38',
     date: '2026-09-08',

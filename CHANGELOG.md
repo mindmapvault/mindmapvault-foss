@@ -4,14 +4,19 @@ All notable changes to this repository are documented here.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
-## [Unreleased]
+## [0.6.0] - 2026-09-08
 
-A map you export now comes back the way you saved it. This release closes the
+Version numbers now line up across every MindMapVault edition — this is the
+first release on the shared line, which is why it jumps from 0.3.38 to 0.6.0.
+The offline app also gains Linux packages and a Snap Store listing, and a map
+you export now comes back the way you saved it. This release closes the
 gap a reviewer put plainly — "exporting a mindmap and then re-importing it
 loses all formatting" — and puts a test gate in the release process so that
 class of bug cannot ship again.
 
 ### Added
+- **"Always on" for the keyboard shortcuts card.** A switch in the card's header keeps it on the canvas instead of dismissing it on the next click, and the choice — along with where you dragged the card — is remembered between launches. Closing the card with × clears the switch, so it can never reappear unexplained. `store/ui.ts`, `components/MindMapEditor.tsx`.
+- **Linux packages and a Snap Store release.** The offline app now builds a `.deb` and an AppImage alongside the Windows installer, and is published to the Snap Store as `mindmapvault-foss`. The snap is strictly confined with **no network access at all** — an independently verifiable form of the local-only promise. `desktop/src-tauri/tauri.conf.linux.json`, `desktop/snap/snapcraft.yaml`.
 - **A native, lossless map format (`.mmvault`).** Every other export is an interchange with a third-party app and drops fields the editor can set — icons, progress, dates, tags, pictures, attachments. `.mmvault` is the application's own: a versioned JSON envelope (`mindmapvault-tree`, v1) that carries the tree verbatim, so export → re-import loses nothing. It is listed first in both the export and import menus, so "save this map and open it back" finally works. `utils/mmvaultFormat.ts`.
 - **A round-trip fidelity suite** (`utils/__tests__/roundTrip.test.ts`). A fixture tree sets every field the editor supports; each format is exported and re-imported, then diffed against a per-format fidelity mask that declares what it can carry. A format that silently drops a field it claims to keep now fails the build, and teaching a format a new field is a one-line mask change the test then enforces.
 - **A compatibility suite for real source-software files** (`utils/__tests__/compat.test.ts`). Where the round-trip suite proves our export → our import is self-consistent, this proves the importers can read files the *actual* applications write — FreeMind's `<font>`/`<attribute>` children and empty attributes, FreePlane's `richcontent` node text and `BACKGROUND_COLOR`, WiseMapping's `order`/`CDATA` notes, both XMind layouts (Zen `content.json` and XMind 8 `content.xml`), and Obsidian tasks/callouts/wiki-links. A genuine FreeMind 1.1.0 export (`sample.mm`) is a committed fixture.
@@ -22,6 +27,9 @@ class of bug cannot ship again.
 - **A release gate** (`scripts/check_import_export_roundtrip.mjs`, `pnpm check:roundtrip`) that runs both suites and blocks the release on a regression. Documented under Release Validation in `docs/PROJECT_STRUCTURE_AND_BUILD.md`.
 
 ### Fixed
+- **Choosing a storage folder never worked on Linux.** The Browse button called `rfd`'s synchronous folder dialog straight from a Tauri command, and `rfd`'s GTK3 backend requires the main thread while commands run on a worker — so on every Linux desktop the dialog silently failed to appear. Windows was unaffected, which is why it went unnoticed. Both call sites (the unlock screen and Settings → Account) now use `@tauri-apps/plugin-dialog`'s `open({ directory: true })`, the async IPC path Tauri supports, and the unused Rust command is gone. `pages/LocalUnlockPage.tsx`, `components/SettingsModal.tsx`, `local_store.rs`.
+- **The Attach button had no icon, and no build could succeed.** The paperclip `<svg>` in the toolbar was truncated mid-attribute, which is a hard TypeScript parse error — every build of the editor failed until it was repaired. `components/MindMapEditor.tsx`.
+- **Note preview popups closed under the pointer.** Moving onto a hovered note's popup should cancel its scheduled close, but the handler re-set the hovered node id — referencing a variable that was not in scope — instead of setting the flag the close actually checks, so the popup vanished as you reached for it. `components/MindMapEditor.tsx`.
 - **The markdown importer could not read its own exporter.** The exporter wrote a rich structured dialect — `[75%]`, `:icon:`, `Tags: #…`, `📅`, `🔗 <url>`, `📎`, `>` notes — but the importer was a generic Obsidian parser that understood none of it, so a map exported to Markdown and re-imported lost its notes, tags, dates, links, and progress, and grew a spurious wrapper node. The importer now reads the dialect back (and unwraps the export's root), while leaving generic Obsidian notes untouched. Markdown round-trips notes, checkboxes, progress, icons, tags, links, and attachment names; colour and node pictures remain documented losses, and dates survive only approximately (they are written locale-formatted).
 - **FreeMind export was not byte-compatible with FreeMind.** It emitted an XML prolog FreeMind never writes, attributes in insertion order, and UTF-8 text. It now follows the spec: no prolog, the fixed FreeMind comment, `<map version="1.1.0">`, attributes in alphabetical order (FreeMind stores them in a `TreeMap`), pure-ASCII escaping with `&#xHH;` numeric entities for non-ASCII, `POSITION` only on the root's direct children, and LF newlines with no indentation. Byte-level tests assert the format, and a re-export of the real `sample.mm` is verified to match FreeMind's byte rules.
 - **Rich-text node labels lost word boundaries.** The importer's HTML stripper decoded the named entities but not numeric character references, so a non-breaking space written as `&#160;` — which FreePlane emits inside rich text — survived as literal text and glued words together. Numeric references (`&#xHH;` and `&#NNN;`) are now decoded. Surfaced by the real freeplane.org maps.
@@ -29,6 +37,7 @@ class of bug cannot ship again.
 - **The demos showed desktop-only settings that cannot work in a browser.** The Account tab's "Local storage folder" picker and "Change password" form both drive on-disk vault files through Tauri commands, so in the browser the former rendered `Cannot read properties of undefined (reading 'invoke')` and the latter could never succeed. Both are now shown only inside the Tauri desktop shell (`isTauri()`); the demos keep the settings that make sense offline — Local profile, Auto-logout, Appearance, Interface, What's New and Help.
 
 ### Changed
+- **No privacy or terms notices in the offline app.** The legal dialog could open a GDPR notice and terms of service, but this build ships neither document and never linked to them — the offline app contacts no server and collects nothing, so those notices belong to the hosted service alone. The dead code paths are removed and only Credits remains. `components/LegalDocumentDialog.tsx`.
 - **Encrypted FreeMind/FreePlane branches are explicitly out of scope.** A password-protected branch stores its children encrypted in `ENCRYPTED_CONTENT`, and the password is not in the file — so "importing" it means prompting for a password, which is a feature, not a parser fix. Rather than dropping the locked subtree silently, the importer now marks the node with a `🔒 Encrypted branch` note so the hidden content is visible. The decision and the two underlying algorithms (legacy DES, AES-256-GCM) are documented in `docs/FREEPLANE_MM_FORMAT_SPEC.md` §8.
 - Frontend unit tests went from 189 to 276.
 

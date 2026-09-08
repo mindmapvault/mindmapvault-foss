@@ -4,7 +4,7 @@ use local_store::{
     delete_local_profile, delete_local_vault, export_vault_file, get_local_profile,
     get_local_storage_dir, get_local_storage_summary, get_local_vault_blob, get_local_vault_detail,
     import_vault_file, is_wsl_environment, list_local_profiles, list_local_vaults,
-    pick_local_storage_dir, reset_local_storage_dir, save_export_file, save_local_profile,
+    reset_local_storage_dir, save_export_file, save_local_profile,
     save_local_vault, save_local_vault_blob, set_active_user, set_local_storage_dir,
     update_local_vault_meta, verify_local_vault_integrity,
 };
@@ -178,7 +178,6 @@ pub fn run() {
             get_local_storage_summary,
             set_local_storage_dir,
             reset_local_storage_dir,
-            pick_local_storage_dir,
             is_wsl_environment,
             // Import / Export
             export_vault_file,

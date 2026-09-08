@@ -1005,12 +1005,6 @@ pub fn reset_local_storage_dir(app: AppHandle) -> Result<LocalStorageDirInfo, Lo
     get_local_storage_dir(app)
 }
 
-#[tauri::command]
-pub fn pick_local_storage_dir() -> Result<Option<String>, LocalStoreError> {
-    let picked = rfd::FileDialog::new().pick_folder();
-    Ok(picked.map(|p| p.to_string_lossy().to_string()))
-}
-
 /// Lists all locally available profile usernames (scans AppData/profiles/).
 #[tauri::command]
 pub fn list_local_profiles(app: AppHandle) -> Result<Vec<String>, LocalStoreError> {

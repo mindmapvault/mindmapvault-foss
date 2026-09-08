@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { aesDecrypt, aesEncrypt, importAesKey } from '../crypto/aes';
 import { DesktopTauriBadge } from '../components/DesktopTauriBadge';
 import { DynamicLucideIcon } from '../components/DynamicLucideIcon';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { LegalDocumentDialog, type LegalDocument } from '../components/LegalDocumentDialog';
 import { deriveMasterKey, DEFAULT_ARGON2_PARAMS } from '../crypto/kdf';
 import { generateUserKeyPairs } from '../crypto/kem';
@@ -155,8 +156,8 @@ export function LocalUnlockPage() {
     setError('');
     setChangingDir(true);
     try {
-      const picked = await invoke<string | null>('pick_local_storage_dir');
-      if (picked) {
+      const picked = await openDialog({ directory: true, multiple: false });
+      if (typeof picked === 'string') {
         const info = await invoke<{ path: string; is_override: boolean }>('set_local_storage_dir', { path: picked });
         setStorageDir(info.path);
       }

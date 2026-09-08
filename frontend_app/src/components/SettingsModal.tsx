@@ -16,6 +16,7 @@ import {
   type TrayPosition,
 } from '../store/ui';
 import { isMac } from '../platform/isMac';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { isTauri } from '../storage';
 
 export type SettingsTab = 'account' | 'changelog' | 'appearance' | 'interface' | 'help';
@@ -175,8 +176,8 @@ function LocalStorageFolderSection({ onFolderChanged }: { onFolderChanged?: () =
   const handleBrowse = async () => {
     setPathError('');
     try {
-      const selected = await invokeTauri<string | null>('pick_local_storage_dir');
-      if (selected) setPathInput(selected);
+      const selected = await openDialog({ directory: true, multiple: false });
+      if (typeof selected === 'string') setPathInput(selected);
     } catch (err) {
       setPathError(err instanceof Error ? err.message : String(err));
     }

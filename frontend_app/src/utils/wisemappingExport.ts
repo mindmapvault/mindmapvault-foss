@@ -42,6 +42,10 @@ function rmXmlInv(text: string): string {
   return out;
 }
 
+function cdata(text: string): string {
+  return `<![CDATA[${text.replace(/]]>/g, ']]]]><![CDATA[>')}]]>`;
+}
+
 let topicCounter = 0;
 function nextId(): string {
   return String(++topicCounter);
@@ -97,10 +101,10 @@ function nodeToXml(
   // Build the child elements (multi-line text, notes, links, subtopics).
   const body: string[] = [];
   if (multiline) {
-    body.push(`${indent}  <text><![CDATA[${text}]]></text>`);
+    body.push(`${indent}  <text>${cdata(text)}</text>`);
   }
   if (hasNotes) {
-    body.push(`${indent}  <note><![CDATA[${rmXmlInv(node.notes!.trim())}]]></note>`);
+    body.push(`${indent}  <note>${cdata(rmXmlInv(node.notes!.trim()))}</note>`);
   }
   if (hasLink) {
     body.push(`${indent}  <link url="${escapeXml(node.urls![0].url)}" urlType="url"/>`);

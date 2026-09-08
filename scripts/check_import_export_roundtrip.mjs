@@ -32,27 +32,28 @@ const frontendDir = path.join(repoRoot, 'frontend_app');
 // pnpm is the workspace package manager. In CI it is on PATH (via
 // pnpm/action-setup); on a local Windows machine without an admin shell the
 // shim may be absent, so fall back to corepack with the pinned version.
-// On Windows the launcher is a .cmd, which requires the shell to spawn; the
-// args are static and trusted, so the resulting DEP0190 concat warning is
-// benign.
 const isWin = process.platform === 'win32';
 const hasPnpm = spawnSync(isWin ? 'pnpm.cmd' : 'pnpm', ['--version'], {
   stdio: 'ignore', shell: false, windowsHide: true,
 }).status === 0;
+
+const testArgs = [
+  // Round-trip: our export → our import keeps every claimed field.
+  'src/utils/__tests__/roundTrip.test.ts',
+  // Compatibility: real source-software files import correctly.
+  'src/utils/__tests__/compat.test.ts',
+];
+
 const [cmd, args] = hasPnpm
-  ? [isWin ? 'pnpm.cmd' : 'pnpm', ['exec', 'vitest', 'run']]
-  : ['corepack', ['pnpm@10.17.1', 'exec', 'vitest', 'run']];
+  ? [isWin ? 'pnpm.cmd' : 'pnpm', ['exec', 'vitest', 'run', ...testArgs]]
+  : isWin
+    ? ['cmd.exe', ['/d', '/s', '/c', `corepack pnpm@10.17.1 exec vitest run ${testArgs.join(' ')}`]]
+    : ['corepack', ['pnpm@10.17.1', 'exec', 'vitest', 'run', ...testArgs]];
 
 const result = spawnSync(
   cmd,
-  [
-    ...args,
-    // Round-trip: our export → our import keeps every claimed field.
-    'src/utils/__tests__/roundTrip.test.ts',
-    // Compatibility: real source-software files import correctly.
-    'src/utils/__tests__/compat.test.ts',
-  ],
-  { cwd: frontendDir, stdio: 'inherit', shell: isWin, windowsHide: true },
+  args,
+  { cwd: frontendDir, stdio: 'inherit', shell: false, windowsHide: true },
 );
 
 if (result.error) {

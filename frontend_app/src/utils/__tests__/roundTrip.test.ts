@@ -117,7 +117,7 @@ const NATIVE: Fidelity = {
 
 const MARKDOWN: Fidelity = { notes: true, checked: true, progress: true, icons: true, tags: true, urls: true, attachments: 'name' };
 const FREEMIND: Fidelity = { notes: true, color: true, side: true, collapsed: true, urls: true };
-const WISEMAPPING: Fidelity = { notes: true, color: true, side: true, urls: true };
+const WISEMAPPING: Fidelity = { notes: true, color: true, side: true, collapsed: true, urls: true };
 const XMIND: Fidelity = { notes: true, color: true, urls: true };
 
 // ── Comparison ──────────────────────────────────────────────────────────────
@@ -165,6 +165,10 @@ function expectRoundTrip(
   });
 }
 
+function normalizeFreeplaneVolatileIds(xml: string): string {
+  return xml.replace(/ID="ID_\d+"/g, 'ID="ID"');
+}
+
 // ── Suites ──────────────────────────────────────────────────────────────────
 
 describe('round-trip fidelity', () => {
@@ -191,6 +195,29 @@ describe('round-trip fidelity', () => {
   expectRoundTrip('xmind', XMIND,
     (r) => treeToXmind(r, 'Root'),
     (d, t) => xmindToTree(d as ArrayBuffer, t));
+});
+
+describe('exported XML file stability', () => {
+  it('keeps a FreeMind export byte-identical after import and re-export', () => {
+    const first = treeToFreemind(fixture());
+    const imported = freemindToTree(first, 'Root');
+    const second = treeToFreemind(imported);
+    expect(second).toBe(first);
+  });
+
+  it('keeps a FreePlane export identical after import and re-export except generated IDs', () => {
+    const first = treeToFreeplane(fixture());
+    const imported = freemindToTree(first, 'Root');
+    const second = treeToFreeplane(imported);
+    expect(normalizeFreeplaneVolatileIds(second)).toBe(normalizeFreeplaneVolatileIds(first));
+  });
+
+  it('keeps a WiseMapping export byte-identical after import and re-export', () => {
+    const first = treeToWisemapping(fixture(), 'Root');
+    const imported = wisemappingToTree(first, 'Root');
+    const second = treeToWisemapping(imported, 'Root');
+    expect(second).toBe(first);
+  });
 });
 
 /**
@@ -363,5 +390,27 @@ describe('wisemapping tango byte compatibility', () => {
     })), 'Root');
     expect(back.children[0].side).toBe('left');
     expect(back.children[1].side).toBe('right');
+  });
+
+  it('recovers sides after sorting children by order', () => {
+    const xml = `<map version="tango" layout="mindmap">
+  <topic central="true" text="Root" id="1">
+    <topic position="150,0" order="1" text="Right" id="2"/>
+    <topic position="-150,0" order="0" text="Left" id="3"/>
+  </topic>
+</map>`;
+    const back = wisemappingToTree(xml, 'Root');
+    expect(back.children.map((c) => c.text)).toEqual(['Left', 'Right']);
+    expect(back.children.map((c) => c.side)).toEqual(['left', 'right']);
+  });
+
+  it('splits CDATA terminators in multi-line text and notes', () => {
+    const out = treeToWisemapping(node({ text: 'line one\nclose ]]> marker', notes: 'note ]]> marker' }));
+    expect(out).toContain('<![CDATA[line one\nclose ]]]]><![CDATA[> marker]]>');
+    expect(out).toContain('<![CDATA[note ]]]]><![CDATA[> marker]]>');
+
+    const back = wisemappingToTree(out, 'Root');
+    expect(back.text).toBe('Root');
+    expect(back.notes).toBe('note ]]> marker');
   });
 });

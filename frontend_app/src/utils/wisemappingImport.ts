@@ -21,6 +21,16 @@ function makeNode(text: string): MindMapTreeNode {
   };
 }
 
+function orderedTopicChildren(el: Element): Element[] {
+  return Array.from(el.children)
+    .filter((c) => c.tagName.toLowerCase() === 'topic')
+    .sort((a, b) => {
+      const oa = parseInt(a.getAttribute('order') ?? '0', 10);
+      const ob = parseInt(b.getAttribute('order') ?? '0', 10);
+      return oa - ob;
+    });
+}
+
 function parseTopicEl(el: Element, isTopLevel = false): MindMapTreeNode {
   // Text comes from the `text` attribute for single-line topics, or from a
   // `<text>` CDATA child for multi-line ones (the real tango serializer writes
@@ -31,6 +41,8 @@ function parseTopicEl(el: Element, isTopLevel = false): MindMapTreeNode {
 
   const bgColor = el.getAttribute('bgColor');
   if (bgColor) node.color = bgColor;
+
+  if (el.getAttribute('shrink') === 'true') node.collapsed = true;
 
   // `side` is only meaningful for the root's direct children in our model.
   const position = el.getAttribute('position');
@@ -54,13 +66,7 @@ function parseTopicEl(el: Element, isTopLevel = false): MindMapTreeNode {
     if (url) node.urls = [{ url, label: '' }];
   }
 
-  node.children = Array.from(el.children)
-    .filter((c) => c.tagName.toLowerCase() === 'topic')
-    .sort((a, b) => {
-      const oa = parseInt(a.getAttribute('order') ?? '0', 10);
-      const ob = parseInt(b.getAttribute('order') ?? '0', 10);
-      return oa - ob;
-    })
+  node.children = orderedTopicChildren(el)
     // Children of the root are top-level (side is meaningful); deeper nodes not.
     .map((c) => parseTopicEl(c, false));
 
@@ -92,9 +98,7 @@ export function wisemappingToTree(xmlString: string, title: string): MindMapTree
   const root = parseTopicEl(rootTopicEl);
   // The root's direct children are the top-level branches — re-derive their
   // side from their position, which parseTopicEl skipped for them.
-  const rootChildEls = Array.from(rootTopicEl.children).filter(
-    (c) => c.tagName.toLowerCase() === 'topic',
-  );
+  const rootChildEls = orderedTopicChildren(rootTopicEl);
   rootChildEls.forEach((el, i) => {
     const position = el.getAttribute('position');
     if (position === 'left' || position === 'right') {
@@ -110,7 +114,11 @@ export function wisemappingToTree(xmlString: string, title: string): MindMapTree
   // topics to the root so a flat map does not import as a single node.
   const topLevel = Array.from(mapEl.children).filter(
     (c) => c.tagName.toLowerCase() === 'topic' && c !== rootTopicEl,
-  );
+  ).sort((a, b) => {
+    const oa = parseInt(a.getAttribute('order') ?? '0', 10);
+    const ob = parseInt(b.getAttribute('order') ?? '0', 10);
+    return oa - ob;
+  });
   for (const el of topLevel) {
     root.children.push(parseTopicEl(el, true));
   }

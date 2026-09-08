@@ -6,13 +6,24 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
-### Added
+A map you export now comes back the way you saved it. This release closes the
+gap a reviewer put plainly — "exporting a mindmap and then re-importing it
+loses all formatting" — and puts a test gate in the release process so that
+class of bug cannot ship again.
 
-### Changed
+### Added
+- **A native, lossless map format (`.mmvault`).** Every other export is an interchange with a third-party app and drops fields the editor can set — icons, progress, dates, tags, pictures, attachments. `.mmvault` is the application's own: a versioned JSON envelope (`mindmapvault-tree`, v1) that carries the tree verbatim, so export → re-import loses nothing. It is listed first in both the export and import menus, so "save this map and open it back" finally works. `utils/mmvaultFormat.ts`.
+- **A round-trip fidelity suite** (`utils/__tests__/roundTrip.test.ts`). A fixture tree sets every field the editor supports; each format is exported and re-imported, then diffed against a per-format fidelity mask that declares what it can carry. A format that silently drops a field it claims to keep now fails the build, and teaching a format a new field is a one-line mask change the test then enforces.
+- **A compatibility suite for real source-software files** (`utils/__tests__/compat.test.ts`). Where the round-trip suite proves our export → our import is self-consistent, this proves the importers can read files the *actual* applications write — FreeMind's `<font>`/`<attribute>` children and empty attributes, FreePlane's `richcontent` node text and `BACKGROUND_COLOR`, WiseMapping's `order`/`CDATA` notes, both XMind layouts (Zen `content.json` and XMind 8 `content.xml`), and Obsidian tasks/callouts/wiki-links. A genuine FreeMind 1.1.0 export (`sample.mm`) is a committed fixture.
+- **A FreeMind `.mm` format specification** (`docs/FREEMIND_MM_FORMAT_SPEC.md`), reverse-engineered from the FreeMind source so the format is documented rather than reverse-guessed.
+- **A release gate** (`scripts/check_import_export_roundtrip.mjs`, `pnpm check:roundtrip`) that runs both suites and blocks the release on a regression. Documented under Release Validation in `docs/PROJECT_STRUCTURE_AND_BUILD.md`.
 
 ### Fixed
+- **The markdown importer could not read its own exporter.** The exporter wrote a rich structured dialect — `[75%]`, `:icon:`, `Tags: #…`, `📅`, `🔗 <url>`, `📎`, `>` notes — but the importer was a generic Obsidian parser that understood none of it, so a map exported to Markdown and re-imported lost its notes, tags, dates, links, and progress, and grew a spurious wrapper node. The importer now reads the dialect back (and unwraps the export's root), while leaving generic Obsidian notes untouched. Markdown round-trips notes, checkboxes, progress, icons, tags, links, and attachment names; colour and node pictures remain documented losses, and dates survive only approximately (they are written locale-formatted).
+- **FreeMind export was not byte-compatible with FreeMind.** It emitted an XML prolog FreeMind never writes, attributes in insertion order, and UTF-8 text. It now follows the spec: no prolog, the fixed FreeMind comment, `<map version="1.1.0">`, attributes in alphabetical order (FreeMind stores them in a `TreeMap`), pure-ASCII escaping with `&#xHH;` numeric entities for non-ASCII, `POSITION` only on the root's direct children, and LF newlines with no indentation. Byte-level tests assert the format, and a re-export of the real `sample.mm` is verified to match FreeMind's byte rules.
 
-### Removed
+### Changed
+- Frontend unit tests went from 189 to 265.
 
 ## [0.3.38] - 2026-09-08
 

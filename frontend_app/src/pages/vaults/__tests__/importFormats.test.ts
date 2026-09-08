@@ -60,8 +60,8 @@ describe('IMPORT_MENU_ITEMS', () => {
    * FreePlane are two names people look for and one `.mm` reader. Collapsing
    * the menu onto the format list would silently drop an entry.
    */
-  it('lists five entries for four formats', () => {
-    expect(IMPORT_MENU_ITEMS).toHaveLength(5);
+  it('lists six entries for five formats', () => {
+    expect(IMPORT_MENU_ITEMS).toHaveLength(6);
     expect(new Set(IMPORT_MENU_ITEMS.map((i) => i.format)).size).toBe(IMPORT_FORMATS.length);
   });
 

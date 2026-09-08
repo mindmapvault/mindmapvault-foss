@@ -11,6 +11,8 @@
     "dev:mobile-demo": "pnpm --dir mobile-demo dev",
     "build:mobile-demo": "pnpm --dir mobile-demo build",
     "build:mobile-demo:pages": "pnpm --dir mobile-demo build:pages",
+    "test:app": "pnpm --dir frontend_app test",
+    "check:roundtrip": "node scripts/check_import_export_roundtrip.mjs",
     "tauri:dev": "pnpm --dir frontend_app tauri:dev",
     "tauri:build": "pnpm --dir frontend_app tauri:build",
     "build:linux": "docker build -f scripts/linux-build.Dockerfile --output type=local,dest=./dist-linux .",

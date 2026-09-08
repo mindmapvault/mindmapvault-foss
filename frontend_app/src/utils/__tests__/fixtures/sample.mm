@@ -1,0 +1,127 @@
+<map version="1.1.0">
+<!-- To view this file, download free mind mapping software FreeMind from http://freemind.sourceforge.net -->
+<node CREATED="1572058401236" ID="ID_1525247519" MODIFIED="1572305045520" TEXT="mindmap">
+<font NAME="Takao P&#x30b4;&#x30b7;&#x30c3;&#x30af;" SIZE="12"/>
+<attribute NAME="mindmap" VALUE="root"/>
+<node CREATED="1572148405953" ID="ID_1073048952" MODIFIED="1572234446949" POSITION="right" TEXT="spec(dynamic)">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1,2-3-1"/>
+<node CREATED="1572164363178" ID="ID_1573110149" MODIFIED="1572234824349" TEXT="Interrupt-SPI">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+</node>
+<node CREATED="1572234399673" ID="ID_528716949" MODIFIED="1572234846112" TEXT="devices">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+</node>
+<node CREATED="1572234402569" ID="ID_301317288" MODIFIED="1572234906514" TEXT="flash(large-read)">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+</node>
+</node>
+<node CREATED="1572234413407" ID="ID_953234019" MODIFIED="1572302614600" POSITION="right" TEXT="spec(static)">
+<attribute NAME="" VALUE=""/>
+<node CREATED="1572234460918" ID="ID_1934048096" MODIFIED="1572234488968" TEXT="interface">
+<node CREATED="1572234483313" ID="ID_1385585083" MODIFIED="1572234507356" TEXT="UART(USB)">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+</node>
+<node CREATED="1572234496686" ID="ID_574578096" MODIFIED="1572234497597" TEXT="BLE">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+<node CREATED="1572302529003" ID="ID_323478477" MODIFIED="1572302556505" TEXT="advertisement">
+<attribute NAME="req" VALUE="1-1"/>
+</node>
+</node>
+</node>
+<node CREATED="1572234520534" ID="ID_690452339" MODIFIED="1572234522021" TEXT="commands">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+</node>
+<node CREATED="1572234463261" ID="ID_1016999520" MODIFIED="1572234547998" TEXT="flow">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+</node>
+<node CREATED="1572234535508" ID="ID_91970396" MODIFIED="1572234609556" TEXT="normal">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+</node>
+<node CREATED="1572234629886" ID="ID_329998595" MODIFIED="1572234632840" TEXT="devices">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+</node>
+<node CREATED="1572234617551" ID="ID_1006424268" MODIFIED="1572234620517" TEXT="looping">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+</node>
+</node>
+<node CREATED="1572234465707" ID="ID_569350386" MODIFIED="1572234565971" POSITION="right" TEXT="devices">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+<node CREATED="1572234569578" ID="ID_1637116776" MODIFIED="1572234573056" TEXT="sensor-A">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+</node>
+<node CREATED="1572234577385" ID="ID_205472541" MODIFIED="1572234580131" TEXT="sensor-B">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+</node>
+<node CREATED="1572234586058" ID="ID_245591481" MODIFIED="1572234588237" TEXT="sensor-C">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+</node>
+</node>
+<node CREATED="1572234643118" ID="ID_1203699055" MODIFIED="1572234645148" POSITION="right" TEXT="calculation">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+<node CREATED="1572234649308" ID="ID_1094907669" MODIFIED="1572234654728" TEXT="compensation">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+</node>
+<node CREATED="1572234658038" ID="ID_1007771074" MODIFIED="1572234775754" TEXT="detections">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+</node>
+<node CREATED="1572234671986" ID="ID_60106761" MODIFIED="1572234793331" TEXT="quake">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+</node>
+</node>
+<node CREATED="1572234857982" ID="ID_1489079810" MODIFIED="1572234860743" POSITION="right" TEXT="storage">
+<attribute NAME="doc" VALUE="1-1-1"/>
+<attribute NAME="test" VALUE="1-1-1"/>
+<node CREATED="1572234866842" ID="ID_173300677" MODIFIED="1572234869540" TEXT="flash"/>
+<node CREATED="1572234884005" ID="ID_1205190055" MODIFIED="1572234888005" TEXT="flash(large-read)"/>
+<node CREATED="1572234874950" ID="ID_1186669347" MODIFIED="1572234876098" TEXT="memory"/>
+</node>
+<node CREATED="1572234469725" ID="ID_1230978741" MODIFIED="1572234471287" POSITION="left" TEXT="structure">
+<node CREATED="1572304857213" ID="ID_1358423958" MODIFIED="1572304920798" TEXT="MCU">
+<attribute NAME="doc" VALUE="1-3"/>
+<node CREATED="1572304867412" ID="ID_684971956" MODIFIED="1572304870353" TEXT="peripherals"/>
+<node CREATED="1572304878766" ID="ID_297301130" MODIFIED="1572304880447" TEXT="timer"/>
+<node CREATED="1572304883871" ID="ID_1389346169" MODIFIED="1572304885235" TEXT="RTC"/>
+<node CREATED="1572304888964" ID="ID_1718524238" MODIFIED="1572304890209" TEXT="GPIO"/>
+</node>
+<node CREATED="1572234678513" ID="ID_290761587" MODIFIED="1572234681996" TEXT="sensors"/>
+<node CREATED="1572234696533" ID="ID_1602716468" MODIFIED="1572234702507" TEXT="flash"/>
+<node CREATED="1572234731236" ID="ID_716363297" MODIFIED="1572234733225" TEXT="calculation"/>
+<node CREATED="1572234686972" ID="ID_1338808883" MODIFIED="1572234688243" TEXT="memory"/>
+<node CREATED="1572234692247" ID="ID_705014473" MODIFIED="1572234693295" TEXT="BLE"/>
+<node CREATED="1572234707759" ID="ID_1233500509" MODIFIED="1572234942988" TEXT="UART">
+<attribute NAME="doc" VALUE="1-1-2"/>
+</node>
+</node>
+<node CREATED="1572302616305" ID="ID_1475557850" MODIFIED="1572305025151" POSITION="left" TEXT="document">
+<attribute NAME="doc" VALUE="root"/>
+<node CREATED="1572302624300" ID="ID_301380749" MODIFIED="1572304939318" TEXT="abstract">
+<attribute NAME="doc" VALUE="0-1"/>
+</node>
+<node CREATED="1572304829006" ID="ID_314065878" MODIFIED="1572304958149" TEXT="toc">
+<attribute NAME="doc" VALUE="0-2"/>
+</node>
+<node CREATED="1572304834686" ID="ID_1454822535" MODIFIED="1572305000092" TEXT="histories">
+<attribute NAME="doc" VALUE="10"/>
+</node>
+</node>
+</node>
+</map>

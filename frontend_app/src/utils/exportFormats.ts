@@ -14,8 +14,9 @@ import { treeToMarkdown } from './markdownExport';
 import { treeToFreemind } from './freemindExport';
 import { treeToFreeplane } from './freeplaneExport';
 import { treeToWisemapping } from './wisemappingExport';
+import { treeToMmvault } from './mmvaultFormat';
 
-export type ExportFormatId = 'md' | 'freemind' | 'freeplane' | 'wisemapping' | 'xmind';
+export type ExportFormatId = 'mmvault' | 'md' | 'freemind' | 'freeplane' | 'wisemapping' | 'xmind';
 
 export interface ExportFormat {
   id: ExportFormatId;
@@ -30,6 +31,15 @@ export interface ExportFormat {
 const xml = (text: string) => new Blob([text], { type: 'application/xml' });
 
 export const EXPORT_FORMATS: ExportFormat[] = [
+  {
+    // The only lossless export: the application's own format, re-importable
+    // with every field intact. Listed first so it is the default a user
+    // reaches for when they mean "save this map", not "send it elsewhere".
+    id: 'mmvault',
+    label: 'MindMapVault (.mmvault)',
+    extension: '.mmvault',
+    serialize: (root) => new Blob([treeToMmvault(root)], { type: 'application/json' }),
+  },
   {
     id: 'md',
     label: 'Markdown (.md)',

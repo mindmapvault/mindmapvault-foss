@@ -101,12 +101,13 @@ export function VaultsPage() {
   const [importBusy, setImportBusy] = useState<ImportFormatId | null>(null);
   /** Kept per format: each format shows its own failure, in its own wording. */
   const [importErrors, setImportErrors] = useState<Partial<Record<ImportFormatId, string>>>({});
+  const mmvaultImportRef = useRef<HTMLInputElement>(null);
   const mdImportRef = useRef<HTMLInputElement>(null);
   const mmImportRef = useRef<HTMLInputElement>(null);
   const wxmlImportRef = useRef<HTMLInputElement>(null);
   const xmindImportRef = useRef<HTMLInputElement>(null);
   const importRefs: Record<ImportFormatId, RefObject<HTMLInputElement | null>> = {
-    md: mdImportRef, mm: mmImportRef, wxml: wxmlImportRef, xmind: xmindImportRef,
+    mmvault: mmvaultImportRef, md: mdImportRef, mm: mmImportRef, wxml: wxmlImportRef, xmind: xmindImportRef,
   };
 
   const [showImportMenu, setShowImportMenu] = useState(false);

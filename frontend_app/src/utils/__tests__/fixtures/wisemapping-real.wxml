@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- A genuine WiseMapping export: numeric ids, central root, order attributes,
+     a CDATA note, and a link element. -->
+<map name="Team Map">
+  <topic id="1" text="Team Map" central="true">
+    <topic id="2" text="People" order="0" position="right" bgColor="#ddeeff">
+      <note><![CDATA[Who does what]]></note>
+      <topic id="4" text="Alice" order="0"/>
+      <topic id="5" text="Bob" order="1"/>
+    </topic>
+    <topic id="3" text="Links" order="1" position="left">
+      <link url="https://example.com/team"/>
+      <topic id="6" text="Onboarding" order="0"/>
+    </topic>
+  </topic>
+</map>

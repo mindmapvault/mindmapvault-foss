@@ -45,6 +45,86 @@ function listDepth(line: string): number {
 /** Markdown supports h1–h6; list items occupy virtual levels above this. */
 const HEADING_MAX_LEVEL = 6;
 
+/**
+ * The inline prefix the exporter writes before a node's text:
+ *   [x] [75%] :Target: :Sparkles: Formatted
+ * Returns the recovered fields plus the remaining clean text. Every group is
+ * optional and order-independent, so a hand-written or Obsidian line with no
+ * prefix passes through unchanged.
+ */
+function parseInlinePrefix(raw: string): {
+  text: string;
+  checked: boolean | null;
+  progress: number | null;
+  icons: string[];
+} {
+  let text = raw;
+  let checked: boolean | null = null;
+  let progress: number | null = null;
+  const icons: string[] = [];
+
+  const cb = text.match(/^\[([xX ])\]\s+/);
+  if (cb) {
+    checked = cb[1].toLowerCase() === 'x';
+    text = text.slice(cb[0].length);
+  }
+  const prog = text.match(/^\[(\d{1,3})%\]\s+/);
+  if (prog) {
+    progress = Math.min(100, parseInt(prog[1], 10));
+    text = text.slice(prog[0].length);
+  }
+  // Leading run of :icon: tokens.
+  let ic;
+  while ((ic = text.match(/^:([A-Za-z0-9]+):\s+/))) {
+    icons.push(ic[1]);
+    text = text.slice(ic[0].length);
+  }
+  return { text, checked, progress, icons };
+}
+
+/**
+ * A metadata line the exporter indents under a node. Returns the field to set
+ * on the current node, or null if the line is not one of ours — in which case
+ * the caller falls back to the generic Obsidian handling.
+ */
+type Metadata =
+  | { kind: 'tags'; tags: string[] }
+  | { kind: 'dates'; startDate: string | null; endDate: string | null }
+  | { kind: 'attachment'; name: string; sizeKb: number }
+  | { kind: 'url'; label: string; url: string };
+
+function matchMetadata(trimmed: string): Metadata | null {
+  let m = trimmed.match(/^Tags:\s+(.*)$/);
+  if (m) {
+    const tags = m[1].split(/\s+/).map((t) => t.replace(/^#/, '')).filter(Boolean);
+    return { kind: 'tags', tags };
+  }
+  m = trimmed.match(/^📅\s+(.*)$/);
+  if (m) {
+    const parts = m[1].split(/\s+·\s+/);
+    let startDate: string | null = null;
+    let endDate: string | null = null;
+    for (const p of parts) {
+      const s = p.match(/^Start:\s+(.*)$/);
+      const e = p.match(/^End:\s+(.*)$/);
+      if (s) startDate = s[1].trim();
+      if (e) endDate = e[1].trim();
+    }
+    return { kind: 'dates', startDate, endDate };
+  }
+  m = trimmed.match(/^📎\s+(.*)\s+\(([\d.]+)\s*KB\)$/);
+  if (m) return { kind: 'attachment', name: m[1], sizeKb: parseFloat(m[2]) };
+  m = trimmed.match(/^🔗\s*(.*?)\s*<([^>]+)>$/);
+  if (m) return { kind: 'url', label: m[1], url: m[2] };
+  return null;
+}
+
+/** Convert an exporter-written localised date back to ISO, best effort. */
+function toIsoDate(localised: string): string {
+  const d = new Date(localised);
+  return Number.isNaN(d.getTime()) ? localised : d.toISOString().slice(0, 16);
+}
+
 /** Heading level 1-6 → returns [level, text] or null */
 function matchHeading(line: string): [number, string] | null {
   const m = line.match(/^(#{1,6})\s+(.*)/);
@@ -166,7 +246,11 @@ export function obsidianMarkdownToTree(md: string, title: string): MindMapTreeNo
     if (heading) {
       const [level, headingText] = heading;
       const parent = getParentForLevel(level);
-      const node = makeNode(cleanText(headingText));
+      const meta = parseInlinePrefix(headingText);
+      const node = makeNode(cleanText(meta.text));
+      if (meta.checked !== null) node.checked = meta.checked;
+      if (meta.progress !== null) node.progress = meta.progress;
+      if (meta.icons.length > 0) node.icons = meta.icons;
       parent.children.push(node);
       stack.push({ node, level });
       lastNode = node;
@@ -183,17 +267,45 @@ export function obsidianMarkdownToTree(md: string, title: string): MindMapTreeNo
       const headingBase = stack.reduce((acc, e) => (e.level <= HEADING_MAX_LEVEL ? e.level : acc), 0);
       const itemLevel = headingBase + HEADING_MAX_LEVEL + 1 + depth;
       const parent = getParentForLevel(itemLevel);
-      const node = makeNode(cleanText(itemText));
-      if (checked !== null) node.checked = checked;
+      const meta = parseInlinePrefix(itemText);
+      const node = makeNode(cleanText(meta.text));
+      // The task-list checkbox wins over a prefix checkbox; both are never set.
+      node.checked = checked !== null ? checked : meta.checked;
+      if (meta.progress !== null) node.progress = meta.progress;
+      if (meta.icons.length > 0) node.icons = meta.icons;
       parent.children.push(node);
       stack.push({ node, level: itemLevel });
       lastNode = node;
       continue;
     }
 
+    // Indented metadata the exporter wrote under the current node. These lines
+    // are deeper than their owner's list marker, so they are not list items;
+    // route them onto lastNode instead of letting them become child nodes.
+    const metadata = matchMetadata(line.trim());
+    if (metadata) {
+      if (metadata.kind === 'tags') {
+        lastNode.tags = [...(lastNode.tags ?? []), ...metadata.tags];
+      } else if (metadata.kind === 'dates') {
+        if (metadata.startDate) lastNode.startDate = toIsoDate(metadata.startDate);
+        if (metadata.endDate) lastNode.endDate = toIsoDate(metadata.endDate);
+      } else if (metadata.kind === 'url') {
+        lastNode.urls = [...(lastNode.urls ?? []), { label: metadata.label, url: metadata.url }];
+      } else if (metadata.kind === 'attachment') {
+        lastNode.attachments = [...(lastNode.attachments ?? []), {
+          attachment_id: '',
+          name: metadata.name,
+          content_type: 'application/octet-stream',
+          size_bytes: Math.round(metadata.sizeKb * 1024),
+          uploaded_at: '',
+        }];
+      }
+      continue;
+    }
+
     // Blockquote → append to lastNode's notes.
     // Obsidian callouts (> [!note] Title) have the callout type stripped.
-    const bqMatch = line.match(/^>\s?(.*)/);
+    const bqMatch = line.trim().match(/^>\s?(.*)/);
     if (bqMatch) {
       const noteText = bqMatch[1].replace(/^\[![^\]]+\]\s*/, '');
       if (noteText.trim()) {
@@ -216,5 +328,32 @@ export function obsidianMarkdownToTree(md: string, title: string): MindMapTreeNo
     root.children.push(makeNode('Imported content'));
   }
 
-  return root;
+  // Round-trip unwrap. The exporter writes either `# Root` (no title) or
+  // `# Title` + the root as a single `- Root` list item. Both leave the real
+  // root buried under one or two single-child wrapper levels made from the
+  // file-name title. Collapse a chain of single-child wrappers whose text
+  // matches the title, then promote a final single child that carries real
+  // node content. A generic Obsidian doc — several top-level headings, or a
+  // single heading that is just a heading — is left untouched.
+  let current = root;
+  for (;;) {
+    if (current.children.length !== 1) break;
+    const only = current.children[0];
+    const matchesTitle = only.text === current.text;
+    // A node with children of its own or node-level fields is real content,
+    // not a wrapper — but only promote past it if it is the title echo.
+    if (!matchesTitle) break;
+    only.id = current.id;
+    current = only;
+  }
+  // After collapsing title echoes, a single remaining child is the real root
+  // content (the exporter wrote the root node as one top-level item). Promote
+  // it so its children become the root's children.
+  if (current !== root && current.children.length === 1) {
+    current = current.children[0];
+  }
+  // Whatever node we landed on becomes the root; it takes the file-name title.
+  current.id = root.id;
+  current.text = root.text;
+  return current;
 }

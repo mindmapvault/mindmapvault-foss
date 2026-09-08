@@ -28,6 +28,29 @@ This document explains how the repository is organized and how to build the desk
 - Rust stable toolchain
 - Tauri OS dependencies for your platform
 
+## Release Validation
+
+Run these gates before tagging a release. All must pass.
+
+```bash
+# Import/export fidelity — two suites. roundTrip.test.ts proves our export →
+# our import keeps every field a format claims; compat.test.ts proves files
+# written by the real FreeMind / FreePlane / WiseMapping / XMind / Obsidian
+# applications import correctly. Blocks the "export loses formatting" and the
+# "won't read a real file" classes of bug.
+node scripts/check_import_export_roundtrip.mjs
+
+# Full frontend unit suite.
+pnpm --dir frontend_app test
+
+# Offline parity with the FOSS capability contract.
+node scripts/check_frontend_offline_parity.mjs --foss-root=. --strict=false
+```
+
+The round-trip gate is the one to touch when a format learns a new field:
+raise that format's fidelity mask in the test and the gate enforces it from
+then on.
+
 ## Build Commands
 
 One-command setup (Windows PowerShell):

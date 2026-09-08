@@ -14,8 +14,9 @@ import type { MindMapTreeNode } from '../../types';
 import { freemindToTree } from '../../utils/freemindImport';
 import { obsidianMarkdownToTree } from '../../utils/markdownImport';
 import { wisemappingToTree } from '../../utils/wisemappingImport';
+import { mmvaultToTree } from '../../utils/mmvaultFormat';
 
-export type ImportFormatId = 'md' | 'mm' | 'wxml' | 'xmind';
+export type ImportFormatId = 'mmvault' | 'md' | 'mm' | 'wxml' | 'xmind';
 
 export interface ImportFormat {
   id: ImportFormatId;
@@ -35,6 +36,15 @@ export function vaultTitleFromFileName(fileName: string, extensions: RegExp): st
 }
 
 export const IMPORT_FORMATS: ImportFormat[] = [
+  {
+    // The native format: the only one that re-imports everything the editor
+    // can set. Listed first for the same reason it is first in the export menu.
+    id: 'mmvault',
+    accept: '.mmvault',
+    errorLabel: 'MindMapVault import failed',
+    extensions: /\.mmvault$/i,
+    parse: async (file, title) => mmvaultToTree(await file.text(), title),
+  },
   {
     id: 'md',
     accept: '.md',
@@ -85,6 +95,7 @@ export interface ImportMenuItem {
 }
 
 export const IMPORT_MENU_ITEMS: ImportMenuItem[] = [
+  { label: 'MindMapVault', extension: '.mmvault', format: 'mmvault' },
   { label: 'Markdown', extension: '.md', format: 'md' },
   { label: 'FreeMind', extension: '.mm', format: 'mm' },
   { label: 'FreePlane', extension: '.mm', format: 'mm' },

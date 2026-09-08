@@ -161,6 +161,8 @@ export function DesktopMindMapEditor({
   const iconTrayEnabled = useUiStore((s) => s.iconTrayEnabled);
   const iconTrayPosition = useUiStore((s) => s.iconTrayPosition);
   const setIconTray = useUiStore((s) => s.setIconTray);
+  const shortcutsPinned = useUiStore((s) => s.shortcutsPinned);
+  const setShortcutsPinned = useUiStore((s) => s.setShortcutsPinned);
 
   // ── Mobile detection ───────────────────────────────────────────────────────
   const [isMobile, setIsMobile] = useState(() =>
@@ -2312,7 +2314,7 @@ export function DesktopMindMapEditor({
               className={`mm-btn mm-save-btn${isDirty ? ' mm-save-btn--dirty' : ''}${saving ? ' mm-save-btn--saving' : ''}${error ? ' mm-save-btn--err' : ''}${saveMsg ? ' mm-save-btn--ok' : ''}`}
               onClick={handleSave}
               disabled={saving || (!isDirty && !error)}
-              title={saving ? 'Saving…' : error ? error : isDirty ? 'Unsaved changes' : 'All saved'}
+              title={saving ? 'Saving…' : error ? error : isDirty ? `Unsaved changes` : 'All saved'}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
@@ -2456,11 +2458,14 @@ export function DesktopMindMapEditor({
                 className="mm-btn"
                 data-label="Attach"
                 data-shortcut={formatButtonShortcut('node.attachFile', keyboardLayout)}
-                onClick={() => nodeAttachmentInputRef.current?.click()}
+                onClick={() => {
+                  nodeImageTargetRef.current = selectedId;
+                  nodeImageInputRef.current?.click();
+                }}
                 title={`Attach encrypted files to selected node (${formatShortcut('node.attachFile', keyboardLayout)})`}
                 disabled={!onNodeFileDrop || selectedId === 'root'}
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21.44 11.05l-9.19 9.19a6 6 0 11-8.49-8.49l9.2-9.19a4 4 0 015.65 5.66l-9.2 9.19a2 2 0 11-2.82-2.82l8.48-8.48"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round"
               </button>
             );
             const imageBtn = (
@@ -2475,7 +2480,7 @@ export function DesktopMindMapEditor({
                 }}
                 title={`Add a picture to the selected node (${formatShortcut('node.addImage', keyboardLayout)})`}
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 15l-5-5L5 21"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 15l-5-5L5 21L21 15z"/></svg>
               </button>
             );
             // Linking lives in the Insert section next to Notes and Image:
@@ -2676,7 +2681,8 @@ export function DesktopMindMapEditor({
         <svg ref={svgRef} className="mm-canvas" onMouseDown={onMouseDownSvg} onMouseMove={onMouseMoveSvg} onMouseUp={onMouseUpSvg} onMouseLeave={onMouseUpSvg}
           onTouchStart={onTouchStartSvg} onTouchMove={onTouchMoveSvg} onTouchEnd={onTouchEndSvg} onTouchCancel={onTouchEndSvg}
           onDragOver={onDragOverSvg} onDragLeave={onDragLeaveSvg} onDrop={(e) => { void onDropSvg(e); }}
-          onClick={() => { setShowColorPicker(false); setContextMenu(null); setShowIconPicker(false); setShowExportMenu(false); setShowToolbarOverflow(false); }}>
+          onClick={() => { setShowColorPicker(false); setContextMenu(null); setShowIconPicker(false); setShowExportMenu(false); setShowToolbarOverflow(false); if (!shortcutsPinned) setShowShortcuts(false); }}
+        >
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
             <g className="mm-connections">{renderConnections(root)}</g>
             <g className="mm-nodes">{renderNodes(root)}</g>
@@ -2696,8 +2702,7 @@ export function DesktopMindMapEditor({
             tabIndex={0}
             onMouseEnter={() => {
               cancelHoverPopupClose();
-              setHoveringNotePopup(true);
-              hoverPopupRef.current?.focus();
+              setHoveredNoteNodeId(nodeId);
             }}
             onMouseLeave={() => {
               setHoveringNotePopup(false);
@@ -2817,7 +2822,7 @@ export function DesktopMindMapEditor({
               setMobilePropsOpen(false);
             }}
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v12a2 2 0 002 2h11a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
             Edit text
           </button>
           <div className="mm-mobile-props-section">
@@ -2886,7 +2891,7 @@ export function DesktopMindMapEditor({
               onClick={() => { setMobilePropsOpen(false); setMobileRecordingOpen(true); }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path strokeLinecap="round" strokeLinejoin="round" d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-              Voice note
+              <span>Voice note</span>
             </button>
           </div>
         </div>
@@ -2942,8 +2947,7 @@ export function DesktopMindMapEditor({
                 </div>
                 <div className="mm-recording-actions">
                   <button className="mm-btn mm-btn--primary" onClick={() => void saveRecording()}>Save &amp; Upload</button>
-                  <button className="mm-btn" onClick={() => setRecordingState('idle')}>Re-record</button>
-                  <button className="mm-btn mm-btn--danger" onClick={() => { discardRecording(); setMobileRecordingOpen(false); }}>Discard</button>
+                  <button className="mm-btn" onClick={() => { discardRecording(); setMobileRecordingOpen(false); }}>Discard</button>
                 </div>
               </div>
             )}
@@ -3311,6 +3315,17 @@ export function DesktopMindMapEditor({
               window.addEventListener('mouseup', onUp);
             }}
           ><span>Keyboard Shortcuts</span>
+            <button
+              type="button"
+              className={`mm-btn-icon${shortcutsPinned ? ' mm-btn-icon--active' : ''}`}
+              style={{ marginLeft: 'auto' }}
+              title={shortcutsPinned ? 'Keep open: on (stays open when you click the canvas)' : 'Keep open: off (canvas click closes it)'}
+              aria-pressed={shortcutsPinned}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => setShortcutsPinned(!shortcutsPinned)}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 17v5"/><path d="M9 3h6l-1 7 3 3H7l3-7-1-4z"/></svg>
+            </button>
             <button className="mm-btn-icon" onClick={() => setShowShortcuts(false)}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
           <div className="mm-shortcuts-grid">
@@ -3366,10 +3381,10 @@ export function DesktopMindMapEditor({
           </div>
           <div className="mm-date-body">
             <label className="mm-date-label">URL</label>
-            <input className="mm-date-input" type="url" placeholder="https://…" value={urlDraft.url} onChange={(e) => setUrlDraft((d) => ({ ...d, url: e.target.value }))} onKeyDown={(e) => { if (e.key === 'Escape') setShowUrlDialog(false); e.stopPropagation(); }} />
+            <input className="mm-date-input" type="url" placeholder="https://…" value={urlDraft.url} onChange={(e) => setUrlDraft((d) => ({ ...d, url: e.target.value }))} onKeyDown={(e) => { if (e.key === 'Escape') { setShowUrlDialog(false); e.stopPropagation(); } if (e.key === 'Enter' && urlDraft.url.trim()) { addNodeUrl(selectedId, { url: urlDraft.url.trim(), label: urlDraft.label.trim() }); setUrlDraft({ url: '', label: '' }); setShowUrlDialog(false); } e.stopPropagation(); }} />
             <label className="mm-date-label">Label (optional)</label>
             <input className="mm-date-input" type="text" placeholder="Display text" value={urlDraft.label} onChange={(e) => setUrlDraft((d) => ({ ...d, label: e.target.value }))}
-              onKeyDown={(e) => { if (e.key === 'Escape') setShowUrlDialog(false); if (e.key === 'Enter' && urlDraft.url.trim()) { addNodeUrl(selectedId, { url: urlDraft.url.trim(), label: urlDraft.label.trim() }); setUrlDraft({ url: '', label: '' }); setShowUrlDialog(false); } e.stopPropagation(); }} />
+              onKeyDown={(e) => { if (e.key === 'Escape') { setShowUrlDialog(false); e.stopPropagation(); } if (e.key === 'Enter' && urlDraft.url.trim()) { addNodeUrl(selectedId, { url: urlDraft.url.trim(), label: urlDraft.label.trim() }); setUrlDraft({ url: '', label: '' }); setShowUrlDialog(false); } e.stopPropagation(); }} />
             {(selNode?.urls ?? []).length > 0 && (<div style={{ marginTop: 8 }}>
               <label className="mm-date-label">Current URLs</label>
               {(selNode?.urls ?? []).map((u, i) => (<div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 4 }}>

@@ -47,6 +47,11 @@ interface UiState {
   toggleColourFavourite: (color: string) => void;
   iconFavourites: string[];
   toggleIconFavourite: (name: string) => void;
+
+  /** When true, the floating Keyboard Shortcuts panel stays open on canvas
+   *  clicks instead of being dismissed — a "keep open for reference" toggle. */
+  shortcutsPinned: boolean;
+  setShortcutsPinned: (pinned: boolean) => void;
 }
 
 export const useUiStore = create<UiState>()(
@@ -104,6 +109,9 @@ export const useUiStore = create<UiState>()(
           ? state.iconFavourites.filter((n) => n !== name)
           : [...state.iconFavourites, name],
       })),
+
+      shortcutsPinned: false,
+      setShortcutsPinned: (shortcutsPinned) => set({ shortcutsPinned }),
     }),
     { name: 'mindmapvault-ui' },
   ),

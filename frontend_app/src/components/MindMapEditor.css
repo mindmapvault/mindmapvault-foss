@@ -445,6 +445,8 @@
   transition: color 0.12s;
 }
 .mm-btn-icon:hover { color: var(--mm-btn-text-hover); }
+.mm-btn-icon--active { color: var(--accent); }
+.mm-btn-icon--active:hover { color: var(--accent-hover); }
 
 /* ── Color picker ────────────────────────────────────────────────────────── */
 .mm-color-picker {
@@ -2147,7 +2149,9 @@
   border: 1px solid var(--mm-notes-border);
   border-radius: 12px;
   box-shadow: 0 12px 40px rgba(0,0,0,0.4);
-  z-index: 200;
+  /* Above .mm-note-hover (260) so a hovered node's note popup cannot punch
+     through the panel while it is open as a reference. */
+  z-index: 300;
   overflow: hidden;
 }
 

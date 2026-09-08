@@ -2,7 +2,12 @@ import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { useEffect, useMemo, useState } from 'react';
 
-export type LegalDocument = 'privacy' | 'terms' | 'credits';
+/**
+ * Credits only. The local-only FOSS build collects nothing and talks to no
+ * server, so it carries no privacy/GDPR notice or terms of service — those
+ * belong to the SaaS build, which ships the matching documents.
+ */
+export type LegalDocument = 'credits';
 
 type Props = {
   document: LegalDocument | null;
@@ -16,18 +21,6 @@ export function LegalDocumentDialog({ document, onClose }: Props) {
 
   const meta = useMemo(() => {
     const withBase = (name: string) => `${import.meta.env.BASE_URL}${name}`;
-    if (document === 'privacy') {
-      return {
-        title: 'MindMapVault Privacy & GDPR Notice',
-        path: withBase('PRIVACY.md'),
-      };
-    }
-    if (document === 'terms') {
-      return {
-        title: 'MindMapVault Terms of Service',
-        path: withBase('TERMS.md'),
-      };
-    }
     if (document === 'credits') {
       return {
         title: 'Credits and acknowledgements',

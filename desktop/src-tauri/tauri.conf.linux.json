@@ -1,0 +1,8 @@
+{
+  "bundle": {
+    "targets": ["deb", "appimage"]
+  },
+  "build": {
+    "beforeBuildCommand": ""
+  }
+}

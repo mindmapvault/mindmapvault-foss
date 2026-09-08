@@ -1,0 +1,66 @@
+name: mindmapvault-foss
+title: MindMapVault FOSS
+version: '0.6.0'
+summary: Offline zero-knowledge encrypted mind maps — no account, no network
+description: |
+  MindMapVault FOSS is a privacy-first mind mapping app with zero-knowledge
+  end-to-end encryption, and it is offline-only: there is no account, no
+  server, and no telemetry.
+
+  This snap is strictly confined and declares no network interface at all, so
+  the local-only promise is enforced by the system rather than taken on trust.
+  Your vaults are encrypted on this device and never leave it.
+
+  Import and export FreeMind, FreePlane, WiseMapping, XMind, Markdown and the
+  app's own lossless .mmvault format.
+
+grade: stable
+confinement: strict
+base: core24
+license: MIT
+source-code: https://github.com/mindmapvault/mindmapvault-foss
+website: https://mindmapvault.com
+issues: https://github.com/mindmapvault/mindmapvault-foss/issues
+
+platforms:
+  amd64:
+    build-on: [amd64]
+    build-for: [amd64]
+
+parts:
+  mindmapvault-foss:
+    plugin: dump
+    # Built by `tauri build --config tauri.conf.linux.json`.
+    source: deb/mindmapvault-foss.deb
+    source-type: deb
+    stage-packages:
+      - libwebkit2gtk-4.1-0
+      - libayatana-appindicator3-1
+      - libgtk-3-0
+      - libglib2.0-0
+      - libgdk-pixbuf-2.0-0
+      - libpango-1.0-0
+      - libcairo2
+      - libsoup-3.0-0
+      - libdbus-1-3
+      - libxdo3
+
+apps:
+  mindmapvault-foss:
+    command: usr/bin/MindMapVault-foss
+    desktop: usr/share/applications/MindMapVault FOSS Local-Only.desktop
+    environment:
+      TMPDIR: $XDG_RUNTIME_DIR
+      # WebKit has no usable GPU under VMs and many stock drivers; without this
+      # the window comes up black.
+      WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+    plugs:
+      # Deliberately NO network / network-bind: this edition never talks to a
+      # server, and the store listing should be able to prove it.
+      - home
+      - desktop
+      - desktop-legacy
+      - opengl
+      - wayland
+      - x11
+      - unity7

@@ -55,6 +55,17 @@ import fpVault from './fixtures/Vault.mm?raw';
 import fpSwot from './fixtures/SWOT.mm?raw';
 import fpTutorial from './fixtures/freeplaneTutorial.mm?raw';
 
+// Real WiseMapping exports from the wisemapping-frontend mindplot test suite —
+// written by the authoritative XMLSerializerTango. They use the genuine wire
+// format: central="true", position="x,y", fontStyle, bgColor/brColor, <icon>,
+// <link url urlType>, and <text> CDATA for multi-line — not the older dialect
+// our exporter emits.
+import wmWelcome from './fixtures/wm-welcome.wxml?raw';
+import wmComplex from './fixtures/wm-complex.wxml?raw';
+import wmProcess from './fixtures/wm-process.wxml?raw';
+import wmCdata from './fixtures/wm-cdata-support.wxml?raw';
+import wmIssue from './fixtures/wm-issue.wxml?raw';
+
 // The two .xmind files are ZIP archives. Rather than commit binaries, build
 // them inline with fflate (already a dependency) exactly as the real apps lay
 // them out: Zen/2020+ uses content.json, XMind 8 uses content.xml.
@@ -300,5 +311,48 @@ describe('real freeplane.org maps', () => {
     expect(root.text).toBe('Vault');
     expect(root.children).toEqual([]);
     expect(root.notes).toContain('Encrypted branch');
+  });
+});
+
+// Real WiseMapping exports (XMLSerializerTango wire format). These exercise
+// position="x,y", <text> CDATA, <link url>, <icon>, and fontStyle — none of
+// which our own exporter produces.
+describe('real wisemapping exports (tango format)', () => {
+  const cases: Array<[string, string]> = [
+    ['welcome', wmWelcome],
+    ['complex', wmComplex],
+    ['process', wmProcess],
+    ['cdata-support', wmCdata],
+    ['issue', wmIssue],
+  ];
+
+  for (const [name, xml] of cases) {
+    it(`imports ${name}.wxml into a non-empty tree`, () => {
+      const root = wisemappingToTree(xml, 'Imported');
+      expect(root.text).toBe('Imported');
+      expect(root.children.length).toBeGreaterThan(0);
+      const walk = (n: typeof root): void => {
+        expect(typeof n.text).toBe('string');
+        n.children.forEach(walk);
+      };
+      walk(root);
+    });
+  }
+
+  it('reads multi-line text from a <text> CDATA child', () => {
+    // welcome.wxml has a topic whose text is a CDATA block with a newline.
+    const root = wisemappingToTree(wmWelcome, 'W');
+    const walk = (n: typeof root): string[] => [n.text, ...n.children.flatMap(walk)];
+    const all = walk(root).join('\n');
+    // The CDATA text "5 min tutorial video ?\nFollow the link !" must survive.
+    expect(all).toContain('Follow the link');
+  });
+
+  it('reads links from <link url> feature elements', () => {
+    const root = wisemappingToTree(wmWelcome, 'W');
+    const walk = (n: typeof root): string[] =>
+      [n.urls?.map((u) => u.url) ?? [], ...n.children.flatMap(walk)].flat() as string[];
+    const urls = walk(root);
+    expect(urls.some((u) => u.includes('youtube.com'))).toBe(true);
   });
 });

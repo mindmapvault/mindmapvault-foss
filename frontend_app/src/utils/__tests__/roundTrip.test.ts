@@ -312,3 +312,56 @@ describe('freemind byte compatibility', () => {
     expect(out).toContain('<richcontent TYPE="NOTE"><html><head/><body><p>line one<br/>line two</p></body></html></richcontent>');
   });
 });
+
+/**
+ * Byte-level compliance with the WiseMapping tango format
+ * (docs/WISEMAPPING_FORMAT_SPEC.md). These assert the bytes real WiseMapping
+ * reads — the map envelope, numeric ids, central/position/order, the text
+ * attribute vs. CDATA split, and feature elements.
+ */
+describe('wisemapping tango byte compatibility', () => {
+  const node = (over: Partial<MindMapTreeNode>): MindMapTreeNode => ({
+    id: 'x', text: 't', notes: '', collapsed: false, color: null, icons: [],
+    checked: null, progress: null, startDate: null, endDate: null, urls: [],
+    children: [], ...over,
+  });
+
+  it('opens with the tango map envelope', () => {
+    const out = treeToWisemapping(node({ text: 'Root' }), 'My Map');
+    expect(out.startsWith('<map name="My Map" version="tango" layout="mindmap">')).toBe(true);
+    expect(out.endsWith('</map>')).toBe(true);
+  });
+
+  it('marks the root central and gives every topic a numeric id', () => {
+    const out = treeToWisemapping(node({ text: 'Root', children: [node({ text: 'c' })] }));
+    expect(out).toContain('<topic central="true" text="Root" id="1">');
+    expect(out).toMatch(/<topic position="-?\d+,-?\d+" order="0" text="c" id="2"\/>/);
+  });
+
+  it('writes single-line text as an attribute and multi-line as a CDATA child', () => {
+    const single = treeToWisemapping(node({ text: 'one line' }));
+    expect(single).toContain('text="one line"');
+    expect(single).not.toContain('<text>');
+
+    const multi = treeToWisemapping(node({ text: 'line one\nline two' }));
+    expect(multi).toContain('<text><![CDATA[line one\nline two]]></text>');
+    expect(multi).not.toContain('text="line one');
+  });
+
+  it('writes notes and links as feature elements with CDATA / urlType', () => {
+    const out = treeToWisemapping(node({
+      text: 'Root', notes: 'a note', urls: [{ label: '', url: 'https://x' }],
+    }));
+    expect(out).toContain('<note><![CDATA[a note]]></note>');
+    expect(out).toContain('<link url="https://x" urlType="url"/>');
+  });
+
+  it('recovers left/right side from the synthesized position on re-import', () => {
+    const back = wisemappingToTree(treeToWisemapping(node({
+      text: 'Root',
+      children: [node({ text: 'L', side: 'left' }), node({ text: 'R', side: 'right' })],
+    })), 'Root');
+    expect(back.children[0].side).toBe('left');
+    expect(back.children[1].side).toBe('right');
+  });
+});

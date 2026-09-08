@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useInRouterContext } from 'react-router-dom';
 import { VaultIcon } from './Logo';
 import { PasswordRotationForm } from './PasswordRotationForm';
 import { LegalDocumentDialog, type LegalDocument } from './LegalDocumentDialog';
@@ -16,6 +16,7 @@ import {
   type TrayPosition,
 } from '../store/ui';
 import { isMac } from '../platform/isMac';
+import { isTauri } from '../storage';
 
 export type SettingsTab = 'account' | 'changelog' | 'appearance' | 'interface' | 'help';
 
@@ -331,7 +332,14 @@ function AccountTab({
   onClose: () => void;
   onStorageFolderChanged?: () => void;
 }) {
-  const navigate = useNavigate();
+  // The demos (demo/, mobile-demo/) render the editor with no <Router>, so
+  // useNavigate() would throw there. Only resolve it when a router is present.
+  const inRouter = useInRouterContext();
+  const navigate = inRouter ? useNavigate() : null;
+  // The storage-folder and password-rotation sections drive on-disk vault files
+  // through Tauri commands; the browser demos have no filesystem backend, so
+  // both are desktop-only.
+  const isDesktop = isTauri();
 
   return (
     <div className="space-y-6">
@@ -348,7 +356,7 @@ function AccountTab({
         </div>
       </section>
 
-      <LocalStorageFolderSection onFolderChanged={onStorageFolderChanged} />
+      {isDesktop && <LocalStorageFolderSection onFolderChanged={onStorageFolderChanged} />}
 
       <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
         <SectionLabel>Auto-logout after inactivity</SectionLabel>
@@ -387,15 +395,17 @@ function AccountTab({
         </p>
       </section>
 
-      <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
-        <SectionLabel>Change password</SectionLabel>
-        <PasswordRotationForm
-          doneAction={{
-            label: 'Done',
-            onClick: () => { onClose(); navigate('/vaults'); },
-          }}
-        />
-      </section>
+      {isDesktop && (
+        <section className="border-t pt-6" style={{ borderColor: 'var(--border)' }}>
+          <SectionLabel>Change password</SectionLabel>
+          <PasswordRotationForm
+            doneAction={{
+              label: 'Done',
+              onClick: () => { onClose(); navigate?.('/vaults'); },
+            }}
+          />
+        </section>
+      )}
     </div>
   );
 }

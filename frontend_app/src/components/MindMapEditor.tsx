@@ -163,6 +163,8 @@ export function DesktopMindMapEditor({
   const setIconTray = useUiStore((s) => s.setIconTray);
   const shortcutsPinned = useUiStore((s) => s.shortcutsPinned);
   const setShortcutsPinned = useUiStore((s) => s.setShortcutsPinned);
+  const shortcutsPos = useUiStore((s) => s.shortcutsPos);
+  const setShortcutsPos = useUiStore((s) => s.setShortcutsPos);
 
   // ── Mobile detection ───────────────────────────────────────────────────────
   const [isMobile, setIsMobile] = useState(() =>
@@ -224,8 +226,11 @@ export function DesktopMindMapEditor({
   const skipNextAutoPan = useRef(false);
 
   // ── UI toggles ─────────────────────────────────────────────────────────────
-  const [showShortcuts, setShowShortcuts] = useState(() => Boolean(initialShowShortcuts));
-  const [shortcutsPos, setShortcutsPos] = useState<{ x: number; y: number } | null>(null);
+  // "Always on" wins over the host's initial hint: a card the user pinned has
+  // to come back on the next mount, including in the demos that pass false.
+  const [showShortcuts, setShowShortcuts] = useState(
+    () => useUiStore.getState().shortcutsPinned || Boolean(initialShowShortcuts),
+  );
   const scDragRef = useRef<{
     /** Grab point inside the panel. */
     offsetX: number; offsetY: number;
@@ -2465,7 +2470,7 @@ export function DesktopMindMapEditor({
                 title={`Attach encrypted files to selected node (${formatShortcut('node.attachFile', keyboardLayout)})`}
                 disabled={!onNodeFileDrop || selectedId === 'root'}
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round"
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21.44 11.05l-9.19 9.19a6 6 0 11-8.49-8.49l9.2-9.19a4 4 0 015.65 5.66l-9.2 9.19a2 2 0 11-2.82-2.82l8.48-8.48"/></svg>
               </button>
             );
             const imageBtn = (
@@ -2702,7 +2707,7 @@ export function DesktopMindMapEditor({
             tabIndex={0}
             onMouseEnter={() => {
               cancelHoverPopupClose();
-              setHoveredNoteNodeId(nodeId);
+              setHoveringNotePopup(true);
             }}
             onMouseLeave={() => {
               setHoveringNotePopup(false);
@@ -3315,18 +3320,34 @@ export function DesktopMindMapEditor({
               window.addEventListener('mouseup', onUp);
             }}
           ><span>Keyboard Shortcuts</span>
-            <button
-              type="button"
-              className={`mm-btn-icon${shortcutsPinned ? ' mm-btn-icon--active' : ''}`}
+            <label
+              className="mm-switch"
               style={{ marginLeft: 'auto' }}
-              title={shortcutsPinned ? 'Keep open: on (stays open when you click the canvas)' : 'Keep open: off (canvas click closes it)'}
-              aria-pressed={shortcutsPinned}
+              title={shortcutsPinned
+                ? 'Always on: the card stays on the canvas and reopens with the editor'
+                : 'Always on: off — a canvas click closes the card'}
               onMouseDown={(e) => e.stopPropagation()}
-              onClick={() => setShortcutsPinned(!shortcutsPinned)}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 17v5"/><path d="M9 3h6l-1 7 3 3H7l3-7-1-4z"/></svg>
-            </button>
-            <button className="mm-btn-icon" onClick={() => setShowShortcuts(false)}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+              <span className="mm-switch-label">Always on</span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={shortcutsPinned}
+                onChange={(e) => setShortcutsPinned(e.target.checked)}
+              />
+            </label>
+            <button
+              className="mm-btn-icon"
+              title="Close"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => {
+                // Closing by hand is an explicit "not now", so it clears the
+                // always-on flag too — otherwise the card would silently
+                // reappear on the next launch with no way to see why.
+                setShortcutsPinned(false);
+                setShowShortcuts(false);
+              }}
+            ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
           <div className="mm-shortcuts-grid">
             {(['Nodes', 'Format', 'View', 'Edit', 'Find', 'File'] as const).map((group) => (

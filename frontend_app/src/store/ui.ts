@@ -48,10 +48,17 @@ interface UiState {
   iconFavourites: string[];
   toggleIconFavourite: (name: string) => void;
 
-  /** When true, the floating Keyboard Shortcuts panel stays open on canvas
-   *  clicks instead of being dismissed — a "keep open for reference" toggle. */
+  /** When true, the floating Keyboard Shortcuts card is always on: it opens
+   *  with the editor and survives canvas clicks, instead of being a
+   *  dismiss-on-click popup. Persisted, so it comes back on the next launch. */
   shortcutsPinned: boolean;
   setShortcutsPinned: (pinned: boolean) => void;
+
+  /** Where the user dragged the card, in offset-parent coords. `null` = the
+   *  CSS default (top right). Persisted so an always-on card reopens where it
+   *  was left instead of jumping back to the corner. */
+  shortcutsPos: { x: number; y: number } | null;
+  setShortcutsPos: (pos: { x: number; y: number } | null) => void;
 }
 
 export const useUiStore = create<UiState>()(
@@ -112,6 +119,9 @@ export const useUiStore = create<UiState>()(
 
       shortcutsPinned: false,
       setShortcutsPinned: (shortcutsPinned) => set({ shortcutsPinned }),
+
+      shortcutsPos: null,
+      setShortcutsPos: (shortcutsPos) => set({ shortcutsPos }),
     }),
     { name: 'mindmapvault-ui' },
   ),

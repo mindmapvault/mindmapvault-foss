@@ -85,3 +85,14 @@ RELEASE_PROCESS.md
 # Snap build input: the deb copied in by hand before `snapcraft`, never committed.
 desktop/snap/deb/
 desktop/snap/*.snap
+
+# Store packaging: signing material and built packages never belong here. The
+# certificate lives in the Windows certificate store; see desktop/msix/build-msix.ps1.
+*.pfx
+*.p12
+*.cer
+*.snk
+*.msix
+*.msixupload
+*.appx
+*.appxupload

@@ -81,3 +81,7 @@ RELEASE_PROCESS.md
 .github/copilot-instructions.md
 # Linux container build output
 /dist-linux
+
+# Snap build input: the deb copied in by hand before `snapcraft`, never committed.
+desktop/snap/deb/
+desktop/snap/*.snap

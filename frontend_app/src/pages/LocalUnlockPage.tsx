@@ -110,6 +110,33 @@ export function LocalUnlockPage() {
     }
   };
 
+  /**
+   * Lists the profiles in the current vault folder and activates the first
+   * one. Runs on mount and again after the user picks a different folder —
+   * the profile lives inside that folder, so a new folder means a new list.
+   */
+  const refreshProfiles = async () => {
+    try {
+      const list = await invoke<string[]>('list_local_profiles');
+      setProfiles(list);
+      if (list.length > 0) {
+        const p = await invoke<LocalProfile>('set_active_user', { username: list[0] });
+        setSelectedUsername(list[0]);
+        setProfile(p);
+        setUsername(p.username);
+        const ls = getLockoutState(p.username);
+        setFailedAttempts(ls.attempts);
+        setLockoutUntil(ls.lockedUntil);
+        setStep('unlock');
+      } else {
+        setStep('empty');
+      }
+    } catch {
+      setProfiles([]);
+      setStep('empty');
+    }
+  };
+
   // On mount: run migrations, list profiles, activate the first one.
   useEffect(() => {
     (async () => {
@@ -117,25 +144,7 @@ export function LocalUnlockPage() {
         const info = await invoke<{ path: string; is_override: boolean }>('get_local_storage_dir');
         setStorageDir(info.path);
       } catch { /* non-fatal */ }
-      try {
-        const list = await invoke<string[]>('list_local_profiles');
-        setProfiles(list);
-        if (list.length > 0) {
-          const p = await invoke<LocalProfile>('set_active_user', { username: list[0] });
-          setSelectedUsername(list[0]);
-          setProfile(p);
-          setUsername(p.username);
-          const ls = getLockoutState(p.username);
-          setFailedAttempts(ls.attempts);
-          setLockoutUntil(ls.lockedUntil);
-          setStep('unlock');
-        } else {
-          setStep('empty');
-        }
-      } catch {
-        setProfiles([]);
-        setStep('empty');
-      }
+      await refreshProfiles();
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -160,6 +169,9 @@ export function LocalUnlockPage() {
       if (typeof picked === 'string') {
         const info = await invoke<{ path: string; is_override: boolean }>('set_local_storage_dir', { path: picked });
         setStorageDir(info.path);
+        // The folder just chosen may already hold profiles: show its users
+        // instead of staying on "No vault found in this folder".
+        await refreshProfiles();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to change folder');

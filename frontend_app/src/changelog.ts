@@ -39,12 +39,32 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: '0.6.1',
     date: '2026-09-15',
-    highlights: 'PNG and PDF exports contain the whole map.',
+    highlights: 'The Snap Store package starts again, a vault folder can be reopened from any install, PNG and PDF exports contain the whole map, and the "Offline-only mode" banner is gone.',
     items: [
+      {
+        kind: 'fix',
+        title: 'The Snap Store package starts again',
+        desc: 'Version 0.6.0 from the Snap Store crashed on launch, or opened an empty window, because the packaged WebKit did not match its own helper processes. Both now come from the GNOME platform snap.',
+      },
+      {
+        kind: 'fix',
+        title: 'A vault folder now carries its own user profile',
+        desc: 'Your profile used to live in a hidden config folder outside the vault folder, so after a reinstall, a switch between the deb and the snap, or a copy to another machine the app said "No vault found in this folder". The profile is now stored inside the vault folder next to your vaults, existing profiles are moved in automatically, and choosing a folder immediately shows the users in it.',
+      },
       {
         kind: 'fix',
         title: 'PNG and PDF exports showed only part of the map',
         desc: 'An exported image or PDF now contains every node, including the ones scrolled out of view, in the same font as the editor.',
+      },
+      {
+        kind: 'fix',
+        title: 'No more "Offline-only mode active" banner on every map',
+        desc: 'If the hosted MindMapVault desktop app had run on the same machine, this edition could pick up its saved settings, lose local mode, and fail to save. Local mode is now fixed and never read from disk.',
+      },
+      {
+        kind: 'fix',
+        title: 'The Attach button accepts any file again',
+        desc: 'The toolbar button opened the image picker, so only pictures could be attached from it. It now opens the same file picker as F6 and the Node menu.',
       },
     ],
   },

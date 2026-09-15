@@ -2463,10 +2463,10 @@ export function DesktopMindMapEditor({
                 className="mm-btn"
                 data-label="Attach"
                 data-shortcut={formatButtonShortcut('node.attachFile', keyboardLayout)}
-                onClick={() => {
-                  nodeImageTargetRef.current = selectedId;
-                  nodeImageInputRef.current?.click();
-                }}
+                // The same picker the F6 shortcut and the Node menu open. This
+                // once pointed at the image-only input, so the button accepted
+                // pictures and nothing else.
+                onClick={() => nodeAttachmentInputRef.current?.click()}
                 title={`Attach encrypted files to selected node (${formatShortcut('node.attachFile', keyboardLayout)})`}
                 disabled={!onNodeFileDrop || selectedId === 'root'}
               >

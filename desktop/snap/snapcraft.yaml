@@ -1,6 +1,6 @@
 name: mindmapvault-foss
 title: MindMapVault FOSS
-version: '0.6.0'
+version: '0.6.1'
 summary: Offline zero-knowledge encrypted mind maps — no account, no network
 description: |
   MindMapVault FOSS is a privacy-first mind mapping app with zero-knowledge
@@ -21,6 +21,7 @@ license: MIT
 source-code: https://github.com/mindmapvault/mindmapvault-foss
 website: https://mindmapvault.com
 issues: https://github.com/mindmapvault/mindmapvault-foss/issues
+contact: https://github.com/mindmapvault/mindmapvault-foss/issues
 
 platforms:
   amd64:
@@ -33,22 +34,30 @@ parts:
     # Built by `tauri build --config tauri.conf.linux.json`.
     source: deb/mindmapvault-foss.deb
     source-type: deb
+    # WebKitGTK 4.1, GTK, GLib, Pango, Cairo, libsoup and the GDK-pixbuf
+    # loaders all come from the GNOME platform snap via the `gnome` extension.
+    #
+    # Do NOT stage libwebkit2gtk-4.1-0 here. The extension bind-mounts the
+    # platform's helper executables (WebKitWebProcess, WebKitNetworkProcess)
+    # at /usr/lib/<triplet>/webkit2gtk-4.1, and a staged copy of the library
+    # would be a different WebKit release than those helpers: the UI process
+    # then loads the staged .so, launches the platform's helpers, and the web
+    # process never completes its handshake — a window with a menu bar and a
+    # blank page. (WEBKIT_EXEC_PATH cannot redirect this; release builds of
+    # WebKit ignore it.) Only what the platform does not carry is staged.
     stage-packages:
-      - libwebkit2gtk-4.1-0
       - libayatana-appindicator3-1
-      - libgtk-3-0
-      - libglib2.0-0
-      - libgdk-pixbuf-2.0-0
-      - libpango-1.0-0
-      - libcairo2
-      - libsoup-3.0-0
-      - libdbus-1-3
       - libxdo3
 
 apps:
   mindmapvault-foss:
     command: usr/bin/MindMapVault-foss
     desktop: usr/share/applications/MindMapVault FOSS Local-Only.desktop
+    # The gnome extension wires up GTK, GSettings schemas, fonts, icon themes,
+    # GL, the library search path and the WebKit helper layout. Without it,
+    # revision 1 aborted on launch with "Unable to spawn a new child process:
+    # /usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess".
+    extensions: [gnome]
     environment:
       TMPDIR: $XDG_RUNTIME_DIR
       # WebKit has no usable GPU under VMs and many stock drivers; without this

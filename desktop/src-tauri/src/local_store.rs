@@ -17,7 +17,7 @@
 
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use chrono::Utc;
@@ -283,8 +283,18 @@ fn root_dir(app: &AppHandle) -> Result<PathBuf, LocalStoreError> {
     default_root_dir(app)
 }
 
-/// Returns the AppData directory that holds all per-user profile files.
-fn profiles_dir(app: &AppHandle) -> Result<PathBuf, LocalStoreError> {
+/// File name of the per-user profile inside the vault folder.
+const PROFILE_FILE: &str = "profile.json";
+
+/// The AppData directory where profiles used to live (0.3.x – 0.6.0).
+///
+/// Keeping the profile outside the vault folder made the folder useless on
+/// its own: a reinstall, a switch between the deb and the snap (which has a
+/// different config dir), or a copy to another machine kept every vault but
+/// lost the profile that unlocks them, and the app reported "No vault found
+/// in this folder". Profiles now live *inside* the vault folder; this dir is
+/// only read so existing profiles can be adopted, see `adopt_legacy_profile`.
+fn legacy_profiles_dir(app: &AppHandle) -> Result<PathBuf, LocalStoreError> {
     let base = app
         .path()
         .app_config_dir()
@@ -294,9 +304,79 @@ fn profiles_dir(app: &AppHandle) -> Result<PathBuf, LocalStoreError> {
     Ok(dir)
 }
 
+/// `<root>/<username>/profile.json` — next to that user's vaults, so the
+/// vault folder carries everything needed to unlock it.
+fn profile_file_in(root: &Path, username: &str) -> PathBuf {
+    root.join(username).join(PROFILE_FILE)
+}
+
+/// Copies `<legacy>/<username>.json` to `<root>/<username>/profile.json` if
+/// the folder does not already hold a profile for that user. Returns whether
+/// a profile now exists in the folder. The legacy file is left in place: it
+/// is key material, and the copy is what the app reads from here on.
+fn adopt_legacy_profile(root: &Path, legacy_dir: &Path, username: &str) -> std::io::Result<bool> {
+    let target = profile_file_in(root, username);
+    if target.exists() {
+        return Ok(true);
+    }
+    let legacy = legacy_dir.join(format!("{username}.json"));
+    if !legacy.is_file() {
+        return Ok(false);
+    }
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::copy(&legacy, &target)?;
+    Ok(true)
+}
+
+/// Every `<root>/<name>/profile.json`, sorted. A folder is a profile only if
+/// the file parses as one, so stray directories never show up as users.
+fn discover_profiles_in(root: &Path) -> Vec<String> {
+    let mut names = Vec::new();
+    let Ok(entries) = fs::read_dir(root) else { return names };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else { continue };
+        if validate_username(name).is_err() {
+            continue;
+        }
+        let Ok(data) = fs::read_to_string(path.join(PROFILE_FILE)) else { continue };
+        if serde_json::from_str::<LocalProfile>(&data).is_ok() {
+            names.push(name.to_string());
+        }
+    }
+    names.sort();
+    names
+}
+
+/// Adopts every legacy profile into the current vault folder. Best-effort:
+/// one unreadable file must not hide the others.
+fn adopt_all_legacy_profiles(app: &AppHandle) {
+    let (Ok(root), Ok(legacy_dir)) = (root_dir(app), legacy_profiles_dir(app)) else { return };
+    let Ok(entries) = fs::read_dir(&legacy_dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+            let _ = adopt_legacy_profile(&root, &legacy_dir, stem);
+        }
+    }
+}
+
 fn profile_path_for(app: &AppHandle, username: &str) -> Result<PathBuf, LocalStoreError> {
     validate_username(username)?;
-    Ok(profiles_dir(app)?.join(format!("{}.json", username)))
+    let root = root_dir(app)?;
+    let legacy_dir = legacy_profiles_dir(app)?;
+    // Adopt on every lookup, so a folder chosen after the legacy profile was
+    // written still gets its copy.
+    let _ = adopt_legacy_profile(&root, &legacy_dir, username);
+    Ok(profile_file_in(&root, username))
 }
 
 fn vaults_dir(app: &AppHandle) -> Result<PathBuf, LocalStoreError> {
@@ -616,11 +696,16 @@ pub fn save_local_profile(app: AppHandle, profile: LocalProfile) -> Result<(), L
 /// Deletes the active user's profile file and all their vaults.
 #[tauri::command]
 pub fn delete_local_profile(app: AppHandle) -> Result<(), LocalStoreError> {
-    // Remove the profile json
+    // Remove the profile json (inside the vault folder, and any legacy copy)
     if let Ok(path) = profile_path(&app) {
         if path.exists() { let _ = fs::remove_file(&path); }
     }
-    // Remove the vault directory
+    if let (Ok(cfg), Ok(legacy_dir)) = (read_config(&app), legacy_profiles_dir(&app)) {
+        let username = cfg.active_username.as_deref().unwrap_or("default");
+        let legacy = legacy_dir.join(format!("{username}.json"));
+        if legacy.exists() { let _ = fs::remove_file(&legacy); }
+    }
+    // Remove the vault directory (which now also held the profile)
     let dir = local_dir(&app)?;
     if dir.exists() {
         fs::remove_dir_all(&dir)?;
@@ -1009,19 +1094,8 @@ pub fn reset_local_storage_dir(app: AppHandle) -> Result<LocalStorageDirInfo, Lo
 #[tauri::command]
 pub fn list_local_profiles(app: AppHandle) -> Result<Vec<String>, LocalStoreError> {
     let _ = migrate_if_needed(&app);
-    let dir = profiles_dir(&app)?;
-    let mut names = Vec::new();
-    for entry in fs::read_dir(&dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("json") {
-            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                names.push(stem.to_string());
-            }
-        }
-    }
-    names.sort();
-    Ok(names)
+    adopt_all_legacy_profiles(&app);
+    Ok(discover_profiles_in(&root_dir(&app)?))
 }
 
 /// Switches the active user and returns their profile.
@@ -1222,6 +1296,82 @@ mod tests {
             updated_at: "2026-01-01T00:00:00Z".into(),
             entry_mac: None,
         }
+    }
+
+    fn profile(username: &str) -> LocalProfile {
+        LocalProfile {
+            username: username.into(),
+            argon2_salt: "salt".into(),
+            argon2_params: Argon2Params { m_cost: 1, t_cost: 1, p_cost: 1 },
+            classical_public_key: "cpk".into(),
+            pq_public_key: "pqpk".into(),
+            classical_priv_encrypted: "cpe".into(),
+            pq_priv_encrypted: "pqpe".into(),
+            key_version: 1,
+            created_at: "2026-01-01T00:00:00Z".into(),
+        }
+    }
+
+    // ── Profiles live in the vault folder ────────────────────────────────
+
+    /// The bug this guards: a vault folder created by the deb build showed
+    /// "No vault found in this folder" in the snap build, because the
+    /// profile sat in a config dir the snap cannot see.
+    #[test]
+    fn a_legacy_profile_is_adopted_into_the_vault_folder() {
+        let tmp = TempDir::new();
+        let root = tmp.path("vaults");
+        let legacy = tmp.path("config/profiles");
+        fs::create_dir_all(&legacy).unwrap();
+        fs::write(legacy.join("kornelko.json"), serde_json::to_string(&profile("kornelko")).unwrap()).unwrap();
+
+        assert!(discover_profiles_in(&root).is_empty());
+        assert!(adopt_legacy_profile(&root, &legacy, "kornelko").unwrap());
+        assert!(profile_file_in(&root, "kornelko").is_file());
+        assert_eq!(discover_profiles_in(&root), vec!["kornelko".to_string()]);
+        // The legacy copy is left untouched.
+        assert!(legacy.join("kornelko.json").is_file());
+    }
+
+    #[test]
+    fn adoption_never_overwrites_a_profile_already_in_the_folder() {
+        let tmp = TempDir::new();
+        let root = tmp.path("vaults");
+        let legacy = tmp.path("config/profiles");
+        fs::create_dir_all(&legacy).unwrap();
+        fs::write(legacy.join("u.json"), "legacy").unwrap();
+        let target = profile_file_in(&root, "u");
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::write(&target, "current").unwrap();
+
+        assert!(adopt_legacy_profile(&root, &legacy, "u").unwrap());
+        assert_eq!(fs::read_to_string(&target).unwrap(), "current");
+    }
+
+    #[test]
+    fn adoption_reports_false_when_there_is_nothing_to_adopt() {
+        let tmp = TempDir::new();
+        let root = tmp.path("vaults");
+        let legacy = tmp.path("config/profiles");
+        fs::create_dir_all(&legacy).unwrap();
+        assert!(!adopt_legacy_profile(&root, &legacy, "nobody").unwrap());
+        assert!(!profile_file_in(&root, "nobody").exists());
+    }
+
+    /// Only directories holding a parseable profile count as users.
+    #[test]
+    fn discovery_ignores_directories_without_a_valid_profile() {
+        let tmp = TempDir::new();
+        let root = tmp.path("vaults");
+        let alice = serde_json::to_string(&profile("alice")).unwrap();
+        for (name, content) in [("alice", Some(alice.as_str())), ("default", None), ("broken", Some("{"))] {
+            fs::create_dir_all(root.join(name).join("vaults")).unwrap();
+            if let Some(c) = content {
+                fs::write(profile_file_in(&root, name), c).unwrap();
+            }
+        }
+        fs::write(root.join("stray.txt"), "x").unwrap();
+        assert_eq!(discover_profiles_in(&root), vec!["alice".to_string()]);
     }
 
     // ── The index MAC ────────────────────────────────────────────────────

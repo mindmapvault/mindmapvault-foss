@@ -1,5 +1,6 @@
 /**
  * Exports an SVG element as a single-page A4-landscape PDF download.
+ * - Exports the whole map, not the part the editor window happens to show.
  * - Removes foreignObject elements to avoid canvas taint issues.
  * - Resolves CSS custom properties so they render correctly on canvas.
  * - Fills the canvas with the app's current canvas background color.
@@ -171,32 +172,63 @@ function drawWatermark(
   ctx.restore();
 }
 
+/** Space around the map in the exported image, in map units. */
+const EXPORT_PADDING = 40;
+/** Room below the map for the version pill and brand badge, so they cannot cover a node. */
+const WATERMARK_SPACE = 80;
+/** WebKit refuses to encode a canvas much past this many pixels, and an empty file is worse than a softer one. */
+const MAX_CANVAS_PIXELS = 16_000_000;
+const MAX_CANVAS_SIDE = 16_384;
+
 /**
- * Render an SVG element to a canvas with correct theme colors and an optional watermark.
+ * The whole map's extent in map units, untouched by the editor's pan and zoom.
+ * Sizing the export to the window instead left out anything scrolled out of view.
+ */
+function measureMapBounds(svg: SVGSVGElement): DOMRect | null {
+  const boxes = Array.from(svg.querySelectorAll<SVGGraphicsElement>('.mm-connections, .mm-nodes'))
+    .map((group) => group.getBBox())
+    .filter((box) => box.width > 0 || box.height > 0);
+  if (boxes.length === 0) return null;
+  const minX = Math.min(...boxes.map((b) => b.x));
+  const minY = Math.min(...boxes.map((b) => b.y));
+  const maxX = Math.max(...boxes.map((b) => b.x + b.width));
+  const maxY = Math.max(...boxes.map((b) => b.y + b.height));
+  return new DOMRect(minX, minY, maxX - minX, maxY - minY);
+}
+
+/**
+ * Render the whole map to a canvas with correct theme colors and an optional watermark.
  */
 export async function renderSvgToCanvas(
   svg: SVGSVGElement,
   versionLabel?: string,
   dateStr?: string,
 ): Promise<HTMLCanvasElement> {
-  const svgW = svg.clientWidth || 1200;
-  const svgH = svg.clientHeight || 800;
-
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.querySelectorAll('foreignObject').forEach((fo) => fo.remove());
 
   // The live <svg class="mm-canvas"> is sized purely by CSS (width/height:100%)
   // and carries no width/height/viewBox attributes. Once serialized into a
   // standalone data: URI none of that CSS applies, so the image has no
-  // intrinsic size and rasterizes at the SVG default of 300×150 — everything
-  // beyond that box is cropped, which for a real map means the export comes
-  // out empty apart from the background and watermark drawn separately below.
-  // Stamp the measured viewport size onto the clone before serializing.
+  // intrinsic size and rasterizes at the SVG default of 300×150. Size the clone
+  // to the whole map, and move the map into view in place of the editor's pan
+  // and zoom, so nothing scrolled off-screen is lost either.
+  const bounds = measureMapBounds(svg);
+  let svgW = svg.clientWidth || 1200;
+  let svgH = svg.clientHeight || 800;
+  if (bounds) {
+    svgW = Math.ceil(bounds.width + EXPORT_PADDING * 2);
+    svgH = Math.ceil(bounds.height + EXPORT_PADDING * 2 + WATERMARK_SPACE);
+    clone.querySelector(':scope > g')?.setAttribute(
+      'transform',
+      `translate(${EXPORT_PADDING - bounds.x}, ${EXPORT_PADDING - bounds.y})`,
+    );
+  }
   clone.setAttribute('width', String(svgW));
   clone.setAttribute('height', String(svgH));
-  if (!clone.getAttribute('viewBox')) {
-    clone.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
-  }
+  clone.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
+  // Text takes its font from the editor's stylesheet, which an image cannot see.
+  clone.style.fontFamily = getComputedStyle(svg).fontFamily;
 
   const serializer = new XMLSerializer();
   let svgStr = serializer.serializeToString(clone);
@@ -206,10 +238,15 @@ export async function renderSvgToCanvas(
 
   const { resolved, bgColor } = resolveCssVarsInSvg(svgStr);
 
-  const scale = 2;
+  const scale = Math.min(
+    2,
+    Math.sqrt(MAX_CANVAS_PIXELS / (svgW * svgH)),
+    MAX_CANVAS_SIDE / svgW,
+    MAX_CANVAS_SIDE / svgH,
+  );
   const canvas = document.createElement('canvas');
-  canvas.width = svgW * scale;
-  canvas.height = svgH * scale;
+  canvas.width = Math.round(svgW * scale);
+  canvas.height = Math.round(svgH * scale);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context unavailable');
 
@@ -226,7 +263,7 @@ export async function renderSvgToCanvas(
     img.onload = () => {
       ctx.save();
       ctx.scale(scale, scale);
-      ctx.drawImage(img, 0, 0);
+      ctx.drawImage(img, 0, 0, svgW, svgH);
       ctx.restore();
       resolve();
     };

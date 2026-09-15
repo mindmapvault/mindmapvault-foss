@@ -4,6 +4,13 @@ All notable changes to this repository are documented here.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [0.6.1] - 2026-09-15
+
+PNG and PDF exports contain the whole map.
+
+### Fixed
+- **PNG and PDF exports left out whatever was scrolled out of view.** The export was sized to the editor window, so a map larger than the window, or panned away from its edges, came out cropped. `renderSvgToCanvas` now measures the map with `getBBox()`, frames it with padding and room for the watermark, and replaces the editor's pan and zoom on the clone. Text keeps the editor's font instead of falling back to a serif, and the scale drops below 2× on very large maps so the canvas stays within WebKit's limit. `frontend_app/src/utils/pdfExport.ts`.
+
 ## [0.6.0] - 2026-09-08
 
 Version numbers now line up across every MindMapVault edition — this is the

@@ -1,6 +1,6 @@
 name: mindmapvault-foss
 title: MindMapVault FOSS
-version: '0.6.1'
+version: '0.6.2'
 summary: Offline zero-knowledge encrypted mind maps — no account, no network
 description: |
   MindMapVault FOSS is a privacy-first mind mapping app with zero-knowledge

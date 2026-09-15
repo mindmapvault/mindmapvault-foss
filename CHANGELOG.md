@@ -4,20 +4,24 @@ All notable changes to this repository are documented here.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
-## [0.6.1] - 2026-09-15
+## [0.6.2] - 2026-09-15
 
-Four defects found by installing 0.6.0 in a fresh Ubuntu VM — the Snap Store
+Four defects found by installing 0.6.0 in a fresh Ubuntu VM: the Snap Store
 package did not start, an existing vault folder could not be reopened, the
-offline banner appeared on every map, and the Attach button took pictures
-only — together with a fix for PNG and PDF exports, which now contain the
-whole map.
+offline banner appeared on every map, and the Attach button took pictures only.
 
 ### Fixed
 - **The Snap Store package did not start.** Revision 1 aborted on launch with `Unable to spawn a new child process: Failed to spawn child process "/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess"`. The recipe staged WebKitGTK from the Ubuntu archive but nothing provided the helper executables inside strict confinement. The app now uses the `gnome` extension, whose platform snap supplies GTK, GSettings, fonts and WebKitGTK **together with** its helper processes through a bind layout, and stages no WebKit of its own — a staged copy is a different WebKit release than the platform helpers, and that mismatch leaves a window with a menu bar and a blank page. `desktop/snap/snapcraft.yaml`.
-- **A vault folder could not be reopened after a reinstall or a package switch.** The per-user profile — Argon2 salt and the wrapped private keys — was written to the app config directory (`~/.config/com.mindmapvault.desktop/profiles/`, or its snap-private equivalent), not to the vault folder. Pointing a fresh install, the snap build, or another machine at an existing vault folder therefore showed "No vault found in this folder" even though every vault was there. The profile now lives at `<vault folder>/<username>/profile.json`; profiles found in the old location are copied in on first sight and left in place; note that the snap cannot see `~/.config` at all, so a profile created by an earlier deb or AppImage is adopted by running the 0.6.1 deb or AppImage once, or by copying `~/.config/com.mindmapvault.desktop/profiles/<user>.json` to `<vault folder>/<user>/profile.json` by hand; and the unlock page rescans the folder as soon as one is chosen instead of staying on the empty state. `desktop/src-tauri/src/local_store.rs` (four new unit tests), `frontend_app/src/pages/LocalUnlockPage.tsx`.
-- **PNG and PDF exports left out whatever was scrolled out of view.** The export was sized to the editor window, so a map larger than the window, or panned away from its edges, came out cropped. `renderSvgToCanvas` now measures the map with `getBBox()`, frames it with padding and room for the watermark, and replaces the editor's pan and zoom on the clone. Text keeps the editor's font instead of falling back to a serif, and the scale drops below 2× on very large maps so the canvas stays within WebKit's limit. `frontend_app/src/utils/pdfExport.ts`.
+- **A vault folder could not be reopened after a reinstall or a package switch.** The per-user profile — Argon2 salt and the wrapped private keys — was written to the app config directory (`~/.config/com.mindmapvault.desktop/profiles/`, or its snap-private equivalent), not to the vault folder. Pointing a fresh install, the snap build, or another machine at an existing vault folder therefore showed "No vault found in this folder" even though every vault was there. The profile now lives at `<vault folder>/<username>/profile.json`; profiles found in the old location are copied in on first sight and left in place; note that the snap cannot see `~/.config` at all, so a profile created by an earlier deb or AppImage is adopted by running the 0.6.2 deb or AppImage once, or by copying `~/.config/com.mindmapvault.desktop/profiles/<user>.json` to `<vault folder>/<user>/profile.json` by hand; and the unlock page rescans the folder as soon as one is chosen instead of staying on the empty state. `desktop/src-tauri/src/local_store.rs` (four new unit tests), `frontend_app/src/pages/LocalUnlockPage.tsx`.
 - **"Offline-only mode active" on every map, and Save failed, when the hosted desktop app had run on the same machine.** Both desktop editions share the Tauri identifier `com.mindmapvault.desktop` and therefore one WebKitGTK profile on Linux. The FOSS mode store was persisted under the same localStorage key the hosted app uses, so a `mode: "server"` written there rehydrated into this build, switched the editor out of local mode, and every stubbed server call surfaced as the offline banner. The mode is now a constant that is never persisted, and the stale key is removed on start. `frontend_app/src/store/mode.ts`, with a regression test in `mode.test.ts`.
 - **The toolbar Attach button only accepted pictures.** It clicked the hidden image input instead of the attachment input, so the file dialog was filtered to `image/*`; the F6 shortcut and the Node menu were unaffected. `frontend_app/src/components/MindMapEditor.tsx`.
+
+## [0.6.1] - 2026-09-15
+
+PNG and PDF exports contain the whole map.
+
+### Fixed
+- **PNG and PDF exports left out whatever was scrolled out of view.** The export was sized to the editor window, so a map larger than the window, or panned away from its edges, came out cropped. `renderSvgToCanvas` now measures the map with `getBBox()`, frames it with padding and room for the watermark, and replaces the editor's pan and zoom on the clone. Text keeps the editor's font instead of falling back to a serif, and the scale drops below 2× on very large maps so the canvas stays within WebKit's limit. `frontend_app/src/utils/pdfExport.ts`.
 
 ## [0.6.0] - 2026-09-08
 

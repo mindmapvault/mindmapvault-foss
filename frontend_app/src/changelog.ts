@@ -12,7 +12,7 @@
  * equal `CHANGELOG[0].version`.
  */
 
-export const APP_VERSION = '0.6.1';
+export const APP_VERSION = '0.6.2';
 
 /**
  * localStorage key recording the last version whose "What's New" the user saw.
@@ -37,9 +37,9 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: '0.6.1',
+    version: '0.6.2',
     date: '2026-09-15',
-    highlights: 'The Snap Store package starts again, a vault folder can be reopened from any install, PNG and PDF exports contain the whole map, and the "Offline-only mode" banner is gone.',
+    highlights: 'The Snap Store package starts again, a vault folder can be reopened from any install, and the "Offline-only mode" banner is gone.',
     items: [
       {
         kind: 'fix',
@@ -53,11 +53,6 @@ export const CHANGELOG: ChangelogEntry[] = [
       },
       {
         kind: 'fix',
-        title: 'PNG and PDF exports showed only part of the map',
-        desc: 'An exported image or PDF now contains every node, including the ones scrolled out of view, in the same font as the editor.',
-      },
-      {
-        kind: 'fix',
         title: 'No more "Offline-only mode active" banner on every map',
         desc: 'If the hosted MindMapVault desktop app had run on the same machine, this edition could pick up its saved settings, lose local mode, and fail to save. Local mode is now fixed and never read from disk.',
       },
@@ -65,6 +60,18 @@ export const CHANGELOG: ChangelogEntry[] = [
         kind: 'fix',
         title: 'The Attach button accepts any file again',
         desc: 'The toolbar button opened the image picker, so only pictures could be attached from it. It now opens the same file picker as F6 and the Node menu.',
+      },
+    ],
+  },
+  {
+    version: '0.6.1',
+    date: '2026-09-15',
+    highlights: 'PNG and PDF exports contain the whole map.',
+    items: [
+      {
+        kind: 'fix',
+        title: 'PNG and PDF exports showed only part of the map',
+        desc: 'An exported image or PDF now contains every node, including the ones scrolled out of view, in the same font as the editor.',
       },
     ],
   },

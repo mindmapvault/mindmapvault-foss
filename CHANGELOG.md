@@ -4,6 +4,17 @@ All notable changes to this repository are documented here.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [0.6.3] - 2026-09-28
+
+Text typed into a node jumped away from it on macOS, and the field it landed
+in was too narrow to read.
+
+### Fixed
+- **Typing more than a word or two moved the text off the node, on macOS.** The edit field is a textarea inside an SVG `<foreignObject>`, sized from the node's *committed* text — the value being typed never reached the geometry. So the field stayed at the size the node had before editing began, which for a new node is the 80px minimum, and anything longer overflowed a fixed, scrollable box. WebKit then painted that overflowing control outside its `foreignObject`, unclipped and far from its node, so the text appeared near the top of the canvas while the node looked empty. Measured in the editor: one short word gives a content height of 32px in a 32px box, a few words more gives 47px in the same box. `editorBox` now measures what is being typed, so the field is as wide as the node will be once committed and never overflows; it also makes long text less cramped on Windows and Linux, where this was uncomfortable rather than broken. Reported in #2. `packages/mindmap-core/src/geometry.ts` (four new unit tests), `frontend_app/src/components/MindMapEditor.tsx`.
+
+### Changed
+- **dompurify updated to 3.4.16**, for two advisories in the sanitiser that note previews pass through.
+
 ## [0.6.2] - 2026-09-15
 
 Four defects found by installing 0.6.0 in a fresh Ubuntu VM: the Snap Store

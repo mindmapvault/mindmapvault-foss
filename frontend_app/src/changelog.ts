@@ -12,7 +12,7 @@
  * equal `CHANGELOG[0].version`.
  */
 
-export const APP_VERSION = '0.6.2';
+export const APP_VERSION = '0.6.3';
 
 /**
  * localStorage key recording the last version whose "What's New" the user saw.
@@ -36,6 +36,18 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.6.3',
+    date: '2026-09-28',
+    highlights: 'Text stays on its node while you type it, on macOS.',
+    items: [
+      {
+        kind: 'fix',
+        title: 'Typed text jumped away from the node on macOS',
+        desc: 'Typing more than a word or two into a node moved the text to the top of the canvas, into a field too narrow to read, and the node looked empty until you pressed Return. The edit field now grows with what you type and stays where the node is. It also makes typing long text less cramped on Windows and Linux.',
+      },
+    ],
+  },
   {
     version: '0.6.2',
     date: '2026-09-15',

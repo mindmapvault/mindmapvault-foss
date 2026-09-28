@@ -96,3 +96,9 @@ desktop/snap/*.snap
 *.msixupload
 *.appx
 *.appxupload
+
+# This project builds with pnpm -- CI, the deploy workflow and the image build
+# all use pnpm-lock.yaml. An npm lockfile alongside it silently rots: the one
+# committed here drifted for three months and reported dependency versions
+# that were never shipped.
+package-lock.json

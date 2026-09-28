@@ -1319,6 +1319,10 @@
 .mm-edit-textarea {
   width: 100%;
   height: 100%;
+  /* The box is sized to the text, so there is nothing to scroll. Saying so
+     keeps the control from getting a scrolling layer, which macOS WKWebView
+     paints outside its <foreignObject> (issue #2). */
+  overflow: hidden;
   background: transparent;
   border: none;
   outline: none;

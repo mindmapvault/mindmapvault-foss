@@ -162,3 +162,35 @@ export const nodeGeometry = (box: NodeBox, parts: NodeParts): NodeGeometry => {
     footerTopY: bodyTopY + bodyH,
   };
 };
+
+// ── The edit field ──────────────────────────────────────────────
+
+/**
+ * The box the in-place edit field needs to hold `text`, in node coordinates.
+ *
+ * The node is sized from its *committed* text, so a field sized from the node
+ * is too small the moment the typed text is longer — and an overflowing
+ * textarea inside `<foreignObject>` is what macOS WKWebView paints in the
+ * wrong coordinate space, far from its node (issue #2). Sizing the field from
+ * what is being typed means it never overflows, so that path is never taken;
+ * it also previews the width the node will have once committed.
+ *
+ * Never smaller than the node's own body, and measured with the same default
+ * size `measureNodeSize` uses, so the field is exactly as wide as the node
+ * will be once committed — and wider than the 13px the field actually renders
+ * at, so it errs wide rather than clipping. Grows about the node's centre,
+ * the way the node itself will when the edit is committed.
+ */
+export const editorBox = (
+  box: NodeBox,
+  geom: NodeGeometry,
+  text: string,
+  fontSize = 14,
+): NodeBox => {
+  const lines = text.split('\n');
+  const widest = Math.max(...lines.map((line) => measureText(line || ' ', fontSize)));
+  const w = Math.max(box.w - 4, widest + NODE_PAD_X * 2);
+  const h = Math.max(geom.bodyH - 4, lines.length * NODE_LINE_H + NODE_PAD_Y * 2);
+
+  return { x: box.x + box.w / 2 - w / 2, y: geom.bodyTopY + 2, w, h };
+};

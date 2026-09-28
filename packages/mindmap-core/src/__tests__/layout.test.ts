@@ -289,3 +289,53 @@ describe('bezierPath', () => {
     expect(layout.bezierPath(0, 0, 100, 50)).toBe('M 0,0 C 50,0 50,50 100,50');
   });
 });
+
+describe('editorBox', () => {
+  /** The node as the layout made it, plus where its body sits. */
+  const placed = (text: string) => {
+    const size = layout.measureNodeSize(node({ text }));
+    const box = { x: 0, y: 0, w: size.w, h: size.h };
+    return { box, geom: layout.nodeGeometry(box, layout.describeNode(node({ text }))) };
+  };
+
+  it('never shrinks below the node it edits', () => {
+    const { box, geom } = placed('hello');
+    const eb = layout.editorBox(box, geom, 'hello');
+    expect(eb.w).toBe(box.w - 4);
+    // A one-line body is 36 tall by NODE_MIN_H but only needs 32 of it; the
+    // field takes the larger of the two, erring wide rather than clipping.
+    expect(eb.h).toBeGreaterThanOrEqual(geom.bodyH - 4);
+  });
+
+  /**
+   * The bug: the field kept the empty node's 80px while a long word was typed
+   * into it, so the text overflowed. Overflow is what macOS WKWebView then
+   * painted in the wrong place (issue #2).
+   */
+  it('grows to fit text longer than the node was measured from', () => {
+    const { box, geom } = placed('');
+    const typed = 'Gestaltungsspielraum der Gesellschaft';
+    const eb = layout.editorBox(box, geom, typed);
+
+    expect(box.w).toBe(80);
+    // 37 chars * 7 + 18 padding each side, comfortably past the node's 80.
+    expect(eb.w).toBe(typed.length * CHAR_W + 18 * 2);
+    expect(eb.w).toBeGreaterThan(box.w);
+  });
+
+  it('adds a line height per newline, so multi-line text does not overflow', () => {
+    const { box, geom } = placed('');
+    const one = layout.editorBox(box, geom, 'a');
+    const four = layout.editorBox(box, geom, 'a\nb\nc\nd');
+    expect(four.h).toBe(4 * 20 + 8 * 2);
+    expect(four.h).toBeGreaterThan(one.h);
+  });
+
+  it('grows about the node centre, the way the node will once committed', () => {
+    const { box, geom } = placed('');
+    const centre = box.x + box.w / 2;
+    const eb = layout.editorBox(box, geom, 'a much longer label than before');
+    expect(eb.x + eb.w / 2).toBeCloseTo(centre);
+    expect(eb.x).toBeLessThan(box.x);
+  });
+});

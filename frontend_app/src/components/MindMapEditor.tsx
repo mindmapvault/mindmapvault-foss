@@ -52,7 +52,7 @@ import {
   defaultRoot,
   migrateNode,
 } from './MindMapHelpers';
-import { layoutTree, bezierPath, describeNode, nodeGeometry } from '@mindmapvault/mindmap-core';
+import { layoutTree, bezierPath, describeNode, nodeGeometry, editorBox } from '@mindmapvault/mindmap-core';
 import { appendAttachmentMarkdownLinks, getVisibleNodeTextLines } from '../utils/nodeAttachments';
 import { exportSvgAsPdf, renderSvgToCanvas } from '../utils/pdfExport';
 import { downloadBlob, downloadDataUrl } from '../utils/download';
@@ -2123,6 +2123,9 @@ export function DesktopMindMapEditor({
     // space nothing had reserved.
     const parts = box.parts;
     const geom = nodeGeometry(box, parts);
+    // Sized from the text being typed, not from the node, which is still
+    // measured from its committed text. See editorBox in mindmap-core.
+    const editBox = isEditing ? editorBox(box, geom, editText) : null;
     const nodeImage = node.image?.thumb ? node.image : null;
     const visual: NodeVisual = { ownColor, fillColor, strokeColor, textColor, fontSize, fontWeight };
     const checkedInfo = (node.children.length > 0 && node.checked != null) ? countChecked(node) : null;
@@ -2180,8 +2183,8 @@ export function DesktopMindMapEditor({
           actions={bodyActions}
           isSearchHit={searchResults.includes(node.id)}
           checkedInfo={checkedInfo}
-          editor={isEditing ? (
-            <foreignObject x={box.x + 2} y={geom.bodyTopY + 2} width={box.w - 4} height={Math.max(0, geom.bodyH - 4)}>
+          editor={isEditing && editBox ? (
+            <foreignObject x={editBox.x} y={editBox.y} width={editBox.w} height={editBox.h}>
               <textarea ref={editRef} value={editText} onChange={(e) => setEditText(e.target.value)} onBlur={commitEdit}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit(); } if (e.key === 'Escape') cancelEdit(); e.stopPropagation(); }}
                 className="mm-edit-textarea" style={{ color: textColor, background: fillColor }} />

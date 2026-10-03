@@ -12,6 +12,8 @@ import {
   moveSibling,
   nextInCycle,
   nodesWithAttachments,
+  placeInsertion,
+  type PlacedBox,
   removeNode,
   removeUrl,
   reparentNode,
@@ -74,14 +76,15 @@ describe('addChild', () => {
     expect(findNode(result.root, 'a')!.node.collapsed).toBe(false);
   });
 
-  it('clears dragged positions in the branch it inserts into', () => {
+  it('keeps dragged positions in the branch it inserts into', () => {
     const root = sample();
     const a = findNode(root, 'a')!.node;
     a.customX = 100; a.customY = 50;
-    a.children[0].customX = 200;
+    a.children[0].customX = 200; a.children[0].customY = 60;
     const result = addChild(root, 'a')!;
-    expect(findNode(result.root, 'a')!.node.customX).toBeUndefined();
-    expect(findNode(result.root, 'a1')!.node.customX).toBeUndefined();
+    expect(findNode(result.root, 'a')!.node).toMatchObject({ customX: 100, customY: 50 });
+    expect(findNode(result.root, 'a1')!.node).toMatchObject({ customX: 200, customY: 60 });
+    expect(result.node.customX).toBeUndefined();
   });
 
   it('records the side only for a child of the root', () => {
@@ -110,6 +113,67 @@ describe('addSibling', () => {
   it('inherits the side of the node it sits next to', () => {
     const root = node('root', [{ ...node('l'), side: 'left' } as MindMapTreeNode]);
     expect(addSibling(root, 'l')!.side).toBe('left');
+  });
+
+  it('leaves every dragged node alone when added beside a first-level node', () => {
+    const root = sample();
+    for (const id of ['a', 'a1', 'a2', 'b']) {
+      const n = findNode(root, id)!.node;
+      n.customX = id.length * 10; n.customY = id.charCodeAt(0);
+    }
+    const result = addSibling(root, 'a')!;
+    for (const id of ['a', 'a1', 'a2', 'b']) {
+      const n = findNode(result.root, id)!.node;
+      expect(n.customX).toBe(id.length * 10);
+      expect(n.customY).toBe(id.charCodeAt(0));
+    }
+  });
+});
+
+describe('placeInsertion', () => {
+  const box = (x: number, y: number, direction: 'left' | 'right' = 'right'): PlacedBox =>
+    ({ x, y, w: 100, h: 36, direction });
+  /** Every node at the origin unless named: enough to see where the new one goes. */
+  const layoutWith = (boxes: Record<string, PlacedBox>) => (tree: MindMapTreeNode) => {
+    const out: Record<string, PlacedBox> = {};
+    const walk = (n: MindMapTreeNode, direction: 'left' | 'right') => {
+      out[n.id] = boxes[n.id] ?? box(0, 0, direction);
+      n.children.forEach((ch) => walk(ch, n.id === 'root' ? (ch.side === 'left' ? 'left' : 'right') : direction));
+    };
+    walk(tree, 'right');
+    return out;
+  };
+
+  it('leaves the node to the tree when nothing around it was dragged', () => {
+    const result = placeInsertion(addChild(sample(), 'a'), layoutWith({}))!;
+    expect(result.node.customX).toBeUndefined();
+    expect(result.node.customY).toBeUndefined();
+  });
+
+  it('puts a new sibling below the dragged one before it', () => {
+    const root = sample();
+    Object.assign(findNode(root, 'a1')!.node, { customX: 300, customY: 200 });
+    const result = placeInsertion(addSibling(root, 'a1'), layoutWith({ a1: box(300, 200) }))!;
+    expect(result.node.customX).toBe(300);
+    expect(result.node.customY).toBe(200 + 36 + 8);
+  });
+
+  it('puts a first child beside a dragged parent', () => {
+    const root = sample();
+    Object.assign(findNode(root, 'b')!.node, { customX: 500, customY: 100 });
+    const result = placeInsertion(addChild(root, 'b'), layoutWith({ b: box(500, 100) }))!;
+    expect(result.node.customX).toBe(500 + 100 + 40);
+    expect(result.node.customY).toBe(100);
+  });
+
+  it('puts a first child on the left of the parent when the branch grows left', () => {
+    const root = node('root', [{ ...node('l'), side: 'left', customX: -300, customY: 0 } as MindMapTreeNode]);
+    const result = placeInsertion(addChild(root, 'l'), layoutWith({ l: box(-300, 0, 'left') }))!;
+    expect(result.node.customX).toBe(-300 - 100 - 40);
+  });
+
+  it('passes null through', () => {
+    expect(placeInsertion(null, layoutWith({}))).toBeNull();
   });
 });
 

@@ -82,6 +82,7 @@ import {
   nextInCycle,
   removeNode as removeNodeOp,
   removeNodes,
+  placeInsertion,
   removeUrl,
   reparentNode as reparentNodeOp,
   resetPositions,
@@ -643,11 +644,12 @@ export function DesktopMindMapEditor({
    * layout has to measure with the same count the renderer draws with, or the
    * meta strip is drawn in space nothing reserved and the text loses 18px.
    */
-  const layout = useMemo(
-    () => layoutTree(root, 0, 0, (node) =>
+  const layoutOf = useCallback(
+    (tree: MindMapTreeNode) => layoutTree(tree, 0, 0, (node) =>
       describeNode(node, { attachmentCount: getNodeAttachments(node.id, node.attachments).length })),
-    [root, getNodeAttachments],
+    [getNodeAttachments],
   );
+  const layout = useMemo(() => layoutOf(root), [root, layoutOf]);
 
   const loadAttachmentPreview = useCallback(async (attachment: NodeAttachmentRef) => {
     const isImage = (attachment.content_type ?? '').startsWith('image/');
@@ -697,22 +699,22 @@ export function DesktopMindMapEditor({
   // ══════════════════════════════════════════════════════════════════════════
 
   const addChild = useCallback((parentId: string, side?: 'left' | 'right') => {
-    const inserted = addChildOp(root, parentId, side);
+    const inserted = placeInsertion(addChildOp(root, parentId, side), layoutOf);
     if (!inserted) return;
     if (inserted.side === 'left') setRootLeftCollapsed(false);
     if (inserted.side === 'right') setRootRightCollapsed(false);
     mutate(inserted.root);
     setTimeout(() => { setSelectedId(inserted.node.id); startEditing(inserted.node); }, 30);
-  }, [root, mutate]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [root, mutate, layoutOf]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const addSibling = useCallback((nodeId: string) => {
-    const inserted = addSiblingOp(root, nodeId);
+    const inserted = placeInsertion(addSiblingOp(root, nodeId), layoutOf);
     if (!inserted) return;
     if (inserted.side === 'left') setRootLeftCollapsed(false);
     if (inserted.side === 'right') setRootRightCollapsed(false);
     mutate(inserted.root);
     setTimeout(() => { setSelectedId(inserted.node.id); startEditing(inserted.node); }, 30);
-  }, [root, mutate]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [root, mutate, layoutOf]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const deleteNode = useCallback((nodeId: string) => {
     const removed = removeNodeOp(root, nodeId);

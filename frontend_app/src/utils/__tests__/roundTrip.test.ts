@@ -5,7 +5,7 @@
  *
  * The fixture below sets every field the editor can put on a node — notes,
  * colour, side, collapse, icons, checkbox, progress, dates, urls, tags,
- * image, attachments — so a format that silently drops one shows up here as
+ * image, attachments, dragged position — so a format that silently drops one shows up here as
  * a diff, not as a user's lost map.
  *
  * Each format declares what it *can* carry in a `Fidelity` mask. The test
@@ -58,6 +58,8 @@ function fixture(): MindMapTreeNode {
     n({
       text: 'Formatted',
       side: 'right',
+      customX: 320,
+      customY: -48,
       color: '#22c55e',
       collapsed: true,
       icons: ['Target', 'Sparkles'],
@@ -104,6 +106,8 @@ interface Fidelity {
   urls?: boolean;
   tags?: boolean;
   image?: boolean;
+  /** A dragged node's `customX`/`customY`. */
+  position?: boolean;
   /** Compare attachment presence. 'name' = name only (text dialects drop id/size). */
   attachments?: boolean | 'name';
 }
@@ -112,7 +116,7 @@ interface Fidelity {
 const NATIVE: Fidelity = {
   notes: true, color: true, side: true, collapsed: true, icons: true,
   checked: true, progress: true, dates: true, urls: true, tags: true,
-  image: true, attachments: true,
+  image: true, position: true, attachments: true,
 };
 
 const MARKDOWN: Fidelity = { notes: true, checked: true, progress: true, icons: true, tags: true, urls: true, attachments: 'name' };
@@ -136,6 +140,7 @@ function stripTo(node: MindMapTreeNode, f: Fidelity): unknown {
     ...(f.urls ? { urls: (node.urls ?? []).map((u) => u.url) } : {}),
     ...(f.tags ? { tags: node.tags ?? [] } : {}),
     ...(f.image ? { image: node.image ? { w: node.image.w, h: node.image.h, name: node.image.name ?? null } : null } : {}),
+    ...(f.position ? { customX: node.customX ?? null, customY: node.customY ?? null } : {}),
     ...(f.attachments
       ? {
           attachments: (node.attachments ?? []).map((a) =>

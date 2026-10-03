@@ -14,6 +14,7 @@
 
 import type { MindMapTreeNode, UrlEntry } from '../../types';
 import { cloneTree, findNode, isDescendant, uid } from '../MindMapHelpers';
+import { H_GAP, V_GAP } from '../MindMapConstants';
 
 /** A node with every field present, so nothing downstream has to guard. */
 export const createNode = (over: Partial<MindMapTreeNode> = {}): MindMapTreeNode => ({
@@ -33,12 +34,7 @@ export const createNode = (over: Partial<MindMapTreeNode> = {}): MindMapTreeNode
   ...over,
 });
 
-/**
- * A dragged node keeps its own position, and so does everything under it.
- * Inserting into such a branch has to clear those or the new node lands in
- * the middle of stale offsets — laid out by the tree, next to siblings that
- * are not.
- */
+/** Hands a node and everything under it back to the tree layout. */
 export const clearBranchCustomPositions = (node: MindMapTreeNode): void => {
   node.customX = undefined;
   node.customY = undefined;
@@ -84,7 +80,6 @@ export const addChild = (
   found.node.children.push(node);
   // A node added to a collapsed parent would otherwise be invisible.
   found.node.collapsed = false;
-  clearBranchCustomPositions(found.node);
 
   return { root: next, node, side: parentId === 'root' ? (side ?? 'right') : null };
 };
@@ -97,13 +92,66 @@ export const addSibling = (root: MindMapTreeNode, nodeId: string): Insertion | n
 
   const node = createNode();
   found.parent.children.splice(found.index + 1, 0, node);
-  clearBranchCustomPositions(found.parent);
 
   return {
     root: next,
     node,
     side: found.parent.id === 'root' ? (found.node.side === 'left' ? 'left' : 'right') : null,
   };
+};
+
+/** What `placeInsertion` needs from a layout entry. */
+export interface PlacedBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  direction: 'left' | 'right';
+}
+
+const isPlaced = (node: MindMapTreeNode): boolean => node.customX != null && node.customY != null;
+
+/**
+ * Inserting never moves a node the user placed by hand. The new node itself
+ * is left to the tree unless its neighbours were dragged: the tree would put
+ * it beside where the parent *would* be, among siblings that are elsewhere.
+ * Then it gets a position of its own, below the sibling before it, or beside
+ * the parent if it is the first child.
+ *
+ * `layoutOf` lays out the tree after the insertion, which is what the user
+ * is about to see.
+ */
+export const placeInsertion = (
+  result: Insertion | null,
+  layoutOf: (root: MindMapTreeNode) => Record<string, PlacedBox>,
+): Insertion | null => {
+  if (!result) return null;
+  const found = findNode(result.root, result.node.id);
+  const parent = found?.parent;
+  if (!parent) return result;
+
+  // A child of the root is laid out with the children on its own side only.
+  const group = parent.id === 'root'
+    ? parent.children.filter((ch) => (ch.side === 'left') === (result.side === 'left'))
+    : parent.children;
+  if (!isPlaced(parent) && !group.some(isPlaced)) return result;
+
+  const layout = layoutOf(result.root);
+  const self = layout[result.node.id];
+  const parentBox = layout[parent.id];
+  if (!self || !parentBox) return result;
+  const index = group.indexOf(result.node);
+  const above = index > 0 ? layout[group[index - 1].id] : undefined;
+  const left = self.direction === 'left';
+
+  if (above) {
+    result.node.customX = Math.round(left ? above.x + above.w - self.w : above.x);
+    result.node.customY = Math.round(above.y + above.h + V_GAP);
+  } else {
+    result.node.customX = Math.round(left ? parentBox.x - self.w - H_GAP : parentBox.x + parentBox.w + H_GAP);
+    result.node.customY = Math.round(parentBox.y + (parentBox.h - self.h) / 2);
+  }
+  return result;
 };
 
 export interface Removal {

@@ -18,6 +18,10 @@ grade: stable
 confinement: strict
 base: core24
 license: MIT
+# 512px copy of desktop/src-tauri/icons/icon.png. Without it snapcraft cannot
+# resolve the desktop file's bare "Icon=MindMapVault-foss" and falls back to
+# the first hicolor match, the 32x32 PNG, so launchers show a blurry icon.
+icon: snap/gui/mindmapvault-foss.png
 source-code: https://github.com/mindmapvault/mindmapvault-foss
 website: https://mindmapvault.com
 issues: https://github.com/mindmapvault/mindmapvault-foss/issues

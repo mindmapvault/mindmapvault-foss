@@ -1,12 +1,12 @@
 mod local_store;
 
 use local_store::{
-    delete_local_profile, delete_local_vault, export_vault_file, get_local_profile,
-    get_local_storage_dir, get_local_storage_summary, get_local_vault_blob, get_local_vault_detail,
-    import_vault_file, is_wsl_environment, list_local_profiles, list_local_vaults,
-    reset_local_storage_dir, save_export_file, save_local_profile,
-    save_local_vault, save_local_vault_blob, set_active_user, set_local_storage_dir,
-    update_local_vault_meta, verify_local_vault_integrity,
+    delete_local_profile, delete_local_vault, export_vault_file, get_local_attachment,
+    get_local_profile, get_local_storage_dir, get_local_storage_summary, get_local_vault_blob,
+    get_local_vault_detail, import_vault_file, is_wsl_environment, list_local_profiles,
+    list_local_vaults, prune_local_attachments, reset_local_storage_dir, save_export_file,
+    save_local_attachment, save_local_profile, save_local_vault, save_local_vault_blob,
+    set_active_user, set_local_storage_dir, update_local_vault_meta, verify_local_vault_integrity,
 };
 use local_store::apply_local_password_rotation;
 use tauri::{
@@ -158,6 +158,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .invoke_handler(tauri::generate_handler![
             // Local profile management
             get_local_profile,
@@ -172,6 +173,9 @@ pub fn run() {
             save_local_vault_blob,
             get_local_vault_blob,
             delete_local_vault,
+            save_local_attachment,
+            get_local_attachment,
+            prune_local_attachments,
             update_local_vault_meta,
             // Local storage folder config
             get_local_storage_dir,

@@ -199,6 +199,33 @@ function measureMapBounds(svg: SVGSVGElement): DOMRect | null {
 /**
  * Render the whole map to a canvas with correct theme colors and an optional watermark.
  */
+/**
+ * A picture shown above glyph size is drawn from a blob: URL, which an image
+ * made from a standalone SVG cannot load. Each becomes a data URI; one that
+ * cannot be read falls back to its glyph, which every such element carries.
+ */
+async function inlineBlobImages(root: SVGSVGElement): Promise<void> {
+  await Promise.all(Array.from(root.querySelectorAll('image')).map(async (image) => {
+    const href = image.getAttribute('href') ?? '';
+    const glyph = image.getAttribute('data-glyph');
+    image.removeAttribute('data-glyph');
+    if (!href.startsWith('blob:')) return;
+    try {
+      const blob = await (await fetch(href)).blob();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+      image.setAttribute('href', dataUrl);
+    } catch {
+      if (glyph) image.setAttribute('href', glyph);
+      else image.remove();
+    }
+  }));
+}
+
 export async function renderSvgToCanvas(
   svg: SVGSVGElement,
   versionLabel?: string,
@@ -206,6 +233,7 @@ export async function renderSvgToCanvas(
 ): Promise<HTMLCanvasElement> {
   const clone = svg.cloneNode(true) as SVGSVGElement;
   clone.querySelectorAll('foreignObject').forEach((fo) => fo.remove());
+  await inlineBlobImages(clone);
 
   // The live <svg class="mm-canvas"> is sized purely by CSS (width/height:100%)
   // and carries no width/height/viewBox attributes. Once serialized into a

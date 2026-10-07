@@ -339,3 +339,36 @@ describe('editorBox', () => {
     expect(eb.x).toBeLessThan(box.x);
   });
 });
+
+describe('image sizes', () => {
+  /** A glyph as the app stores it: 64 on the long side, 3:2. */
+  const glyph = { thumb: 'data:,', w: 64, h: 43 };
+
+  it('leaves a picture without a preset as it was when no sizes are given', () => {
+    expect(layout.imageDisplaySize(glyph)).toEqual({ w: 64, h: 43 });
+  });
+
+  it('draws each preset at its box, keeping the aspect ratio', () => {
+    expect(layout.imageDisplaySize({ ...glyph, size: 'M' })).toEqual({ w: 128, h: 86 });
+    expect(layout.imageDisplaySize({ ...glyph, size: 'L' })).toEqual({ w: 256, h: 172 });
+    const tall = { thumb: 'data:,', w: 32, h: 64, size: 'L' as const };
+    expect(layout.imageDisplaySize(tall)).toEqual({ w: 128, h: 256 });
+  });
+
+  it("uses the map's own sizes, and S for a picture with no preset", () => {
+    const sizes = { S: 100, M: 250, L: 400 };
+    expect(layout.imageDisplaySize(glyph, sizes)).toEqual({ w: 100, h: 67 });
+    expect(layout.imageDisplaySize({ ...glyph, size: 'M' }, sizes)).toEqual({ w: 250, h: 168 });
+  });
+
+  it('holds a preset between the minimum and the maximum', () => {
+    expect(layout.imageDisplaySize({ ...glyph, size: 'L' }, { S: 1, M: 2, L: 5000 }).w).toBe(512);
+    expect(layout.imageDisplaySize(glyph, { S: 1, M: 2, L: 5000 }).w).toBe(32);
+  });
+
+  it('sizes the node from the preset, not from the glyph', () => {
+    const parts = layout.describeNode({ id: 'n', text: 'x', children: [], image: { ...glyph, size: 'L' } });
+    expect(parts.image).toMatchObject({ w: 256, h: 172 });
+    expect(parts.imageBandH).toBe(172 + 6);
+  });
+});

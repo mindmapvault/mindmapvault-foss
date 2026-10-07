@@ -24,3 +24,9 @@ export const PROGRESS_PIE_SIZE = 32;
 export const NODE_IMAGE_BOX = 64;
 /** Vertical breathing room above and below the image band. */
 export const NODE_IMAGE_PAD = 6;
+/** Preset sizes for a map that has not chosen its own. S matches the glyph. */
+export const DEFAULT_IMAGE_SIZES = { S: 64, M: 128, L: 256 } as const;
+/** Bounds for a preset: below the minimum a picture stops being readable,
+ *  above the maximum one picture outgrows the map around it. */
+export const MIN_IMAGE_SIZE = 32;
+export const MAX_IMAGE_SIZE = 512;

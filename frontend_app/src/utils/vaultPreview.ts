@@ -1,4 +1,4 @@
-import { bezierPath, layoutTree, nodeGeometry } from '@mindmapvault/mindmap-core';
+import { DEFAULT_IMAGE_SIZES, bezierPath, describeNode, layoutTree, nodeGeometry } from '@mindmapvault/mindmap-core';
 import { resolveLucideIcon, type LucideIconNode } from '../components/lucideIconRegistry';
 import type { MindMapGraph, MindMapTree, MindMapTreeNode } from '../types';
 import type { ThemeMode } from '../store/theme';
@@ -215,7 +215,8 @@ function renderTreeSvgSync(
   height: number,
 ): string {
   const palette = THEME_PALETTE[theme];
-  const layout = layoutTree(tree.root, 0, 0);
+  const imageSizes = { ...DEFAULT_IMAGE_SIZES, ...tree.image_sizes };
+  const layout = layoutTree(tree.root, 0, 0, (node) => describeNode(node, { imageSizes }));
   const entries = Object.values(layout);
   const minX = Math.min(...entries.map((e) => e.x));
   const minY = Math.min(...entries.map((e) => e.y));
@@ -324,7 +325,7 @@ function renderTreeSvgSync(
     // Node image. `layoutTree` already reserved the band for it, so this has to
     // draw it or the preview shows a node with an unexplained gap. The data URI
     // is inside the tree, so the preview needs no request to render it.
-    const nodeImage = entry.parts.image ? node.image! : null;
+    const nodeImage = entry.parts.image;
     if (nodeImage) {
       const imageW = nodeImage.w * scale;
       const imageH = nodeImage.h * scale;
@@ -526,6 +527,11 @@ async function rasterizeSvg(svg: string, width = CLOUD_PREVIEW_WIDTH, height = C
 function savePreview(vaultId: string, theme: 'dark' | 'light', preview: VaultPreviewSummary): VaultPreviewSummary {
   const cache = readCache() as VaultPreviewCache;
   const entry = cache[vaultId] ?? {};
+  // Previews render asynchronously, so one for an older save can finish last
+  // (an import renders the heavy original while the editor has already saved
+  // a slimmer map). It must not replace the newer one.
+  const existing = entry[theme];
+  if (existing && existing.updated_at > preview.updated_at) return existing;
   entry[theme] = preview;
   cache[vaultId] = entry;
   writeCache(cache);

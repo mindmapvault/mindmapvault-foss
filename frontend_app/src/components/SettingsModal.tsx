@@ -11,6 +11,7 @@ import {
   useUiStore,
   useEffectiveKeyboardLayout,
   resolveDensity,
+  INTERFACE_SCALES,
   type KeyboardLayoutName,
   type DensityPreset,
   type TrayPosition,
@@ -671,12 +672,35 @@ function InterfaceTab() {
   const iconTrayEnabled = useUiStore((s) => s.iconTrayEnabled);
   const iconTrayPosition = useUiStore((s) => s.iconTrayPosition);
   const setIconTray = useUiStore((s) => s.setIconTray);
+  const interfaceScale = useUiStore((s) => s.interfaceScale);
+  const setInterfaceScale = useUiStore((s) => s.setInterfaceScale);
 
   const resolved = resolveDensity(densityPreset, statusBarOverride, toolbarLabelsOverride, buttonShortcutsOverride);
 
   return (
     <div className="space-y-6">
-      <section>
+      {isTauri() && (
+        <section>
+          <SectionLabel>Interface size</SectionLabel>
+          <select
+            value={interfaceScale}
+            onChange={(e) => setInterfaceScale(Number(e.target.value))}
+            aria-label="Interface size"
+            className="w-full rounded-lg px-3 py-2 text-sm"
+            style={{ background: 'var(--surface-2)', color: 'var(--text-primary)', border: '1px solid var(--border-light)' }}
+          >
+            {INTERFACE_SCALES.map((scale) => (
+              <option key={scale} value={scale}>{Math.round(scale * 100)} %</option>
+            ))}
+          </select>
+          <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+            Makes everything in the window larger: text, buttons and the map. Useful on
+            small high-resolution screens. Canvas zoom is separate and still works.
+          </p>
+        </section>
+      )}
+
+      <section className={isTauri() ? 'border-t pt-6' : undefined} style={isTauri() ? { borderColor: 'var(--border)' } : undefined}>
         <SectionLabel>Density</SectionLabel>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {DENSITY_OPTIONS.map((opt) => {

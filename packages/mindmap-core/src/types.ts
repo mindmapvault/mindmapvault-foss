@@ -8,12 +8,21 @@
  * to this shape at the first recursion.
  */
 
+/** The size presets a picture on a node can be shown at. */
+export type ImageSize = 'S' | 'M' | 'L';
+
+/** The long side, in pixels, of each preset. Kept per map. */
+export type ImageSizes = Record<ImageSize, number>;
+
 export interface LayoutImage {
   /** Data URI of the glyph drawn on the node. */
   thumb: string;
-  /** Rendered dimensions, stored so layout never has to decode the image. */
+  /** Glyph dimensions, stored so layout never has to decode the image. Only
+   *  the aspect ratio matters once a preset is in play. */
   w: number;
   h: number;
+  /** The preset it is shown at; absent means S. */
+  size?: ImageSize;
 }
 
 /** A link from a node to another vault. */
@@ -100,6 +109,12 @@ export interface DescribeOptions {
    * agree again.
    */
   attachmentCount?: number;
+  /**
+   * The map's preset sizes. When given, every picture is drawn at its preset
+   * (S if it has none); when omitted, a picture without a preset keeps its
+   * glyph's own dimensions, as before presets existed.
+   */
+  imageSizes?: ImageSizes;
 }
 
 export type DescribeNode<N> = (node: N) => NodeParts;

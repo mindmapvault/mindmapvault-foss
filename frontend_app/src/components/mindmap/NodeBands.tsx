@@ -26,7 +26,7 @@ import {
   TAG_STRIP_H,
 } from '../MindMapConstants';
 import DynamicLucideIcon from '../DynamicLucideIcon';
-import type { MindMapTreeNode, NodeImage } from '../../types';
+import type { MindMapTreeNode } from '../../types';
 import { openExternalUrl } from '../../utils/openExternal';
 
 export type NodeBox = LayoutEntry<MindMapTreeNode>;
@@ -235,16 +235,22 @@ export function ImageBand({
   box,
   geom,
   image,
+  href,
   onOpen,
 }: {
   box: NodeBox;
   geom: NodeGeometry;
-  image: NodeImage;
+  /** As drawn: `parts.image`, already at its display size. */
+  image: { thumb: string; w: number; h: number; name?: string };
+  /** A larger copy built from the original, when there is one; else the glyph. */
+  href?: string;
   onOpen: () => void;
 }): JSX.Element {
   return (
     <image
-      href={image.thumb}
+      href={href ?? image.thumb}
+      // The export cannot load a blob: URL; it falls back to this.
+      data-glyph={href && href !== image.thumb ? image.thumb : undefined}
       x={box.x + (box.w - image.w) / 2}
       y={geom.imageY}
       width={image.w}

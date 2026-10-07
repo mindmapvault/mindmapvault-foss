@@ -9,6 +9,8 @@
 //!     index.json          ← array of VaultMeta (title, KEM envelope, etc.)
 //!     {uuid}.md           ← encrypted mind-map blob (same format as MinIO)
 //!     {uuid}.bin          ← legacy encrypted blob path (read during migration)
+//!     attachments/
+//!       {uuid}/{attachment id}.bin  ← one encrypted original per node attachment
 //! ```
 //!
 //! All plaintext encryption/decryption is done in the frontend JS crypto layer.
@@ -816,7 +818,113 @@ pub fn get_local_vault_blob(app: AppHandle, id: String) -> Result<Vec<u8>, Local
     Ok(fs::read(&path)?)
 }
 
-/// Deletes a vault (metadata + blob).
+// ── Attachment files ─────────────────────────────────────────────────────────
+//
+// An original attached to a node lives in its own file rather than inside the
+// map, so a map with a hundred photos does not carry them through every save
+// and every undo step. The renderer encrypts each file with its own key and
+// keeps that key in the (encrypted) map; these commands move opaque bytes only.
+
+/// Ids become file and folder names, so only plain characters get through.
+fn validate_file_id(kind: &str, id: &str) -> Result<(), LocalStoreError> {
+    let ok = !id.is_empty()
+        && id.len() <= 128
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if ok {
+        Ok(())
+    } else {
+        Err(LocalStoreError::Invalid(format!("invalid {kind} id")))
+    }
+}
+
+fn attachments_dir(app: &AppHandle, vault_id: &str) -> Result<PathBuf, LocalStoreError> {
+    validate_file_id("vault", vault_id)?;
+    Ok(vaults_dir(app)?.join("attachments").join(vault_id))
+}
+
+fn attachment_path(
+    app: &AppHandle,
+    vault_id: &str,
+    attachment_id: &str,
+) -> Result<PathBuf, LocalStoreError> {
+    validate_file_id("attachment", attachment_id)?;
+    Ok(attachments_dir(app, vault_id)?.join(format!("{attachment_id}.bin")))
+}
+
+/// Writes one encrypted attachment and reads it back. The renderer drops its
+/// in-map copy of the original only after this returns, so a short write can
+/// never be the only copy left.
+#[tauri::command]
+pub fn save_local_attachment(
+    app: AppHandle,
+    vault_id: String,
+    attachment_id: String,
+    data_base64: String,
+) -> Result<(), LocalStoreError> {
+    use base64::Engine;
+    ensure_storage_initialized(&app)?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_base64.as_bytes())
+        .map_err(|e| LocalStoreError::Invalid(format!("invalid base64 payload: {e}")))?;
+    let path = attachment_path(&app, &vault_id, &attachment_id)?;
+    write_bytes_atomic(&path, &bytes)?;
+    if fs::read(&path)? != bytes {
+        return Err(LocalStoreError::Invalid(format!(
+            "attachment {attachment_id} did not read back intact"
+        )));
+    }
+    Ok(())
+}
+
+/// Reads one encrypted attachment, base64-encoded for the IPC boundary.
+#[tauri::command]
+pub fn get_local_attachment(
+    app: AppHandle,
+    vault_id: String,
+    attachment_id: String,
+) -> Result<String, LocalStoreError> {
+    use base64::Engine;
+    ensure_storage_initialized(&app)?;
+    let path = attachment_path(&app, &vault_id, &attachment_id)?;
+    if !path.exists() {
+        return Err(LocalStoreError::NotFound(format!("attachment {attachment_id}")));
+    }
+    Ok(base64::engine::general_purpose::STANDARD.encode(fs::read(&path)?))
+}
+
+/// Deletes the attachment files of a vault that its saved map no longer
+/// refers to: removed from a node, or added and never saved. Called when a map
+/// is opened, while the saved map is still the only thing that can point at a
+/// file — undo history starts empty. Returns how many files went.
+#[tauri::command]
+pub fn prune_local_attachments(
+    app: AppHandle,
+    vault_id: String,
+    keep: Vec<String>,
+) -> Result<u32, LocalStoreError> {
+    ensure_storage_initialized(&app)?;
+    let dir = attachments_dir(&app, &vault_id)?;
+    if !dir.exists() {
+        return Ok(0);
+    }
+    let mut removed = 0;
+    for entry in fs::read_dir(&dir)? {
+        let path = entry?.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("bin") {
+            continue;
+        }
+        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if !keep.iter().any(|k| k == stem) {
+            fs::remove_file(&path)?;
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}
+
+/// Deletes a vault (metadata + blob + attachment files).
 #[tauri::command]
 pub fn delete_local_vault(app: AppHandle, id: String) -> Result<(), LocalStoreError> {
     ensure_storage_initialized(&app)?;
@@ -832,6 +940,11 @@ pub fn delete_local_vault(app: AppHandle, id: String) -> Result<(), LocalStoreEr
     let legacy_path = legacy_blob_path(&app, &id)?;
     if legacy_path.exists() {
         fs::remove_file(&legacy_path)?;
+    }
+    if let Ok(dir) = attachments_dir(&app, &id) {
+        if dir.exists() {
+            fs::remove_dir_all(&dir)?;
+        }
     }
     Ok(())
 }
@@ -1141,12 +1254,16 @@ pub fn get_local_storage_summary(app: AppHandle) -> Result<LocalStorageSummary, 
         } else {
             0
         };
+        let attachments_size = match attachments_dir(&app, &v.id) {
+            Ok(dir) if dir.exists() => dir_size_recursive(&dir)?,
+            _ => 0,
+        };
 
         vaults.push(LocalVaultStorageInfo {
             id: v.id,
             title_encrypted: v.title_encrypted,
             version_count: if blob_size > 0 { 1 } else { 0 },
-            total_bytes: blob_size,
+            total_bytes: blob_size + attachments_size,
         });
     }
 
@@ -1609,6 +1726,22 @@ mod tests {
                 validate_username(name).is_err(),
                 "{name:?} should be refused",
             );
+        }
+    }
+
+    // ── Attachment ids that become file names ────────────────────────────
+
+    #[test]
+    fn attachment_ids_the_app_generates_are_accepted() {
+        for id in ["local-3f2a9c1e-8b7d-4e6f-a5b4-c3d2e1f0a9b8", "att_1", "0"] {
+            assert!(validate_file_id("attachment", id).is_ok(), "{id} should be accepted");
+        }
+    }
+
+    #[test]
+    fn attachment_ids_that_could_leave_the_folder_are_refused() {
+        for id in ["", ".", "..", "../x", "a/b", "a\\b", "a.bin", "a\0b", &"x".repeat(129)] {
+            assert!(validate_file_id("attachment", id).is_err(), "{id:?} should be refused");
         }
     }
 }

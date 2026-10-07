@@ -29,10 +29,15 @@ import {
   CHECKBOX_SIZE,
   PROGRESS_PIE_SIZE,
   NODE_IMAGE_PAD,
+  DEFAULT_IMAGE_SIZES as DEFAULT_SIZES,
+  MIN_IMAGE_SIZE,
+  MAX_IMAGE_SIZE,
 } from './constants';
 import { getVisibleNodeTextLines } from './text';
 import type {
   DescribeOptions,
+  ImageSizes,
+  LayoutImage,
   LayoutNode,
   NodeBox,
   NodeGeometry,
@@ -65,6 +70,27 @@ export const measureText = (text: string, fontSize = 14): number => {
   return measureContext.measureText(text || ' ').width;
 };
 
+// ── Pictures ────────────────────────────────────────────────────
+
+/** A preset's pixel size, held to what still reads and still fits. */
+export const clampImageSize = (px: number): number =>
+  Math.round(Math.min(MAX_IMAGE_SIZE, Math.max(MIN_IMAGE_SIZE, Number.isFinite(px) ? px : MIN_IMAGE_SIZE)));
+
+/**
+ * The size a picture is drawn at: its preset's box on the long side, the
+ * glyph's aspect ratio for the other. Without `sizes`, a picture with no
+ * preset keeps its stored dimensions.
+ */
+export const imageDisplaySize = (
+  image: LayoutImage,
+  sizes?: ImageSizes,
+): { w: number; h: number } => {
+  if (!sizes && !image.size) return { w: image.w, h: image.h };
+  const box = clampImageSize((sizes ?? DEFAULT_SIZES)[image.size ?? 'S']);
+  const scale = box / Math.max(image.w, image.h, 1);
+  return { w: Math.round(image.w * scale), h: Math.round(image.h * scale) };
+};
+
 // ── What a node is made of ──────────────────────────────────────
 
 export const describeNode = <N extends LayoutNode<N>>(
@@ -86,7 +112,10 @@ export const describeNode = <N extends LayoutNode<N>>(
   const hasNote = Boolean(node.notes?.trim());
   const attachmentCount = options.attachmentCount ?? node.attachments?.length ?? 0;
   const hasDate = Boolean(node.startDate || node.endDate);
-  const image = node.image?.thumb ? node.image : null;
+  // The picture as it is drawn: the node's own fields, at its display size.
+  const image = node.image?.thumb
+    ? { ...node.image, ...imageDisplaySize(node.image, options.imageSizes) }
+    : null;
 
   return {
     lines,

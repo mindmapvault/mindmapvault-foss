@@ -288,8 +288,10 @@ export function VaultsPage() {
           }),
         );
       }
-      setActiveShareCounts({});
-      setPreviewStates({});
+      // Previews and share counts are not cleared here: the effects below
+      // rebuild them whenever the list or an updated_at changes, and when
+      // neither has (reopening the lobby from the editor), clearing them left
+      // every card blank with nothing to fill it again.
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load vaults');
     } finally {

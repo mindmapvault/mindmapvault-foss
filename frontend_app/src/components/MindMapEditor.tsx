@@ -52,12 +52,16 @@ import {
   defaultRoot,
   migrateNode,
 } from './MindMapHelpers';
-import { layoutTree, bezierPath, describeNode, nodeGeometry, editorBox } from '@mindmapvault/mindmap-core';
+import {
+  layoutTree, bezierPath, describeNode, nodeGeometry, editorBox,
+  DEFAULT_IMAGE_SIZES, MAX_IMAGE_SIZE, MIN_IMAGE_SIZE, clampImageSize, type ImageSize, type ImageSizes,
+} from '@mindmapvault/mindmap-core';
 import { appendAttachmentMarkdownLinks, getVisibleNodeTextLines } from '../utils/nodeAttachments';
 import { exportSvgAsPdf, renderSvgToCanvas } from '../utils/pdfExport';
 import { downloadBlob, downloadDataUrl } from '../utils/download';
 import { handleDelegatedLinkClick } from '../utils/openExternal';
-import { createNodeImageGlyph, type NodeImageGlyph } from '../utils/filePreview';
+import { createImageDisplayUrl, createNodeImageGlyph, type NodeImageGlyph } from '../utils/filePreview';
+import { readNativeClipboardImage } from '../utils/nativeClipboard';
 import { buildExportFileBaseName as buildExportName } from '../utils/exportFileName';
 import {
   BodyBand,
@@ -100,6 +104,7 @@ import {
 
 /** null closes the cycle: 0 → 25 → 50 → 75 → 100 → no dial → 0. */
 const PROGRESS_CYCLE: (number | null)[] = [...PROGRESS_PRESETS, null];
+
 import { useEffectiveKeyboardLayout, useUiStore, useResolvedDensity, type TrayPosition } from '../store/ui';
 import { ColorTray } from './ColorTray';
 import { IconTray } from './IconTray';
@@ -117,6 +122,53 @@ interface DragState {
   currentX: number;
   currentY: number;
   moved: boolean;
+}
+
+/** At this many pictures at Medium or Large, the map says it may get slow. */
+const LARGE_IMAGE_WARNING = 50;
+
+/**
+ * Which larger copy a picture drawn at `shown` uses: its original scaled for
+ * the screen's pixel density, capped at 2× — beyond that is memory with
+ * nothing more to see.
+ */
+const displayImageKey = (attachmentId: string, shown: { w: number; h: number }) =>
+  `${attachmentId}@${Math.ceil(Math.max(shown.w, shown.h) * Math.min(2, window.devicePixelRatio || 1))}`;
+
+/** Pixel size of Small, Medium and Large, for one map. */
+function ImageSizesDialog({ sizes, onChange, onClose }: {
+  sizes: ImageSizes;
+  onChange: (sizes: ImageSizes) => void;
+  onClose: () => void;
+}) {
+  // Typed into freely and applied on Done: clamping on every keystroke would
+  // turn the "1" of "128" into the minimum.
+  const [draft, setDraft] = useState<ImageSizes>(sizes);
+  const labels: Record<ImageSize, string> = { S: 'Small', M: 'Medium', L: 'Large' };
+  return (
+    <div className="mm-tag-dialog" style={{ position: 'absolute', right: 12, top: 60, zIndex: 200 }}>
+      <div className="mm-tag-dialog-title">Picture sizes in this map</div>
+      {(['S', 'M', 'L'] as const).map((size) => (
+        <label key={size} className="mm-tag-input-row" style={{ alignItems: 'center' }}>
+          <span style={{ width: 64, fontSize: 12 }}>{labels[size]}</span>
+          <input
+            className="mm-tag-input"
+            type="number"
+            min={MIN_IMAGE_SIZE}
+            max={MAX_IMAGE_SIZE}
+            step={8}
+            value={draft[size]}
+            onChange={(e) => setDraft({ ...draft, [size]: Number(e.target.value) })}
+          />
+          <span style={{ fontSize: 12 }}>px</span>
+        </label>
+      ))}
+      <div className="mm-tag-input-row" style={{ justifyContent: 'flex-end' }}>
+        <button className="mm-tag-add-btn" type="button" onClick={() => setDraft({ ...DEFAULT_IMAGE_SIZES })}>Defaults</button>
+        <button className="mm-tag-add-btn" type="button" onClick={() => { onChange(draft); onClose(); }}>Done</button>
+      </div>
+    </div>
+  );
 }
 
 // A captioned cluster of toolbar buttons — Standard density merges some of
@@ -335,6 +387,15 @@ export function DesktopMindMapEditor({
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [fileDropBusyNodeId, setFileDropBusyNodeId] = useState<string | null>(null);
   const [nodeImageBusy, setNodeImageBusy] = useState(false);
+  // The pixel size of each picture preset. A setting of the map, like its
+  // zoom, so it is saved with the map but is not an undo step.
+  const [imageSizes, setImageSizes] = useState<ImageSizes>(() => ({ ...DEFAULT_IMAGE_SIZES, ...initialTree?.image_sizes }));
+  const [showImageSizes, setShowImageSizes] = useState(false);
+  /** Pictures shown above glyph size, built from their originals. Key: `${attachment id}@${px}`. */
+  const [displayImageUrls, setDisplayImageUrls] = useState<Record<string, string>>({});
+  const displayImageUrlsRef = useRef<Record<string, string>>({});
+  const displayImagePending = useRef<Set<string>>(new Set());
+  const displayImageFailed = useRef<Set<string>>(new Set());
   const dragRef = useRef<DragState | null>(null);
   const hoverPopupCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverPopupRef = useRef<HTMLDivElement>(null);
@@ -554,6 +615,14 @@ export function DesktopMindMapEditor({
   }, [attachmentPreviewUrls]);
 
   useEffect(() => {
+    displayImageUrlsRef.current = displayImageUrls;
+  }, [displayImageUrls]);
+
+  useEffect(() => () => {
+    Object.values(displayImageUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (attachmentPreviewUrl) URL.revokeObjectURL(attachmentPreviewUrl);
     };
@@ -646,8 +715,8 @@ export function DesktopMindMapEditor({
    */
   const layoutOf = useCallback(
     (tree: MindMapTreeNode) => layoutTree(tree, 0, 0, (node) =>
-      describeNode(node, { attachmentCount: getNodeAttachments(node.id, node.attachments).length })),
-    [getNodeAttachments],
+      describeNode(node, { attachmentCount: getNodeAttachments(node.id, node.attachments).length, imageSizes })),
+    [getNodeAttachments, imageSizes],
   );
   const layout = useMemo(() => layoutOf(root), [root, layoutOf]);
 
@@ -685,6 +754,31 @@ export function DesktopMindMapEditor({
       void loadAttachmentPreview(attachment);
     }
   }, [attachmentById, loadAttachmentPreview, onLoadNodeAttachmentPreview]);
+
+  // A picture shown above its glyph's size is drawn from its original, scaled
+  // once to what the screen needs. Until that copy exists — or if the original
+  // is gone — the glyph is drawn stretched.
+  useEffect(() => {
+    for (const entry of Object.values(layout)) {
+      const shown = entry.parts.image;
+      const image = entry.node.image;
+      const attachmentId = image?.attachment_id;
+      if (!shown || !image || !attachmentId) continue;
+      if (Math.max(shown.w, shown.h) <= Math.max(image.w, image.h)) continue;
+      const source = attachmentPreviewUrls[attachmentId];
+      const key = displayImageKey(attachmentId, shown);
+      if (!source || displayImageUrls[key]) continue;
+      if (displayImagePending.current.has(key) || displayImageFailed.current.has(key)) continue;
+      displayImagePending.current.add(key);
+      const px = Number(key.slice(key.lastIndexOf('@') + 1));
+      void fetch(source)
+        .then((response) => response.blob())
+        .then((blob) => createImageDisplayUrl(blob, px))
+        .then((url) => setDisplayImageUrls((current) => ({ ...current, [key]: url })))
+        .catch(() => { displayImageFailed.current.add(key); })
+        .finally(() => { displayImagePending.current.delete(key); });
+    }
+  }, [layout, attachmentPreviewUrls, displayImageUrls]);
 
   const mutate = useCallback((newRoot: MindMapTreeNode) => {
     setRoot(newRoot);
@@ -1203,7 +1297,8 @@ export function DesktopMindMapEditor({
       focus_anchor_id: focusAnchorId,
       selected_node_id: selectedId,
     },
-  }), [root, pan, zoom, focusMode, focusAnchorId, selectedId]);
+    image_sizes: imageSizes,
+  }), [root, pan, zoom, focusMode, focusAnchorId, selectedId, imageSizes]);
 
   const handleSave = useCallback(() => {
     if (saving) return;
@@ -1667,6 +1762,30 @@ export function DesktopMindMapEditor({
     }
   }, [loadAttachmentPreview, mutate, onNodeFileDrop, root, showToast]);
 
+  /** Shows a node's picture at a preset. S is the default and is not stored. */
+  const setNodeImageSize = useCallback((nodeId: string, size: ImageSize) => {
+    const next = editNode(root, nodeId, (node) => {
+      if (!node.image || (node.image.size ?? 'S') === size) return false;
+      if (size === 'S') delete node.image.size;
+      else node.image.size = size;
+    });
+    if (!next) return;
+    mutate(next);
+    if (size !== 'S') {
+      let large = 0;
+      const walk = (n: MindMapTreeNode) => { if (n.image?.size) large += 1; n.children.forEach(walk); };
+      walk(next);
+      if (large === LARGE_IMAGE_WARNING) {
+        showToast(`${LARGE_IMAGE_WARNING} large pictures — a map with many can get slow`);
+      }
+    }
+  }, [mutate, root, showToast]);
+
+  const updateImageSizes = useCallback((next: ImageSizes) => {
+    setImageSizes({ S: clampImageSize(next.S), M: clampImageSize(next.M), L: clampImageSize(next.L) });
+    setIsDirty(true);
+  }, []);
+
   /** Removes the glyph. The original stays an ordinary attachment on the node. */
   const removeNodeImage = useCallback((nodeId: string) => {
     const newRoot = cloneTree(root);
@@ -1679,23 +1798,56 @@ export function DesktopMindMapEditor({
 
   // Ctrl+V on the canvas puts a copied picture on the selected node. Ignored
   // while a dialog or an inline editor owns the keyboard, where a paste means
-  // text.
+  // text. The picture normally comes with the paste event; WebKitGTK on Linux
+  // never puts one there, so Ctrl+V that brought none reads the OS clipboard.
+  const imagePastedAt = useRef(0);
   useEffect(() => {
-    const handler = (e: ClipboardEvent) => {
-      if (notesOpen || editingId) return;
-      const tag = (e.target as HTMLElement | null)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    const outsideText = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      return !(el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA' || el?.isContentEditable);
+    };
+    const place = (file: File) => {
+      imagePastedAt.current = Date.now();
+      if (!findNode(root, selectedId)) {
+        showToast('Select a node to put the picture on');
+        return;
+      }
+      void attachNodeImage(selectedId, file);
+    };
+    // The event and the fallback can both see one keystroke; only one may place it.
+    const recentlyPasted = () => Date.now() - imagePastedAt.current < 1000;
+    const fromNativeClipboard = async () => {
+      if (recentlyPasted()) return;
+      const file = await readNativeClipboardImage();
+      if (file && !recentlyPasted()) place(file);
+    };
+
+    const onPaste = (e: ClipboardEvent) => {
+      if (notesOpen || editingId || !outsideText(e.target)) return;
       const file = Array.from(e.clipboardData?.items ?? [])
         .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
         .map((item) => item.getAsFile())
         .find((value): value is File => Boolean(value));
-      if (!file) return;
+      if (!file) {
+        void fromNativeClipboard();
+        return;
+      }
       e.preventDefault();
-      void attachNodeImage(selectedId, file);
+      place(file);
     };
-    window.addEventListener('paste', handler);
-    return () => window.removeEventListener('paste', handler);
-  }, [attachNodeImage, editingId, notesOpen, selectedId]);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'KeyV' || !(isMac ? e.metaKey : e.ctrlKey) || e.shiftKey || e.altKey) return;
+      if (notesOpen || editingId || !outsideText(e.target)) return;
+      // A moment for the paste event: where it carries the picture, it wins.
+      window.setTimeout(() => { void fromNativeClipboard(); }, 150);
+    };
+    window.addEventListener('paste', onPaste);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('paste', onPaste);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [attachNodeImage, editingId, notesOpen, root, selectedId, showToast]);
 
   const onDragLeaveSvg = useCallback((e: React.DragEvent<SVGSVGElement>) => {
     if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
@@ -2170,8 +2322,14 @@ export function DesktopMindMapEditor({
 
         <MetaBand box={box} geom={geom} parts={parts} visual={visual} />
 
-        {nodeImage && (
-          <ImageBand box={box} geom={geom} image={nodeImage} onOpen={() => { setSelectedId(node.id); void openNodeImage(node); }} />
+        {nodeImage && parts.image && (
+          <ImageBand
+            box={box}
+            geom={geom}
+            image={parts.image}
+            href={nodeImage.attachment_id ? displayImageUrls[displayImageKey(nodeImage.attachment_id, parts.image)] : undefined}
+            onOpen={() => { setSelectedId(node.id); void openNodeImage(node); }}
+          />
         )}
 
         <TagBand box={box} geom={geom} parts={parts} visual={visual} userLabels={userLabels} />
@@ -2223,7 +2381,7 @@ export function DesktopMindMapEditor({
     }
     return elems;
     }, [layout, selectedId, multiSelect, editingId, editText, dropTargetId, isDragging, searchResults,
-      attachmentPreviewUrls, cancelHoverPopupClose, scheduleHoverPopupClose, commitEdit, cancelEdit, getNodeAttachments, onOpenNodeAttachment, toggleCollapse, toggleCheckbox,
+      attachmentPreviewUrls, displayImageUrls, cancelHoverPopupClose, scheduleHoverPopupClose, commitEdit, cancelEdit, getNodeAttachments, onOpenNodeAttachment, toggleCollapse, toggleCheckbox,
       focusMode, focusedIds, rootLeftCollapsed, rootRightCollapsed, onOpenVaultLink]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const selNode = findNode(root, selectedId)?.node;
@@ -2488,7 +2646,7 @@ export function DesktopMindMapEditor({
                   nodeImageTargetRef.current = selectedId;
                   nodeImageInputRef.current?.click();
                 }}
-                title={`Add a picture to the selected node (${formatShortcut('node.addImage', keyboardLayout)})`}
+                title={`Add a picture to the selected node (${formatShortcut('node.addImage', keyboardLayout)}), or paste one with ${isMac ? '⌘V' : 'Ctrl+V'}`}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 15l-5-5L5 21L21 15z"/></svg>
               </button>
@@ -3047,6 +3205,21 @@ export function DesktopMindMapEditor({
               setContextMenu(null);
             }}>{cmNode.image?.thumb ? 'Replace Image…' : 'Add Image…'} <kbd>{formatShortcut('node.addImage', keyboardLayout)}</kbd></button>
             {cmNode.image?.thumb && (
+              <div className="mm-context-item mm-context-progress-row" data-testid="context-image-size">Picture size
+                <div className="mm-context-progress-presets">
+                  {(['S', 'M', 'L'] as const).map((size) => (
+                    <span
+                      key={size}
+                      className={`mm-ctx-progress${(cmNode.image?.size ?? 'S') === size ? ' active' : ''}`}
+                      title={`${imageSizes[size]} px`}
+                      onClick={() => { setNodeImageSize(contextMenu.nodeId, size); setContextMenu(null); }}
+                    >{size}</span>
+                  ))}
+                  <span className="mm-ctx-progress" title="Pixel size of Small, Medium and Large in this map" onClick={() => { setShowImageSizes(true); setContextMenu(null); }}>…</span>
+                </div>
+              </div>
+            )}
+            {cmNode.image?.thumb && (
               <button className="mm-context-item" data-testid="context-remove-image" onClick={() => { removeNodeImage(contextMenu.nodeId); setContextMenu(null); }}>Remove Image</button>
             )}
             <div className="mm-context-divider" />
@@ -3080,6 +3253,15 @@ export function DesktopMindMapEditor({
           </div>
         </>);
       })()}
+
+      {/* ── Picture sizes for this map ─────────────────────────────── */}
+      {showImageSizes && (
+        <ImageSizesDialog
+          sizes={imageSizes}
+          onChange={updateImageSizes}
+          onClose={() => setShowImageSizes(false)}
+        />
+      )}
 
       {/* ── Notes panel ─────────────────────────────────────────────── */}
       {/* ── Tag dialog ─────────────────────────────────────────────── */}

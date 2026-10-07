@@ -76,7 +76,7 @@ function fixture(): MindMapTreeNode {
     n({
       text: 'Media',
       side: 'left',
-      image: { thumb: 'data:image/webp;base64,AA==', w: 64, h: 64, name: 'pic.webp', attachment_id: 'att-1' },
+      image: { thumb: 'data:image/webp;base64,AA==', w: 64, h: 64, name: 'pic.webp', attachment_id: 'att-1', size: 'L' },
       attachments: [{
         attachment_id: 'att-1',
         name: 'pic.webp',
@@ -139,7 +139,7 @@ function stripTo(node: MindMapTreeNode, f: Fidelity): unknown {
     ...(f.dates ? { startDate: node.startDate ?? null, endDate: node.endDate ?? null } : {}),
     ...(f.urls ? { urls: (node.urls ?? []).map((u) => u.url) } : {}),
     ...(f.tags ? { tags: node.tags ?? [] } : {}),
-    ...(f.image ? { image: node.image ? { w: node.image.w, h: node.image.h, name: node.image.name ?? null } : null } : {}),
+    ...(f.image ? { image: node.image ? { w: node.image.w, h: node.image.h, name: node.image.name ?? null, size: node.image.size ?? null } : null } : {}),
     ...(f.position ? { customX: node.customX ?? null, customY: node.customY ?? null } : {}),
     ...(f.attachments
       ? {

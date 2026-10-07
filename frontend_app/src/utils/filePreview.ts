@@ -123,19 +123,13 @@ async function encodeGlyph(canvas: HTMLCanvasElement, quality: number): Promise<
 }
 
 /**
- * Builds the small picture drawn on the node itself.
- *
- * Unlike `createEncryptedFilePreview` this is a glyph, not a card: no
- * background, no filename bar, and the canvas *is* the aspect ratio — the
- * bitmap is encoded at exactly the dimensions it will be drawn at, so there is
- * no letterbox, no crop at render time, and no `preserveAspectRatio` to reason
- * about. `w`/`h` come back with it so layout never has to decode the image.
- *
- * Throws on anything that is not a decodable image; the caller keeps the plain
- * attachment path.
+ * Draws a picture into a canvas whose long side is `box`, cropping a ratio
+ * beyond `GLYPH_MAX_RATIO` from the centre. The glyph and the larger display
+ * copy both come from here, so a picture shown at Large frames exactly what
+ * its glyph frames.
  */
-export async function createNodeImageGlyph(file: File): Promise<NodeImageGlyph> {
-  const bitmap = await createImageBitmap(file);
+async function drawImageBox(source: Blob, box: number): Promise<HTMLCanvasElement> {
+  const bitmap = await createImageBitmap(source);
   try {
     // Clamp the ratio first, by cropping the excess from the centre. Scaling an
     // unclamped panorama would leave a few unreadable pixels on the short side.
@@ -148,9 +142,10 @@ export async function createNodeImageGlyph(file: File): Promise<NodeImageGlyph> 
     const sx = (bitmap.width - sw) / 2;
     const sy = (bitmap.height - sh) / 2;
 
-    const scale = GLYPH_BOX / Math.max(sw, sh);
-    const w = Math.max(GLYPH_MIN_SIDE, Math.round(sw * scale));
-    const h = Math.max(GLYPH_MIN_SIDE, Math.round(sh * scale));
+    const scale = box / Math.max(sw, sh);
+    const minSide = Math.round(GLYPH_MIN_SIDE * (box / GLYPH_BOX));
+    const w = Math.max(minSide, Math.round(sw * scale));
+    const h = Math.max(minSide, Math.round(sh * scale));
 
     const canvas = document.createElement('canvas');
     canvas.width = w;
@@ -158,16 +153,50 @@ export async function createNodeImageGlyph(file: File): Promise<NodeImageGlyph> 
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas rendering is unavailable');
     ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, w, h);
-
-    let thumb = '';
-    for (const quality of GLYPH_QUALITIES) {
-      thumb = await encodeGlyph(canvas, quality);
-      if (thumb.length <= GLYPH_MAX_BYTES) break;
-    }
-    return { thumb, w, h };
+    return canvas;
   } finally {
     bitmap.close();
   }
+}
+
+/**
+ * Builds the small picture drawn on the node itself.
+ *
+ * Unlike `createEncryptedFilePreview` this is a glyph, not a card: no
+ * background, no filename bar, and the canvas *is* the aspect ratio — the
+ * bitmap is encoded at exactly the dimensions it will be drawn at, so there is
+ * no letterbox, no crop at render time, and no `preserveAspectRatio` to reason
+ * about. `w`/`h` come back with it so layout never has to decode the image.
+ *
+ * Throws on anything that is not a decodable image; the caller keeps the plain
+ * attachment path.
+ */
+export async function createNodeImageGlyph(file: File): Promise<NodeImageGlyph> {
+  const canvas = await drawImageBox(file, GLYPH_BOX);
+  let thumb = '';
+  for (const quality of GLYPH_QUALITIES) {
+    thumb = await encodeGlyph(canvas, quality);
+    if (thumb.length <= GLYPH_MAX_BYTES) break;
+  }
+  return { thumb, w: canvas.width, h: canvas.height };
+}
+
+/**
+ * The picture for a node shown above the glyph's size: the original, framed
+ * like the glyph and scaled to `box` on its long side, as an object URL. Never
+ * stored — it is rebuilt from the original whenever the map is opened — so it
+ * has no byte budget, only a size that keeps a 12-megapixel photo from being
+ * decoded at full size for every pan. The caller revokes it.
+ */
+export async function createImageDisplayUrl(source: Blob, box: number): Promise<string> {
+  const canvas = await drawImageBox(source, box);
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((value) => {
+      if (value) resolve(value);
+      else reject(new Error('Failed to encode node image'));
+    }, 'image/webp', 0.85);
+  });
+  return URL.createObjectURL(blob);
 }
 
 export async function createEncryptedFilePreview(file: File): Promise<{

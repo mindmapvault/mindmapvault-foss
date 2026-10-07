@@ -1,4 +1,4 @@
-import type { NodeLink } from '@mindmapvault/mindmap-core';
+import type { ImageSize, ImageSizes, NodeLink } from '@mindmapvault/mindmap-core';
 export type { NodeLink };
 
 // ── Shared API/backend types ──────────────────────────────────────────────────
@@ -374,8 +374,12 @@ export interface NodeAttachmentRef {
   preview_content_type?: string | null;
   preview_kind?: 'image' | 'card';
   uploaded_at: string;
-  /** Local-mode inline payload (base64) for standalone FOSS attachments. */
+  /** Local-mode inline payload (base64). Written by 0.6.3 and earlier, and by
+   *  `.mmvault` exports; moved out to a file when a local map is opened. */
   inline_data_base64?: string;
+  /** Local mode: the original is a file beside the map, encrypted with this
+   *  key (base64). See storage/localAttachments.ts. */
+  local_file_key_b64?: string;
   /** Optional local-mode preview payload (base64). */
   inline_preview_data_base64?: string;
 }
@@ -433,6 +437,8 @@ export interface NodeImage {
   attachment_id?: string | null;
   /** Original filename — preview modal title and download name. */
   name?: string;
+  /** Display preset; absent means S. `w`/`h` stay the glyph's. */
+  size?: ImageSize;
 }
 
 export interface MindMapTree {
@@ -446,4 +452,6 @@ export interface MindMapTree {
     focus_anchor_id?: string | null;
     selected_node_id?: string;
   };
+  /** Pixel size of each picture preset in this map; defaults when absent. */
+  image_sizes?: ImageSizes;
 }

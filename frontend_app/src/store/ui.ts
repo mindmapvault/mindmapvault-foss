@@ -59,7 +59,16 @@ interface UiState {
    *  was left instead of jumping back to the corner. */
   shortcutsPos: { x: number; y: number } | null;
   setShortcutsPos: (pos: { x: number; y: number } | null) => void;
+
+  /** Zoom for the whole window, 1 = 100 %. For screens where the OS scaling
+   *  still leaves the interface small (a 15" 4K laptop). Desktop only — a
+   *  browser has its own zoom. */
+  interfaceScale: number;
+  setInterfaceScale: (scale: number) => void;
 }
+
+/** The steps offered in Settings → Interface. */
+export const INTERFACE_SCALES = [1, 1.25, 1.5, 1.75, 2];
 
 export const useUiStore = create<UiState>()(
   persist(
@@ -122,6 +131,9 @@ export const useUiStore = create<UiState>()(
 
       shortcutsPos: null,
       setShortcutsPos: (shortcutsPos) => set({ shortcutsPos }),
+
+      interfaceScale: 1,
+      setInterfaceScale: (interfaceScale) => set({ interfaceScale }),
     }),
     { name: 'mindmapvault-ui' },
   ),

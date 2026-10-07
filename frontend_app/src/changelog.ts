@@ -12,7 +12,7 @@
  * equal `CHANGELOG[0].version`.
  */
 
-export const APP_VERSION = '0.6.3';
+export const APP_VERSION = '0.6.4';
 
 /**
  * localStorage key recording the last version whose "What's New" the user saw.
@@ -36,6 +36,43 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.6.4',
+    date: '2026-10-07',
+    highlights: 'Pictures in three sizes, and hand-placed nodes stay where you put them.',
+    items: [
+      {
+        kind: 'fix',
+        title: 'Adding a node no longer moves the ones you placed by hand',
+        desc: 'A new child or sibling used to snap the whole branch back to the automatic layout. Hand-placed nodes now stay put, and the new node goes next to its neighbours.',
+      },
+      {
+        kind: 'feature',
+        title: 'Pictures on nodes in three sizes',
+        desc: 'Right-click a picture and choose Small, Medium or Large. The pixel size of each can be set per map with the “…” next to them. Larger pictures are drawn from the original, so they stay sharp, and the map file does not grow.',
+      },
+      {
+        kind: 'improvement',
+        title: 'Pictures no longer weigh down the map',
+        desc: 'The original of every attached file is now kept beside the map instead of inside it, so a map with many photos saves and undoes as quickly as one without. Existing maps are converted the first time you open them; an export still carries everything.',
+      },
+      {
+        kind: 'feature',
+        title: 'Interface size',
+        desc: 'Settings → Interface → Interface size makes the whole window larger, from 100 to 200 %. Useful on small high-resolution screens.',
+      },
+      {
+        kind: 'fix',
+        title: 'Pasting a picture works on Linux',
+        desc: 'Ctrl+V with a copied image now puts it on the selected node on Linux too. The Image button tooltip mentions the shortcut.',
+      },
+      {
+        kind: 'fix',
+        title: 'Vault previews stay after leaving the editor',
+        desc: 'Going back to the vault list from a map left every card without its preview until the next unlock.',
+      },
+    ],
+  },
   {
     version: '0.6.3',
     date: '2026-09-28',

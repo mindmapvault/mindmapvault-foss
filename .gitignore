@@ -86,6 +86,10 @@ RELEASE_PROCESS.md
 desktop/snap/deb/
 desktop/snap/*.snap
 
+# winget manifests: generated per release (wingetcreate) and submitted to
+# microsoft/winget-pkgs, which is where they live. A copy here only goes stale.
+desktop/winget/
+
 # Store packaging: signing material and built packages never belong here. The
 # certificate lives in the Windows certificate store; see desktop/msix/build-msix.ps1.
 *.pfx

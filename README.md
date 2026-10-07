@@ -324,6 +324,11 @@ Contribution expectations:
 - avoid hidden telemetry and avoid leaking sensitive data to logs
 - document user-visible and security-relevant changes clearly
 
+## Support
+
+MindMapVault FOSS is free and stays free. If it is useful to you and you want
+to say thanks, you can [buy me a coffee](https://buymeacoffee.com/kornelko).
+
 ## License
 
 MindMapVault FOSS is released under the MIT license. See LICENSE for details.

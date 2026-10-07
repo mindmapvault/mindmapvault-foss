@@ -153,3 +153,44 @@ Recommended pattern:
 
 - sync repository to a native WSL folder
 - run pnpm install and pnpm --dir frontend_app tauri:build there
+
+## Store Packages (Snap Store and Microsoft Store)
+
+CI (`desktop-build.yml`, on a published GitHub release) builds the setup.exe,
+AppImage and DMG. It does **not** build the snap or the MSIX; both are made
+locally after the release, from the same version. Bump
+`desktop/snap/snapcraft.yaml` (`version`) and the default `-Version` in
+`desktop/msix/build-msix.ps1` with the other version files.
+
+Build the frontend once (`npm run build` in `frontend_app`, after
+`pnpm install` so new dependencies are present), then build the desktop
+binaries with `beforeBuildCommand` overridden to `""`. Note the entry bundle
+name (`index-<hash>.js` in `frontend_app/dist/index.html`) and confirm each
+binary embeds it — a stale binary otherwise ships silently.
+
+### Microsoft Store (MSIX)
+
+1. Windows: `tauri build --no-bundle` (from the Build Tools dev shell), then
+   copy `target/release/MindMapVault-foss.exe` to
+   `%USERPROFILE%\Downloads\mindmapvault-foss-X.Y.Z-release\MindMapVault-FOSS_X.Y.Z_x64-portable.exe`.
+2. `desktop/msix/build-msix.ps1 -Version X.Y.Z` packs and signs it.
+3. **The Store needs a four-part version.** Pass the three-part version to
+   the script; it writes `Version="X.Y.Z.0"` into the manifest and produces
+   two identical files. **Upload `MindMapVault-FOSS_X.Y.Z.0_x64.msix`** in
+   Partner Center (product `9NMNK1P8D7CZ`). The three-part copy is for the
+   download bucket only.
+
+### Snap Store (`mindmapvault-foss`)
+
+1. Linux (WSL): sync the repo to a native folder and run
+   `tauri build --config tauri.conf.json --config tauri.conf.linux.json`.
+2. As root, in a **fresh, versioned** directory (destructive mode does not
+   re-pull the deb, so a reused directory ships the old binary):
+   `snap/snapcraft.yaml` plus the deb as `deb/mindmapvault-foss.deb`, then
+   `snapcraft pack --destructive-mode`.
+3. Verify: the entry bundle hash is in `prime/usr/bin/MindMapVault-foss`
+   (`grep -a -o`), and no `libwebkit2gtk-4.1.so*` is staged under `prime/`.
+4. Upload as the logged-in user from their **home directory** — the
+   snapcraft snap has a private `/tmp` and reports files there as
+   "not a valid file":
+   `snapcraft upload ~/mindmapvault-foss_X.Y.Z_amd64.snap --release stable`.

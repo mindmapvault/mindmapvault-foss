@@ -3,7 +3,8 @@
 # version's portable exe. Usage: .\build-msix.ps1 -Version 0.6.4 - expects
 # %USERPROFILE%\Downloads\mindmapvault-foss-<version>-release\MindMapVault-FOSS_<version>_x64-portable.exe
 # (target\release\MindMapVault-foss.exe from "tauri build --no-bundle") and
-# writes the .msix beside it. Needs the Windows 10 SDK (makeappx, signtool)
+# writes the .msix beside it. UPLOAD THE FOUR-PART FILE to Partner Center,
+# MindMapVault-FOSS_<version>.0_x64.msix: the Store requires X.Y.Z.0. Needs the Windows 10 SDK (makeappx, signtool)
 # and the store signing certificate in the current user's store. Nothing
 # secret lives in this file: the certificate and its private key stay in the
 # Windows certificate store and are looked up by subject at run time.

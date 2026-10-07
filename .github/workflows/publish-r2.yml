@@ -1,0 +1,74 @@
+name: publish-r2
+
+# Copies a release's desktop packages to the download bucket behind
+# downloads.mindmapvault.com, which is what the website links to:
+#
+#   foss/windows/<version>/MindMapVault-FOSS_<version>_x64-setup.exe
+#   foss/macos/<version>/MindMapVault-FOSS_<version>_universal.dmg
+#   foss/linux/<version>/MindMapVault-FOSS_<version>_amd64.AppImage
+#
+# Runs on its own after desktop-build succeeds for a release, and by hand for
+# a tag whose packages are already attached (no rebuild). It only reads the
+# release, so a failed upload is fixed by running it again.
+#
+# Needs two repository secrets: CLOUDFLARE_API_TOKEN with
+# "Workers R2 Storage: Edit", and CLOUDFLARE_ACCOUNT_ID.
+on:
+  workflow_run:
+    workflows: [desktop-build]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag whose packages to publish, e.g. v0.6.4'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'release')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag || github.event.workflow_run.head_branch }}
+    steps:
+      - name: Download the release packages
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          mkdir dist
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -D dist \
+            -p '*_x64-setup.exe' -p '*_universal.dmg' -p '*_amd64.AppImage'
+          ls -l dist
+
+      - name: Upload to R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          declare -A platform=( [x64-setup.exe]=windows [universal.dmg]=macos [amd64.AppImage]=linux )
+          count=0
+          for suffix in "${!platform[@]}"; do
+            src=$(ls dist/*_"$VERSION"_"$suffix")
+            key="foss/${platform[$suffix]}/$VERSION/MindMapVault-FOSS_${VERSION}_${suffix}"
+            echo "→ $key"
+            npx --yes wrangler@4 r2 object put "mindmapvault-downloads/$key" \
+              --file "$src" --content-type application/octet-stream --remote
+            count=$((count + 1))
+          done
+          [ "$count" -eq 3 ] || { echo "::error::expected 3 packages, uploaded $count"; exit 1; }
+
+      - name: Check the public URLs
+        run: |
+          set -euo pipefail
+          for path in "windows/$VERSION/MindMapVault-FOSS_${VERSION}_x64-setup.exe" \
+                      "macos/$VERSION/MindMapVault-FOSS_${VERSION}_universal.dmg" \
+                      "linux/$VERSION/MindMapVault-FOSS_${VERSION}_amd64.AppImage"; do
+            code=$(curl -s -o /dev/null -I -w '%{http_code}' "https://downloads.mindmapvault.com/foss/$path")
+            echo "$code $path"
+            [ "$code" = 200 ]
+          done

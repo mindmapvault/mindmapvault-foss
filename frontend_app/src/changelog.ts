@@ -12,7 +12,7 @@
  * equal `CHANGELOG[0].version`.
  */
 
-export const APP_VERSION = '0.6.4';
+export const APP_VERSION = '0.6.5';
 
 /**
  * localStorage key recording the last version whose "What's New" the user saw.
@@ -36,6 +36,18 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.6.5',
+    date: '2026-10-08',
+    highlights: 'Medium and Large pictures are sharp in the desktop app.',
+    items: [
+      {
+        kind: 'fix',
+        title: 'Medium and Large pictures are sharp in the desktop app',
+        desc: 'They were drawn from the small 64 px thumbnail, stretched, because the app’s security policy blocked reading the original back from memory. The same block also left pictures out of PDF exports and broke Download in the attachment preview.',
+      },
+    ],
+  },
   {
     version: '0.6.4',
     date: '2026-10-07',

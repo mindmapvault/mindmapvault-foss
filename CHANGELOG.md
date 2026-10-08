@@ -4,7 +4,9 @@ All notable changes to this repository are documented here.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
-## [Unreleased]
+## [0.6.5] - 2026-10-08
+
+Medium and Large pictures are sharp in the desktop app.
 
 ### Fixed
 - **Medium and Large pictures are sharp in the desktop app.** They were drawn from the small 64 px thumbnail, stretched, because the app's security policy blocked reading the original back from memory. The same block also left pictures out of PDF exports and broke Download in the attachment preview.

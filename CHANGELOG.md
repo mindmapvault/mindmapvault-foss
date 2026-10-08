@@ -4,6 +4,11 @@ All notable changes to this repository are documented here.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [Unreleased]
+
+### Fixed
+- **Medium and Large pictures are sharp in the desktop app.** They were drawn from the small 64 px thumbnail, stretched, because the app's security policy blocked reading the original back from memory. The same block also left pictures out of PDF exports and broke Download in the attachment preview.
+
 ## [0.6.4] - 2026-10-07
 
 Pictures in three sizes, and hand-placed nodes stay where you put them.

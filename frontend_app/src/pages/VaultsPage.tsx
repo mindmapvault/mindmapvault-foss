@@ -742,7 +742,7 @@ export function VaultsPage() {
                   </svg>
                 </button>
                 {showImportMenu && (
-                  <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 4px)', zIndex: 200, minWidth: 200, background: 'var(--color-surface-1, #1e293b)', border: '1px solid var(--color-border, #334155)', borderRadius: 8, padding: '4px 0', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+                  <div style={{ position: 'absolute', right: 0, top: 'calc(100% + 4px)', zIndex: 200, minWidth: 200, background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 8, padding: '4px 0', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
                     {IMPORT_MENU_ITEMS.map((item) => (
                       <button
                         key={`${item.format}-${item.label}`}

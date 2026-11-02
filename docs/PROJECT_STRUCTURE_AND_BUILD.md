@@ -154,7 +154,7 @@ Recommended pattern:
 - sync repository to a native WSL folder
 - run pnpm install and pnpm --dir frontend_app tauri:build there
 
-## Store Packages (Snap Store and Microsoft Store)
+## Store Packages (Snap Store, Microsoft Store, Flathub)
 
 CI (`desktop-build.yml`, on a published GitHub release) builds the setup.exe,
 AppImage and DMG. It does **not** build the snap or the MSIX; both are made
@@ -194,3 +194,32 @@ binary embeds it — a stale binary otherwise ships silently.
    snapcraft snap has a private `/tmp` and reports files there as
    "not a valid file":
    `snapcraft upload ~/mindmapvault-foss_X.Y.Z_amd64.snap --release stable`.
+
+### Flathub (`com.mindmapvault.MindMapVaultFOSS`)
+
+Automated. Unlike the snap, Flathub builds from source on its own servers,
+offline, so the manifest in `desktop/flatpak/` pins the release tag and lists
+every cargo and npm dependency. Nothing in it needs a version bump: the tag
+comes from the release and the store's release notes are generated from
+`CHANGELOG.md` at build time.
+
+On a published release, `flatpak.yml`:
+
+1. regenerates `cargo-sources.json` and `node-sources.json` from the
+   lockfiles (`desktop/flatpak/generate-sources.sh`),
+2. builds the Flatpak once to catch breakage early,
+3. pushes the manifest, pinned to the tag, plus both lists to a branch of
+   `flathub/com.mindmapvault.MindMapVaultFOSS` and opens a PR there.
+
+Flathub's bot test-builds that PR. **Merge it** once the build is green;
+that publishes the update, usually within a few hours. If `FLATHUB_TOKEN` is
+not set, step 3 is skipped with a notice.
+
+The same workflow test-builds pull requests that touch the manifest or a
+lockfile. To resend an existing release, run the workflow by hand with its
+tag.
+
+The Flatpak has no network access, like the snap. It does get the home
+folder (`--filesystem=home`), because the vault folder can be moved anywhere
+and the app reopens that path on every start. Open and save dialogs go
+through the file chooser portal.

@@ -1,0 +1,149 @@
+name: flatpak
+
+# Builds the Flatpak from source, and on a release opens a pull request
+# against flathub/com.mindmapvault.MindMapVaultFOSS with the new tag and
+# regenerated dependency lists. Flathub test-builds that PR; merging it
+# publishes the update. See docs/PROJECT_STRUCTURE_AND_BUILD.md, "Flathub".
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to build and send to Flathub (e.g. v0.6.6)'
+        required: true
+  pull_request:
+    paths:
+      - 'desktop/flatpak/**'
+      - 'desktop/src-tauri/Cargo.lock'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/flatpak.yml'
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  APP_ID: com.mindmapvault.MindMapVaultFOSS
+  RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+  # Pinned so a change upstream cannot silently change what we ship.
+  FLATPAK_BUILDER_TOOLS_COMMIT: 9d86d336a39b9af38b86f114b6ce5820fe260f91
+
+jobs:
+  build:
+    name: Build Flatpak (x86_64)
+    runs-on: ubuntu-24.04
+    container:
+      # Keep the gnome-NN tag in step with runtime-version in the manifest.
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
+      options: --privileged
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_TAG || github.sha }}
+
+      - name: Install source generators
+        run: |
+          git clone -q https://github.com/flatpak/flatpak-builder-tools /opt/fbt
+          git -C /opt/fbt checkout -q "$FLATPAK_BUILDER_TOOLS_COMMIT"
+          python3 -m venv /opt/fbt-venv
+          /opt/fbt-venv/bin/pip install -q /opt/fbt/node aiohttp PyYAML tomlkit
+
+      - name: Generate dependency lists
+        run: |
+          PATH=/opt/fbt-venv/bin:$PATH FLATPAK_BUILDER_TOOLS=/opt/fbt \
+            desktop/flatpak/generate-sources.sh
+
+      - name: Build
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: desktop/flatpak/${{ env.APP_ID }}.yml
+          bundle: mindmapvault-foss.flatpak
+          cache-key: flatpak-builder-${{ hashFiles('desktop/src-tauri/Cargo.lock', 'pnpm-lock.yaml') }}
+          arch: x86_64
+          # As Flathub's build service does; the repo linter checks for it.
+          mirror-screenshots-url: https://dl.flathub.org/media
+
+      # The same linter Flathub runs on submission.
+      - name: Lint
+        run: |
+          flatpak install -y --noninteractive flathub org.flatpak.Builder
+          flatpak run --command=flatpak-builder-lint org.flatpak.Builder \
+            manifest "desktop/flatpak/$APP_ID.yml"
+          flatpak run --command=flatpak-builder-lint org.flatpak.Builder repo repo
+
+      - name: Keep dependency lists for the Flathub update
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: flathub-sources
+          path: |
+            desktop/flatpak/cargo-sources.json
+            desktop/flatpak/node-sources.json
+
+  flathub:
+    name: Open Flathub update PR
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check token
+        id: token
+        env:
+          FLATHUB_TOKEN: ${{ secrets.FLATHUB_TOKEN }}
+        run: |
+          if [ -z "$FLATHUB_TOKEN" ]; then
+            echo "::notice::FLATHUB_TOKEN is not set; skipping the Flathub PR."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.token.outputs.present == 'true'
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+
+      - name: Download dependency lists
+        if: steps.token.outputs.present == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: flathub-sources
+          path: desktop/flatpak
+
+      - name: Push the update and open the PR
+        if: steps.token.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.FLATHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          commit=$(git rev-parse "$RELEASE_TAG^{commit}")
+          branch="update-$RELEASE_TAG"
+
+          git clone -q "https://x-access-token:${GH_TOKEN}@github.com/flathub/$APP_ID.git" flathub
+          python3 desktop/flatpak/render-flathub-manifest.py \
+            "desktop/flatpak/$APP_ID.yml" "$RELEASE_TAG" "$commit" > "flathub/$APP_ID.yml"
+          cp desktop/flatpak/cargo-sources.json desktop/flatpak/node-sources.json flathub/
+
+          cd flathub
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -b "$branch"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "::notice::Flathub repo already matches $RELEASE_TAG."
+            exit 0
+          fi
+          git commit -q -m "Update to $RELEASE_TAG"
+          git push -q --force origin "$branch"
+          if ! gh pr view "$branch" --repo "flathub/$APP_ID" >/dev/null 2>&1; then
+            gh pr create --repo "flathub/$APP_ID" --head "$branch" --base master \
+              --title "Update to $RELEASE_TAG" \
+              --body "https://github.com/mindmapvault/mindmapvault-foss/releases/tag/$RELEASE_TAG"
+          fi

@@ -130,6 +130,38 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Signing is on only when the Apple secrets exist; without them the
+      # build gets an ad-hoc signature, as before. Tauri reads these env vars
+      # to sign with the Developer ID and notarize, with no change to the
+      # build command. Exported only when set: an empty APPLE_CERTIFICATE
+      # would make tauri try to import nothing and fail.
+      - name: Set up Apple signing
+        id: apple
+        env:
+          CERT: ${{ secrets.APPLE_CERTIFICATE }}
+          CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          API_KEY: ${{ secrets.APPLE_API_KEY }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          if [ -z "$CERT" ] || [ -z "$API_PRIVATE_KEY" ]; then
+            echo "::notice::Apple signing secrets not set; the DMG gets an ad-hoc signature."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          key_path="$RUNNER_TEMP/AuthKey_$API_KEY.p8"
+          printf '%s\n' "$API_PRIVATE_KEY" > "$key_path"
+          {
+            echo "APPLE_CERTIFICATE=$CERT"
+            echo "APPLE_CERTIFICATE_PASSWORD=$CERT_PASSWORD"
+            echo "APPLE_SIGNING_IDENTITY=$IDENTITY"
+            echo "APPLE_API_KEY=$API_KEY"
+            echo "APPLE_API_ISSUER=$API_ISSUER"
+            echo "APPLE_API_KEY_PATH=$key_path"
+          } >> "$GITHUB_ENV"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
       - name: Build desktop app (universal DMG)
         run: pnpm --dir frontend_app tauri:build --target universal-apple-darwin
 
@@ -153,7 +185,23 @@ jobs:
           lipo -archs "$APP_BIN"
           lipo -archs "$APP_BIN" | grep -q arm64
           lipo -archs "$APP_BIN" | grep -q x86_64
-          codesign -dv "$APP_BIN" 2>&1 | grep -q 'Signature=adhoc'
+          if [ '${{ steps.apple.outputs.signed }}' != 'true' ]; then
+            codesign -dv "$APP_BIN" 2>&1 | grep -q 'Signature=adhoc'
+          fi
+
+      # What a user's Mac checks: the app in the DMG is signed with the
+      # Developer ID, notarized, and has the ticket stapled.
+      - name: Verify signature and notarization
+        if: steps.apple.outputs.signed == 'true'
+        run: |
+          mnt=$(mktemp -d)
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" '${{ steps.mac_paths.outputs.dmg_path }}'
+          app=$(find "$mnt" -maxdepth 1 -name '*.app' | head -n 1)
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv --verbose=2 "$app" 2>&1 | grep -q 'Authority=Developer ID Application'
+          xcrun stapler validate "$app"
+          spctl --assess --type execute --verbose=2 "$app"
+          hdiutil detach "$mnt"
 
       - name: Generate SHA256 checksums (macOS)
         run: |

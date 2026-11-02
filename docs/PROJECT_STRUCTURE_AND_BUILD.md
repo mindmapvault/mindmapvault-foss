@@ -154,6 +154,27 @@ Recommended pattern:
 - sync repository to a native WSL folder
 - run pnpm install and pnpm --dir frontend_app tauri:build there
 
+## macOS Signing and Notarization
+
+`desktop-build.yml` signs the DMG with the Developer ID and notarizes it
+when these repository secrets exist, and falls back to an ad-hoc signature
+when they do not:
+
+| Secret | Value |
+|---|---|
+| `APPLE_CERTIFICATE` | base64 of the exported Developer ID Application `.p12` |
+| `APPLE_CERTIFICATE_PASSWORD` | the password chosen at export |
+| `APPLE_SIGNING_IDENTITY` | `Developer ID Application: <name> (<team id>)` |
+| `APPLE_API_KEY` | App Store Connect API key ID |
+| `APPLE_API_ISSUER` | App Store Connect issuer ID |
+| `APPLE_API_PRIVATE_KEY` | contents of `AuthKey_<key id>.p8` |
+
+A signed run checks the DMG's app for the Developer ID signature, the
+stapled notarization ticket, and Gatekeeper acceptance. The current
+Developer ID certificate (G2) expires on 2027-12-02; create a new one on
+developer.apple.com and replace the first three secrets before then. Apps
+already signed and notarized keep opening after it expires.
+
 ## Store Packages (Snap Store, Microsoft Store, Flathub)
 
 CI (`desktop-build.yml`, on a published GitHub release) builds the setup.exe,

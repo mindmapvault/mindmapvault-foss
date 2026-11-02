@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=MindMapVault FOSS
+GenericName=Mind Map Editor
+Comment=Encrypted mind maps that stay on your computer
+Exec=mindmapvault-foss
+Icon=com.mindmapvault.MindMapVaultFOSS
+Terminal=false
+Categories=Office;
+Keywords=mind map;mindmap;notes;outline;brainstorm;encrypted;offline;
+StartupWMClass=mindmapvault-foss

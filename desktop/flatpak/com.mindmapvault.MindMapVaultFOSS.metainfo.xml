@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The <releases> list is filled in at build time from CHANGELOG.md by
+     metainfo-releases.py, so a release needs no edit here. -->
+<component type="desktop-application">
+  <id>com.mindmapvault.MindMapVaultFOSS</id>
+  <name>MindMapVault FOSS</name>
+  <summary>Encrypted mind maps that stay on your computer</summary>
+  <developer id="com.mindmapvault">
+    <name>MindMapVault</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <description>
+    <p>
+      MindMapVault FOSS is a mind mapping app for people who want their notes to
+      stay private. Every map is encrypted on your computer before it is saved,
+      and nothing ever leaves it: there is no account, no server and no
+      telemetry.
+    </p>
+    <p>
+      This Flatpak has no network access at all, so the offline promise is
+      enforced by the sandbox rather than taken on trust.
+    </p>
+    <ul>
+      <li>Fast keyboard-driven editing: Tab for a child, Enter for a sibling</li>
+      <li>Notes, pictures and file attachments on nodes</li>
+      <li>Local profiles, each unlocked with its own password</li>
+      <li>Keep vaults in any folder, including one you sync yourself</li>
+      <li>Import and export FreeMind, Freeplane, XMind, WiseMapping and Markdown</li>
+      <li>Export to PDF</li>
+    </ul>
+    <p>
+      An open source alternative to XMind and MindMeister.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">com.mindmapvault.MindMapVaultFOSS.desktop</launchable>
+  <provides>
+    <binary>mindmapvault-foss</binary>
+  </provides>
+
+  <screenshots>
+    <!-- Flathub wants real app windows. Add more (vault list, settings)
+         as PNGs under desktop/flatpak/screenshots/. -->
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/mindmapvault/mindmapvault-foss/main/docs/assets/hero-preview.png</image>
+      <caption>Editing a mind map, with a picture on a node</caption>
+    </screenshot>
+  </screenshots>
+
+  <url type="homepage">https://mindmapvault.com</url>
+  <url type="bugtracker">https://github.com/mindmapvault/mindmapvault-foss/issues</url>
+  <url type="vcs-browser">https://github.com/mindmapvault/mindmapvault-foss</url>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#ede9fe</color>
+    <color type="primary" scheme_preference="dark">#4c1d95</color>
+  </branding>
+
+  <recommends>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </recommends>
+  <requires>
+    <display_length compare="ge">720</display_length>
+  </requires>
+
+  <content_rating type="oars-1.1"/>
+
+  <keywords>
+    <keyword>mind map</keyword>
+    <keyword>mindmap</keyword>
+    <keyword>notes</keyword>
+    <keyword>encrypted</keyword>
+    <keyword>offline</keyword>
+  </keywords>
+
+  <releases/>
+</component>

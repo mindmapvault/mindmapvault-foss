@@ -1,0 +1,77 @@
+# Flatpak manifest for Flathub. Built from source, offline: every npm and
+# cargo dependency comes from the generated source lists next to this file
+# (see generate-sources.sh). They are not committed; CI generates them.
+#
+# The app source below is the local checkout, for test builds.
+# render-flathub-manifest.py swaps it for the release tag when the manifest
+# is copied to the flathub/com.mindmapvault.MindMapVaultFOSS repo.
+id: com.mindmapvault.MindMapVaultFOSS
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+  - org.freedesktop.Sdk.Extension.node24
+command: mindmapvault-foss
+
+finish-args:
+  # Deliberately no --share=network: this edition never talks to a server,
+  # and the sandbox enforces it, as the snap does.
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  # The vault folder can be moved anywhere (a synced folder, a USB stick).
+  # The app stores that path and reopens it on every start, which a one-off
+  # file chooser portal grant does not cover well. Open and save dialogs
+  # do go through the portal. Same as the snap's `home` plug.
+  - --filesystem=home
+
+modules:
+  - name: mindmapvault-foss
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node24/bin
+      env:
+        CARGO_HOME: /run/build/mindmapvault-foss/cargo
+        CARGO_NET_OFFLINE: 'true'
+        XDG_CACHE_HOME: /run/build/mindmapvault-foss/flatpak-node/cache
+        npm_config_offline: 'true'
+    build-commands:
+      # pnpm itself comes from the npm tarball below, not from corepack,
+      # which would try to download it.
+      - node pnpm/bin/pnpm.cjs install --offline --frozen-lockfile --filter mindmapvault-desktop-app...
+      - node pnpm/bin/pnpm.cjs --dir frontend_app build
+      # Without the tauri CLI, the release build has to ask for the embedded
+      # frontend itself; otherwise the binary would load devUrl.
+      - cargo --offline build --release --features tauri/custom-protocol --manifest-path desktop/src-tauri/Cargo.toml
+      - install -Dm755 desktop/src-tauri/target/release/MindMapVault-foss /app/bin/mindmapvault-foss
+      - install -Dm644 desktop/flatpak/com.mindmapvault.MindMapVaultFOSS.desktop -t /app/share/applications
+      - python3 desktop/flatpak/metainfo-releases.py CHANGELOG.md desktop/flatpak/com.mindmapvault.MindMapVaultFOSS.metainfo.xml > com.mindmapvault.MindMapVaultFOSS.metainfo.xml
+      - install -Dm644 com.mindmapvault.MindMapVaultFOSS.metainfo.xml -t /app/share/metainfo
+      - install -Dm644 desktop/src-tauri/icons/32x32.png /app/share/icons/hicolor/32x32/apps/com.mindmapvault.MindMapVaultFOSS.png
+      - install -Dm644 desktop/src-tauri/icons/64x64.png /app/share/icons/hicolor/64x64/apps/com.mindmapvault.MindMapVaultFOSS.png
+      - install -Dm644 desktop/src-tauri/icons/128x128.png /app/share/icons/hicolor/128x128/apps/com.mindmapvault.MindMapVaultFOSS.png
+      - install -Dm644 desktop/src-tauri/icons/128x128@2x.png /app/share/icons/hicolor/256x256/apps/com.mindmapvault.MindMapVaultFOSS.png
+      - install -Dm644 desktop/src-tauri/icons/icon.png /app/share/icons/hicolor/512x512/apps/com.mindmapvault.MindMapVaultFOSS.png
+    sources:
+      # @@APP_SOURCE@@ (replaced for Flathub, keep this marker)
+      - type: dir
+        path: ../..
+        skip:
+          - .git
+          - node_modules
+          - frontend_app/node_modules
+          - frontend_app/dist
+          - demo/node_modules
+          - mobile-demo/node_modules
+          - desktop/src-tauri/target
+          - .flatpak-builder
+          - flatpak-build
+      # Keep in step with `packageManager` in the root package.json.
+      - type: archive
+        url: https://registry.npmjs.org/pnpm/-/pnpm-10.17.1.tgz
+        sha256: a1e0133f6801c13039ae41309e5e5a7d1058a3a1e1edd020a4944a83c5368d04
+        dest: pnpm
+      - cargo-sources.json
+      - node-sources.json

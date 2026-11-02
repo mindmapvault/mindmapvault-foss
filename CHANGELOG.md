@@ -4,6 +4,16 @@ All notable changes to this repository are documented here.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [0.6.6] - 2026-11-02
+
+A Flatpak build for Linux, and the Import menu follows light mode.
+
+### Added
+- **Flatpak build for Linux.** The app is now also built as a Flatpak, from source and offline, with no network access in its sandbox. It is on its way to Flathub; until then each release builds it in CI.
+
+### Fixed
+- **The Import menu on the vault list follows light mode.** It stayed dark when the rest of the app was light.
+
 ## [0.6.5] - 2026-10-08
 
 Medium and Large pictures are sharp in the desktop app.

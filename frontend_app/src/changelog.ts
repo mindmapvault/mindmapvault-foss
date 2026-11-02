@@ -12,7 +12,7 @@
  * equal `CHANGELOG[0].version`.
  */
 
-export const APP_VERSION = '0.6.5';
+export const APP_VERSION = '0.6.6';
 
 /**
  * localStorage key recording the last version whose "What's New" the user saw.
@@ -36,6 +36,23 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.6.6',
+    date: '2026-11-02',
+    highlights: 'A Flatpak build for Linux, and the Import menu follows light mode.',
+    items: [
+      {
+        kind: 'feature',
+        title: 'Flatpak build for Linux',
+        desc: 'The app is now also built as a Flatpak, from source and offline, with no network access in its sandbox. It is on its way to Flathub.',
+      },
+      {
+        kind: 'fix',
+        title: 'The Import menu on the vault list follows light mode',
+        desc: 'It stayed dark when the rest of the app was light.',
+      },
+    ],
+  },
   {
     version: '0.6.5',
     date: '2026-10-08',

@@ -12,7 +12,7 @@
  * equal `CHANGELOG[0].version`.
  */
 
-export const APP_VERSION = '0.6.6';
+export const APP_VERSION = '0.6.7';
 
 /**
  * localStorage key recording the last version whose "What's New" the user saw.
@@ -36,6 +36,23 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.6.7',
+    date: '2026-11-03',
+    highlights: 'On the Mac App Store, and ticked tasks show their tick in light mode.',
+    items: [
+      {
+        kind: 'feature',
+        title: 'Mac App Store build',
+        desc: "The app is now also built for the Mac App Store, where it runs in Apple's sandbox. A vault folder you moved elsewhere is still found after a restart there.",
+      },
+      {
+        kind: 'fix',
+        title: 'Ticked tasks in notes show their tick in light mode',
+        desc: 'In light mode a ticked box looked empty, both while reading and while writing a note.',
+      },
+    ],
+  },
   {
     version: '0.6.6',
     date: '2026-11-02',

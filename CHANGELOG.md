@@ -4,6 +4,16 @@ All notable changes to this repository are documented here.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [0.6.7] - 2026-11-03
+
+On the Mac App Store, and ticked tasks show their tick in light mode.
+
+### Added
+- **Mac App Store build.** The app is now also built for the Mac App Store, where it runs in Apple's sandbox. A vault folder you moved elsewhere is still found after a restart there.
+
+### Fixed
+- **Ticked tasks in notes show their tick in light mode.** In light mode a ticked box looked empty, both while reading and while writing a note.
+
 ## [0.6.6] - 2026-11-02
 
 A Flatpak build for Linux, and the Import menu follows light mode.

@@ -1,0 +1,156 @@
+name: mac-app-store
+
+# Builds the sandboxed Mac App Store version and uploads it to App Store
+# Connect. The upload lands in TestFlight / the version page; submitting it
+# for review stays a manual step in App Store Connect.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to build and upload (e.g. v0.6.7)'
+        required: true
+      build_number:
+        description: 'CFBundleVersion override, for re-uploading the same version (e.g. 0.6.7.1)'
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+
+jobs:
+  mas:
+    name: Mac App Store build
+    runs-on: macos-15
+    steps:
+      - name: Check secrets
+        id: secrets
+        env:
+          APP_CERT: ${{ secrets.MAS_APP_CERTIFICATE }}
+          INSTALLER_CERT: ${{ secrets.MAS_INSTALLER_CERTIFICATE }}
+          PROFILE: ${{ secrets.MAS_PROVISION_PROFILE }}
+        run: |
+          if [ -z "$APP_CERT" ] || [ -z "$INSTALLER_CERT" ] || [ -z "$PROFILE" ]; then
+            echo "::notice::Mac App Store secrets not set; skipping."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.secrets.outputs.ready == 'true'
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Setup pnpm
+        if: steps.secrets.outputs.ready == 'true'
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        if: steps.secrets.outputs.ready == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Setup Rust
+        if: steps.secrets.outputs.ready == 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Rust build artifacts
+        if: steps.secrets.outputs.ready == 'true'
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        if: steps.secrets.outputs.ready == 'true'
+        run: pnpm install --frozen-lockfile
+
+      # Both certificates go into a throwaway keychain. Tauri signs the app with
+      # the Apple Distribution one; productbuild signs the .pkg with the
+      # installer one.
+      - name: Import certificates and profile
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          APP_CERT: ${{ secrets.MAS_APP_CERTIFICATE }}
+          INSTALLER_CERT: ${{ secrets.MAS_INSTALLER_CERTIFICATE }}
+          CERT_PASSWORD: ${{ secrets.MAS_CERTIFICATE_PASSWORD }}
+          PROFILE: ${{ secrets.MAS_PROVISION_PROFILE }}
+        run: |
+          kc="$RUNNER_TEMP/mas.keychain-db"
+          kc_pass=$(openssl rand -hex 16)
+          security create-keychain -p "$kc_pass" "$kc"
+          security set-keychain-settings -lut 3600 "$kc"
+          security unlock-keychain -p "$kc_pass" "$kc"
+          for name in APP_CERT INSTALLER_CERT; do
+            printf '%s' "${!name}" | base64 --decode > "$RUNNER_TEMP/$name.p12"
+            security import "$RUNNER_TEMP/$name.p12" -k "$kc" -P "$CERT_PASSWORD" \
+              -T /usr/bin/codesign -T /usr/bin/productbuild
+            rm "$RUNNER_TEMP/$name.p12"
+          done
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$kc_pass" "$kc" >/dev/null
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+
+          app_id=$(security find-identity -v -p codesigning "$kc" | grep -o '"Apple Distribution: [^"]*"' | head -n 1 | tr -d '"')
+          installer_id=$(security find-identity -v "$kc" | grep -oE '"(3rd Party Mac Developer Installer|Mac Installer Distribution): [^"]*"' | head -n 1 | tr -d '"')
+          if [ -z "$app_id" ] || [ -z "$installer_id" ]; then
+            echo "Could not find both signing identities in the imported certificates" >&2
+            security find-identity -v "$kc" >&2
+            exit 1
+          fi
+          echo "APPLE_SIGNING_IDENTITY=$app_id" >> "$GITHUB_ENV"
+          echo "MAS_INSTALLER_IDENTITY=$installer_id" >> "$GITHUB_ENV"
+
+          printf '%s' "$PROFILE" | base64 --decode > desktop/src-tauri/mas/embedded.provisionprofile
+
+      # The App Store needs a new build number for every upload of a version.
+      - name: Set build number
+        if: steps.secrets.outputs.ready == 'true' && github.event.inputs.build_number != ''
+        env:
+          BUILD_NUMBER: ${{ github.event.inputs.build_number }}
+        run: |
+          jq --arg v "$BUILD_NUMBER" '.bundle.macOS.bundleVersion = $v' \
+            desktop/src-tauri/tauri.conf.mas.json > "$RUNNER_TEMP/mas.json"
+          mv "$RUNNER_TEMP/mas.json" desktop/src-tauri/tauri.conf.mas.json
+
+      # No APPLE_API_* variables here on purpose: they would make Tauri
+      # notarize, which App Store builds do not use.
+      - name: Build sandboxed app (universal)
+        if: steps.secrets.outputs.ready == 'true'
+        run: pnpm --dir frontend_app tauri:build --target universal-apple-darwin --config tauri.conf.mas.json
+
+      - name: Package and verify
+        if: steps.secrets.outputs.ready == 'true'
+        id: pkg
+        run: |
+          app=$(find desktop/src-tauri/target/universal-apple-darwin/release/bundle/macos -maxdepth 1 -name '*.app' | head -n 1)
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -d --entitlements - "$app" 2>/dev/null | grep -q com.apple.security.app-sandbox
+          test -f "$app/Contents/embedded.provisionprofile"
+          pkg="$RUNNER_TEMP/MindMapVault-FOSS.pkg"
+          productbuild --component "$app" /Applications --sign "$MAS_INSTALLER_IDENTITY" "$pkg"
+          echo "pkg=$pkg" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to App Store Connect
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          API_KEY: ${{ secrets.APPLE_API_KEY }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s\n' "$API_PRIVATE_KEY" > ~/.appstoreconnect/private_keys/AuthKey_$API_KEY.p8
+          xcrun altool --upload-app --type macos --file '${{ steps.pkg.outputs.pkg }}' \
+            --apiKey "$API_KEY" --apiIssuer "$API_ISSUER"
+
+      - name: Remove keychain
+        if: always() && steps.secrets.outputs.ready == 'true'
+        run: security delete-keychain "$RUNNER_TEMP/mas.keychain-db" || true

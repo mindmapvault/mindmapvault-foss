@@ -175,6 +175,35 @@ Developer ID certificate (G2) expires on 2027-12-02; create a new one on
 developer.apple.com and replace the first three secrets before then. Apps
 already signed and notarized keep opening after it expires.
 
+## Mac App Store
+
+`mac-app-store.yml` builds a sandboxed copy on each published release and
+uploads it to App Store Connect, where it is submitted for review by hand.
+It differs from the DMG in three ways, all in `tauri.conf.mas.json`:
+
+- bundle ID `com.mindmapvault.MindMapVaultFOSS` (the DMG keeps
+  `com.mindmapvault.desktop`), so its data lives in its own sandbox container;
+- `mas/Entitlements.plist`: sandbox, user-chosen files, folder bookmarks,
+  microphone, and outgoing network. WebKit needs the last one to show the
+  bundled pages; the app itself makes no requests;
+- an embedded provisioning profile, written by CI from a secret.
+
+A vault folder the user moves elsewhere is reopened on the next start from a
+security-scoped bookmark saved next to its path (`src/scoped_folder.rs`).
+
+| Secret | Value |
+|---|---|
+| `MAS_APP_CERTIFICATE` | base64 of the Apple Distribution `.p12` |
+| `MAS_INSTALLER_CERTIFICATE` | base64 of the Mac Installer Distribution `.p12` |
+| `MAS_CERTIFICATE_PASSWORD` | the export password of both `.p12` files |
+| `MAS_PROVISION_PROFILE` | base64 of the "Mac App Store Connect" provisioning profile |
+
+The two certificates and the profile expire on 2027-11-03; renew all three and
+replace the four secrets before then. The upload reuses the `APPLE_API_*`
+secrets from notarization. Every upload
+needs a new build number: to re-upload a version, run the workflow by hand
+with `build_number` set (for example `0.6.7.1`).
+
 ## Store Packages (Snap Store, Microsoft Store, Flathub)
 
 CI (`desktop-build.yml`, on a published GitHub release) builds the setup.exe,

@@ -30,6 +30,10 @@ hex = "0.4"
 [target.'cfg(target_os = "linux")'.dependencies]
 rfd = { version = "0.16", default-features = false, features = ["gtk3"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSData", "NSError", "NSString", "NSURL"] }
+
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 rfd = { version = "0.16", default-features = false }
 

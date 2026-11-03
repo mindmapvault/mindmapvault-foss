@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/tauri-v2/crates/tauri-cli/schema.json",
+  "identifier": "com.mindmapvault.MindMapVaultFOSS",
+  "bundle": {
+    "targets": ["app"],
+    "macOS": {
+      "entitlements": "mas/Entitlements.plist",
+      "files": {
+        "embedded.provisionprofile": "mas/embedded.provisionprofile"
+      }
+    }
+  }
+}

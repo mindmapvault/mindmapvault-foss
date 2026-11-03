@@ -1,4 +1,5 @@
 mod local_store;
+mod scoped_folder;
 
 use local_store::{
     delete_local_profile, delete_local_vault, export_vault_file, get_local_attachment,

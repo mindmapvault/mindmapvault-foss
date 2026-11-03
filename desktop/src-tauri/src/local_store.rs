@@ -192,6 +192,10 @@ struct LocalStoreConfig {
     storage_dir_override: Option<String>,
     /// Currently active username (used to select the per-user sub-directory).
     active_username: Option<String>,
+    /// macOS security-scoped bookmark for `storage_dir_override`, base64.
+    /// Without it the sandboxed App Store build loses the folder on restart.
+    #[serde(default)]
+    storage_dir_bookmark: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -276,13 +280,43 @@ fn default_root_dir(app: &AppHandle) -> Result<PathBuf, LocalStoreError> {
 /// Returns the root storage directory (the parent of all per-user folders).
 fn root_dir(app: &AppHandle) -> Result<PathBuf, LocalStoreError> {
     let cfg = read_config(app)?;
-    if let Some(path) = cfg.storage_dir_override {
+    if let Some(path) = cfg.storage_dir_override.as_deref() {
         let trimmed = path.trim();
         if !trimmed.is_empty() {
+            open_folder_bookmark(app, &cfg);
             return Ok(PathBuf::from(trimmed));
         }
     }
     default_root_dir(app)
+}
+
+/// Reopens access to the chosen vault folder from its bookmark, once per run.
+/// A no-op where there is no bookmark (Windows, Linux, older configs).
+fn open_folder_bookmark(app: &AppHandle, cfg: &LocalStoreConfig) {
+    use base64::Engine;
+    static OPENED: Mutex<Option<String>> = Mutex::new(None);
+
+    let Some(encoded) = cfg.storage_dir_bookmark.as_deref() else { return };
+    let mut opened = OPENED.lock().unwrap_or_else(|e| e.into_inner());
+    if opened.as_deref() == Some(encoded) {
+        return;
+    }
+    *opened = Some(encoded.to_string());
+    let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(encoded) else { return };
+    let Some(folder) = crate::scoped_folder::open(&bytes) else { return };
+
+    // A moved or renamed folder resolves but leaves a stale bookmark. Make a
+    // fresh one while access is open, so the next start does not depend on it.
+    if folder.stale {
+        if let Some(fresh) = crate::scoped_folder::create(&folder.path) {
+            let fresh = base64::engine::general_purpose::STANDARD.encode(fresh);
+            let mut updated = cfg.clone();
+            updated.storage_dir_bookmark = Some(fresh.clone());
+            if write_config(app, &updated).is_ok() {
+                *opened = Some(fresh);
+            }
+        }
+    }
 }
 
 /// File name of the per-user profile inside the vault folder.
@@ -1187,6 +1221,11 @@ pub fn set_local_storage_dir(app: AppHandle, path: String) -> Result<LocalStorag
 
     let mut cfg = read_config(&app)?;
     cfg.storage_dir_override = Some(trimmed.to_string());
+    // Made now, while the open dialog's grant is still live.
+    cfg.storage_dir_bookmark = crate::scoped_folder::create(trimmed).map(|b| {
+        use base64::Engine;
+        base64::engine::general_purpose::STANDARD.encode(b)
+    });
     write_config(&app, &cfg)?;
 
     ensure_storage_initialized(&app)?;
@@ -1197,6 +1236,7 @@ pub fn set_local_storage_dir(app: AppHandle, path: String) -> Result<LocalStorag
 pub fn reset_local_storage_dir(app: AppHandle) -> Result<LocalStorageDirInfo, LocalStoreError> {
     let mut cfg = read_config(&app)?;
     cfg.storage_dir_override = None;
+    cfg.storage_dir_bookmark = None;
     write_config(&app, &cfg)?;
 
     ensure_storage_initialized(&app)?;

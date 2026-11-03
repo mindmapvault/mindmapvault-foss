@@ -112,3 +112,6 @@ desktop/flatpak/cargo-sources.json
 desktop/flatpak/node-sources.json
 .flatpak-builder/
 flatpak-build/
+
+# Mac App Store: provisioning profile, written by CI from a secret
+desktop/src-tauri/mas/embedded.provisionprofile

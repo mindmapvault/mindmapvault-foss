@@ -1610,7 +1610,11 @@
   background: transparent;
 }
 .mm-notes-task:checked,
-.mm-cm-task:checked { background: var(--accent); border-color: var(--accent); }
+.mm-cm-task:checked,
+/* `.light input:not([type="color"])` in index.css sets every input's background
+   and outranks the rule above, hiding the white tick in light mode. */
+.light .mm-notes-task:checked,
+.light .mm-cm-task:checked { background: var(--accent); border-color: var(--accent); }
 .mm-notes-task:checked::after,
 .mm-cm-task:checked::after {
   content: "";

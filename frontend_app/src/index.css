@@ -148,6 +148,18 @@
 .light .text-orange-400 { color: #c2410c !important; }
 .light .text-violet-200 { color: #6d28d9 !important; }
 
+/* Dark slate panels (note popups, cards, the shared-vault page). The
+   slate-950/70 and darker fills behind modals stay dim on purpose. */
+.light .bg-slate-900,
+.light .bg-slate-950                        { background-color: var(--surface-1) !important; }
+.light .bg-slate-900\/40,
+.light .bg-slate-900\/50,
+.light .bg-slate-900\/55,
+.light .bg-slate-900\/60,
+.light .bg-slate-900\/70,
+.light .bg-slate-950\/40,
+.light .bg-slate-950\/60                    { background-color: var(--surface-2) !important; }
+
 /* .text-white above turns every white label dark; buttons on the accent
    colour keep white text. */
 .light .bg-accent.text-white,

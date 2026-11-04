@@ -228,10 +228,15 @@ Center, product `9NMNK1P8D7CZ`. The package is unsigned on purpose: the Store
 signs what it accepts. The Store needs the four-part version X.Y.Z.0, and each
 upload must be higher than the last.
 
-The upload is left as a **draft submission**: open it in Partner Center and
-click Submit. A manual run with `submit` ticked sends it to certification
-directly. Without the secrets below the job still builds and attaches the
-MSIX, and skips the upload with a notice.
+The submission is **committed through the API** and goes straight to
+certification. Do not change this to a draft (`--noCommit`) that you submit on
+the website: Partner Center only processes a package uploaded through the API
+when the API commits the submission, and the website then submits the previous
+package instead. That happened with Submission 8 on 2026-11-04. To keep a
+human check, set the product's publishing time to manual in Partner Center, so
+a certified update waits for a click before it goes live. Without the secrets
+below the job still builds and attaches the MSIX, and skips the upload with a
+notice.
 
 | Secret | Where it comes from |
 |---|---|

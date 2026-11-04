@@ -2,8 +2,13 @@ name: microsoft-store
 
 # Builds the Microsoft Store MSIX from a release tag, attaches it to the
 # GitHub release, and uploads it to Partner Center (product 9NMNK1P8D7CZ).
-# The upload stays a draft submission unless `submit` is set, so sending it to
-# certification is a click in Partner Center.
+# The submission is committed through the API, which sends it to
+# certification. A draft left with `--noCommit` is no use here: Partner Center
+# only processes an API-uploaded package when the API commits it, and
+# submitting the draft on the website ships the previous package instead
+# (Submission 8, 2026-11-04). To review before going live, set the product's
+# publishing time to manual in Partner Center: it then waits after
+# certification for a click.
 
 on:
   release:
@@ -13,10 +18,6 @@ on:
       tag:
         description: 'Existing release tag to build and upload (e.g. v0.6.7)'
         required: true
-      submit:
-        description: 'Send the submission to certification instead of leaving a draft'
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -119,15 +120,11 @@ jobs:
           SELLER: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
           CLIENT: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
           SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
-          SUBMIT: ${{ github.event.inputs.submit }}
         run: |
           msstore reconfigure --tenantId $env:TENANT --sellerId $env:SELLER --clientId $env:CLIENT --clientSecret $env:SECRET
           if ($LASTEXITCODE -ne 0) { throw "msstore reconfigure failed" }
           # Replaces any pending draft with a new one built from the live
-          # submission, so the listing text stays as it is in Partner Center.
-          if ($env:SUBMIT -eq 'true') {
-            msstore publish '${{ steps.pack.outputs.msix }}' -id $env:STORE_PRODUCT_ID
-          } else {
-            msstore publish '${{ steps.pack.outputs.msix }}' -id $env:STORE_PRODUCT_ID --noCommit
-          }
+          # submission, so the listing text stays as it is in Partner Center,
+          # then commits it.
+          msstore publish '${{ steps.pack.outputs.msix }}' -id $env:STORE_PRODUCT_ID
           if ($LASTEXITCODE -ne 0) { throw "msstore publish failed" }

@@ -1,3 +1,4 @@
+mod app_link;
 mod local_store;
 mod scoped_folder;
 
@@ -9,6 +10,7 @@ use local_store::{
     save_local_attachment, save_local_profile, save_local_vault, save_local_vault_blob,
     set_active_user, set_local_storage_dir, update_local_vault_meta, verify_local_vault_integrity,
 };
+use app_link::open_app_link;
 use local_store::apply_local_password_rotation;
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder, Submenu, SubmenuBuilder},
@@ -192,6 +194,8 @@ pub fn run() {
             apply_local_password_rotation,
             // Integrity verification
             verify_local_vault_integrity,
+            // Links to other apps (obsidian:, zotero: …)
+            open_app_link,
         ])
         .run(tauri::generate_context!())
         .expect("error while running MindMapVault desktop");

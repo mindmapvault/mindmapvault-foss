@@ -27,7 +27,7 @@ import {
 } from '../MindMapConstants';
 import DynamicLucideIcon from '../DynamicLucideIcon';
 import type { MindMapTreeNode } from '../../types';
-import { openExternalUrl } from '../../utils/openExternal';
+import { linkTarget, openExternalUrl } from '../../utils/openExternal';
 
 export type NodeBox = LayoutEntry<MindMapTreeNode>;
 
@@ -475,7 +475,7 @@ export function FooterBand({ box, geom, parts, node, visual, onOpenLink }: {
       {(node.urls ?? []).map((urlItem, ui) => {
         const fy = geom.footerTopY + (ui + urlOffset) * LINK_STRIP_H;
         const rawUrl = (urlItem.url ?? '').trim();
-        const openUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+        const openUrl = linkTarget(rawUrl);
         return (
           <g key={`url-${ui}`}>
             <BandDivider box={box} y={fy} ownColor={visual.ownColor} inset={4} opacity="33" />
@@ -489,7 +489,7 @@ export function FooterBand({ box, geom, parts, node, visual, onOpenLink }: {
               className={`mm-url-link${visual.ownColor ? ' mm-url-link--on-color' : ''}`}
               style={{ cursor: 'pointer', textDecoration: 'underline' }}
               onMouseDown={(e) => { e.stopPropagation(); }}
-              onClick={(e) => { e.stopPropagation(); void openExternalUrl(openUrl); }}
+              onClick={(e) => { e.stopPropagation(); if (openUrl) void openExternalUrl(openUrl); }}
             >
               {urlItem.label || rawUrl}
             </text>

@@ -515,7 +515,9 @@ export function DesktopMindMapEditor({
       });
     }
     return DOMPurify.sanitize(container.innerHTML, {
-      ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel|blob|data|attachment):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
+      // Any scheme but javascript/vbscript/file, so links to other apps
+      // (obsidian:, zotero: …) survive; blocked ones are refused on click too.
+      ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel|blob|data|attachment):|(?!(?:javascript|vbscript|file):)[a-z][a-z0-9+.-]*:|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
     });
   }, [attachmentById, attachmentPreviewUrls]);
 

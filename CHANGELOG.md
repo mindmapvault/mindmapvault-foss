@@ -7,6 +7,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ## [Unreleased]
 
 ### Fixed
+- **Links to other apps.** A link such as `obsidian://open?vault=…` or `zotero://…` on a node opened as a broken web address, because `https://` was put in front of it. Links with their own scheme now open in the app they belong to. On the desktop app, the first link of each kind asks before it opens.
 - **Note popup in light mode.** Hovering a vault in the list view showed its note in a dark box with dim text. It is light now, like the rest of the page.
 - **Messages and captions in light mode.** Success, warning and error messages kept their dark-mode colours, pale text on a white card. Each now has a light-mode shade. Dates, descriptions and other secondary text are darker as well.
 - **Switches in light mode.** The "Always on" switch on the shortcuts card was invisible when off. Buttons on the accent colour show white text again, and the keys on the shortcuts card are lined up as a table.

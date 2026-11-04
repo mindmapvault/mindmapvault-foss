@@ -20,6 +20,11 @@
   --card:         var(--surface-1);
   --fg:           var(--text-primary);
   --fg-muted:     var(--text-secondary);
+  --tone-feature: #a78bfa;
+  --tone-info:    #38bdf8;
+  --tone-success: #34d399;
+  --tone-warning: #eab308;
+  --tone-danger:  #fca5a5;
   color-scheme: dark;
 }
 
@@ -30,7 +35,7 @@
   /* --accent and --accent-hover are set dynamically by JS */
   --text-primary:   #0f172a;
   --text-secondary: #475569;
-  --text-muted:     #94a3b8;
+  --text-muted:     #64748b;
   --border:       #e2e8f0;
   --border-light: #cbd5e1;
   --input-bg:     #ffffff;
@@ -38,6 +43,11 @@
   --card:         var(--surface-1);
   --fg:           var(--text-primary);
   --fg-muted:     var(--text-secondary);
+  --tone-feature: #6d28d9;
+  --tone-info:    #0369a1;
+  --tone-success: #047857;
+  --tone-warning: #a16207;
+  --tone-danger:  #b91c1c;
   color-scheme: light;
 }
 
@@ -79,17 +89,69 @@
 /* Icon-button hover: slate-300 is nearly invisible on a white surface */
 .light .hover\:text-slate-300:hover         { color: var(--text-secondary)  !important; }
 
-/* Amber warnings: bright yellow (#fcd34d) is unreadable on white */
-.light .text-amber-300                      { color: #b45309                !important; }
-.light .bg-amber-900\/20                    { background-color: #fffbeb     !important; }
-.light .border-amber-700\/60               { border-color: #fde68a         !important; }
+/* Status tints (red, amber, green, ...) use dark-theme shades: pale text on
+   near-black fills. Light mode swaps each for the matching light shade. */
+.light .bg-amber-400\/10,
+.light .bg-amber-500\/10,
+.light .bg-amber-900\/20,
+.light .bg-amber-950\/25 { background-color: #fffbeb !important; }
+.light .bg-emerald-400\/10,
+.light .bg-emerald-500\/10,
+.light .bg-emerald-500\/15,
+.light .bg-emerald-900\/15,
+.light .bg-emerald-900\/20,
+.light .bg-emerald-900\/40 { background-color: #ecfdf5 !important; }
+.light .bg-green-900\/20 { background-color: #f0fdf4 !important; }
+.light .bg-red-400\/10,
+.light .bg-red-500\/10,
+.light .bg-red-900\/30,
+.light .bg-red-950\/30,
+.light .bg-red-950\/40 { background-color: #fef2f2 !important; }
+.light .border-amber-400\/30,
+.light .border-amber-500\/30,
+.light .border-amber-500\/50,
+.light .border-amber-500\/70,
+.light .border-amber-700\/50,
+.light .border-amber-700\/60 { border-color: #fde68a !important; }
+.light .border-emerald-400\/30,
+.light .border-emerald-400\/40,
+.light .border-emerald-500\/30,
+.light .border-emerald-800,
+.light .border-emerald-900\/60 { border-color: #a7f3d0 !important; }
+.light .border-green-700\/50 { border-color: #bbf7d0 !important; }
+.light .border-red-400\/25,
+.light .border-red-500\/40,
+.light .border-red-700\/40,
+.light .border-red-700\/50,
+.light .border-red-800,
+.light .border-red-900\/50,
+.light .border-red-900\/70 { border-color: #fecaca !important; }
+.light .hover\:bg-red-900\/30:hover { background-color: #fee2e2 !important; }
+.light .hover\:text-red-300:hover,
+.light .hover\:text-red-400:hover,
+.light .text-red-100,
+.light .text-red-200,
+.light .text-red-300,
+.light .text-red-400 { color: #b91c1c !important; }
+.light .text-amber-100,
+.light .text-amber-100\/80,
+.light .text-amber-100\/90,
+.light .text-amber-200,
+.light .text-amber-300,
+.light .text-amber-400,
+.light .text-amber-400\/90,
+.light .text-amber-50 { color: #92400e !important; }
+.light .text-emerald-200,
+.light .text-emerald-300,
+.light .text-emerald-400 { color: #047857 !important; }
+.light .text-green-300 { color: #15803d !important; }
+.light .text-orange-400 { color: #c2410c !important; }
+.light .text-violet-200 { color: #6d28d9 !important; }
 
-/* Red errors: light red-400 & near-black red-900 backgrounds need light equivalents */
-.light .text-red-400                        { color: #dc2626                !important; }
-.light .bg-red-900\/30                      { background-color: #fef2f2     !important; }
-.light .border-red-800                      { border-color: #fca5a5         !important; }
-.light .hover\:bg-red-900\/30:hover         { background-color: #fee2e2     !important; }
-.light .hover\:text-red-400:hover           { color: #dc2626                !important; }
+/* .text-white above turns every white label dark; buttons on the accent
+   colour keep white text. */
+.light .bg-accent.text-white,
+.light .bg-\[var\(--accent\)\].text-white   { color: #ffffff                !important; }
 
 .light .confirm-dialog                       { background: rgba(248, 250, 252, 0.74) !important; }
 .light .confirm-dialog__panel               {
@@ -120,7 +182,8 @@
 }
 .light .confirm-dialog__confirm             { color: #ffffff !important; }
 
-.light input:not([type='color']),
+/* Text fields only: checkboxes and switches paint their own background. */
+.light input:not([type='color']):not([type='checkbox']):not([type='radio']),
 .light textarea                             { background-color: var(--input-bg); color: var(--text-primary); }
 .light input::placeholder,
 .light textarea::placeholder                { color: var(--text-muted); }

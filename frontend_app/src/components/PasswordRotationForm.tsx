@@ -125,7 +125,7 @@ export function PasswordRotationForm({ secondaryAction, onDone, doneAction }: Pa
     return (
       <div
         className="rounded-lg px-3 py-2 text-sm"
-        style={{ background: 'rgba(234,179,8,0.12)', color: '#eab308' }}
+        style={{ background: 'rgba(234,179,8,0.12)', color: 'var(--tone-warning)' }}
       >
         <p className="font-medium">Changing your password is temporarily unavailable.</p>
         <p className="mt-1" style={{ color: 'var(--text-muted)' }}>

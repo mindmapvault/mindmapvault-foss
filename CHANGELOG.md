@@ -4,6 +4,12 @@ All notable changes to this repository are documented here.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [Unreleased]
+
+### Fixed
+- **Messages and captions in light mode.** Success, warning and error messages kept their dark-mode colours, pale text on a white card. Each now has a light-mode shade. Dates, descriptions and other secondary text are darker as well.
+- **Switches in light mode.** The "Always on" switch on the shortcuts card was invisible when off. Buttons on the accent colour show white text again, and the keys on the shortcuts card are lined up as a table.
+
 ## [0.6.7] - 2026-11-03
 
 On the Mac App Store, and ticked tasks show their tick in light mode.

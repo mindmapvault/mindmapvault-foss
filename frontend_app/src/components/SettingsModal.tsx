@@ -415,9 +415,9 @@ function AccountTab({
 // ─── Changelog / What's New ──────────────────────────────────────────────────
 
 const changeKindStyle: Record<ChangeKind, { label: string; color: string; bg: string }> = {
-  feature: { label: 'New', color: '#a78bfa', bg: 'rgba(124,58,237,0.14)' },
-  improvement: { label: 'Improved', color: '#38bdf8', bg: 'rgba(56,189,248,0.14)' },
-  fix: { label: 'Fixed', color: '#34d399', bg: 'rgba(16,185,129,0.14)' },
+  feature: { label: 'New', color: 'var(--tone-feature)', bg: 'rgba(124,58,237,0.14)' },
+  improvement: { label: 'Improved', color: 'var(--tone-info)', bg: 'rgba(56,189,248,0.14)' },
+  fix: { label: 'Fixed', color: 'var(--tone-success)', bg: 'rgba(16,185,129,0.14)' },
 };
 
 function ChangelogTab() {

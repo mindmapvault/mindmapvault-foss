@@ -40,7 +40,7 @@
   --mm-toolbar-bg:      #ffffff;
   --mm-toolbar-border:  #e2e8f0;
   --mm-statusbar-bg:    #f8fafc;
-  --mm-statusbar-text:  #94a3b8;
+  --mm-statusbar-text:  #64748b;
   --mm-notes-bg:        #ffffff;
   --mm-notes-border:    #e2e8f0;
   --mm-shortcuts-bg:    #ffffff;
@@ -409,6 +409,8 @@
   color: #ef4444;
   border-color: #ef4444;
 }
+.light .mm-btn--danger,
+.light .mm-btn--danger:hover:not(:disabled) { color: #dc2626; }
 
 .mm-btn--active {
   background: var(--accent);
@@ -1610,11 +1612,7 @@
   background: transparent;
 }
 .mm-notes-task:checked,
-.mm-cm-task:checked,
-/* `.light input:not([type="color"])` in index.css sets every input's background
-   and outranks the rule above, hiding the white tick in light mode. */
-.light .mm-notes-task:checked,
-.light .mm-cm-task:checked { background: var(--accent); border-color: var(--accent); }
+.mm-cm-task:checked { background: var(--accent); border-color: var(--accent); }
 .mm-notes-task:checked::after,
 .mm-cm-task:checked::after {
   content: "";
@@ -2249,6 +2247,16 @@
   white-space: nowrap;
 }
 .mm-shortcut-row span { color: var(--mm-btn-text); }
+/* The keys are table cells here, not the rounded .mm-kbd chips. */
+.mm-shortcut-row kbd.mm-kbd {
+  display: block;
+  border-radius: 0;
+  border-width: 0 1px 1px 0;
+  border-color: var(--mm-toolbar-border);
+  box-shadow: none;
+  font-size: 12px;
+  line-height: inherit;
+}
 
 .mm-kbd {
   display: inline-block;

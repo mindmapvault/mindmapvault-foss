@@ -1,0 +1,133 @@
+name: microsoft-store
+
+# Builds the Microsoft Store MSIX from a release tag, attaches it to the
+# GitHub release, and uploads it to Partner Center (product 9NMNK1P8D7CZ).
+# The upload stays a draft submission unless `submit` is set, so sending it to
+# certification is a click in Partner Center.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to build and upload (e.g. v0.6.7)'
+        required: true
+      submit:
+        description: 'Send the submission to certification instead of leaving a draft'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+  STORE_PRODUCT_ID: 9NMNK1P8D7CZ
+
+jobs:
+  msix:
+    name: Microsoft Store MSIX
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      # The packaging script comes from this workflow's own commit, so a manual
+      # run can package an older tag with the current script.
+      - name: Checkout packaging script
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          path: packaging
+          sparse-checkout: |
+            desktop/msix
+            desktop/src-tauri/icons
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The Store package wraps the bare exe; the NSIS installer is not needed.
+      - name: Build app exe
+        working-directory: desktop/src-tauri
+        run: npx --prefix ../../frontend_app tauri build --no-bundle --config tauri.conf.json
+
+      # Windows PowerShell on purpose: the script draws the wide tile with
+      # System.Drawing.
+      - name: Pack MSIX
+        id: pack
+        shell: powershell
+        run: |
+          $version = $env:RELEASE_TAG.TrimStart('v')
+          $out = Join-Path $env:RUNNER_TEMP 'msix'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          & packaging/desktop/msix/build-msix.ps1 -Version $version -Exe desktop/src-tauri/target/release/MindMapVault-foss.exe -OutDir $out -NoSign
+          $msix = Join-Path $out "MindMapVault-FOSS_${version}.0_x64.msix"
+          if (-not (Test-Path $msix)) { throw "MSIX not written: $msix" }
+          "msix=$msix" >> $env:GITHUB_OUTPUT
+
+      - name: Attach MSIX to release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload $env:RELEASE_TAG '${{ steps.pack.outputs.msix }}' --clobber
+
+      - name: Check Store credentials
+        id: store
+        env:
+          TENANT: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          SELLER: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
+          CLIENT: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+        shell: bash
+        run: |
+          if [ -z "$TENANT" ] || [ -z "$SELLER" ] || [ -z "$CLIENT" ] || [ -z "$SECRET" ]; then
+            echo "::notice::Partner Center secrets not set; the MSIX is on the release but was not uploaded."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Microsoft Store CLI
+        if: steps.store.outputs.ready == 'true'
+        uses: microsoft/microsoft-store-apppublisher@v1.4
+
+      - name: Upload to Partner Center
+        if: steps.store.outputs.ready == 'true'
+        shell: powershell
+        env:
+          TENANT: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          SELLER: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
+          CLIENT: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+          SUBMIT: ${{ github.event.inputs.submit }}
+        run: |
+          msstore reconfigure --tenantId $env:TENANT --sellerId $env:SELLER --clientId $env:CLIENT --clientSecret $env:SECRET
+          if ($LASTEXITCODE -ne 0) { throw "msstore reconfigure failed" }
+          # Replaces any pending draft with a new one built from the live
+          # submission, so the listing text stays as it is in Partner Center.
+          if ($env:SUBMIT -eq 'true') {
+            msstore publish '${{ steps.pack.outputs.msix }}' -id $env:STORE_PRODUCT_ID
+          } else {
+            msstore publish '${{ steps.pack.outputs.msix }}' -id $env:STORE_PRODUCT_ID --noCommit
+          }
+          if ($LASTEXITCODE -ne 0) { throw "msstore publish failed" }

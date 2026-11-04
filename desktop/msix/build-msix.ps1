@@ -1,4 +1,13 @@
-﻿param([string]$Version = "0.6.7")
+﻿param(
+  [string]$Version = "0.6.7",
+  # CI passes the exe and output folder; locally both default to the
+  # Downloads release folder described below.
+  [string]$Exe = "",
+  [string]$OutDir = "",
+  # The Store re-signs every package it accepts, so an upload needs no
+  # signature. CI uses this; the local copy is signed for sideloading tests.
+  [switch]$NoSign
+)
 # Packs and signs the Microsoft Store MSIX for MindMapVault FOSS from a
 # version's portable exe. Usage: .\build-msix.ps1 -Version 0.6.7 - expects
 # %USERPROFILE%\Downloads\mindmapvault-foss-<version>-release\MindMapVault-FOSS_<version>_x64-portable.exe
@@ -20,22 +29,28 @@
 # The hosted app is a separate product (KornelMarz.MindMapVault, 9NBPZF75STJG)
 # on the same publisher account; a package built with its name is refused here.
 $ErrorActionPreference = 'Stop'
-$release = Join-Path $env:USERPROFILE "Downloads\mindmapvault-foss-$Version-release"
+$release = if ($OutDir) { $OutDir } else { Join-Path $env:USERPROFILE "Downloads\mindmapvault-foss-$Version-release" }
 $stage = Join-Path $env:TEMP "msix-staging-foss"
-$exe = Join-Path $release "MindMapVault-FOSS_${Version}_x64-portable.exe"
+$exe = if ($Exe) { $Exe } else { Join-Path $release "MindMapVault-FOSS_${Version}_x64-portable.exe" }
 $icons = Join-Path $PSScriptRoot "..\src-tauri\icons"
 $out = Join-Path $release "MindMapVault-FOSS_${Version}_x64.msix"
-$sdk = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64"
+# Newest installed Windows 10/11 SDK that has makeappx (the GitHub Windows
+# runners ship one).
+$sdk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\10.*\x64\makeappx.exe" -ErrorAction SilentlyContinue |
+  Sort-Object { [version]$_.Directory.Parent.Name } -Descending | Select-Object -First 1 | ForEach-Object { $_.DirectoryName }
+if (-not $sdk) { throw "makeappx.exe not found; install the Windows 10 SDK" }
 # Self-signed certificate with the Partner Center publisher CN, shared with the
 # hosted app because the publisher is the same; the Store re-signs the package,
 # so "terminated in a root" from signtool verify is fine. Found by subject, so
 # no thumbprint is kept here; the newest valid one holding a private key wins.
 $publisherCn = "CN=303071D7-5B25-4A4A-89CE-41735B0B84CD"
-$cert = Get-ChildItem Cert:\CurrentUser\My |
-  Where-Object { $_.Subject -eq $publisherCn -and $_.HasPrivateKey -and $_.NotAfter -gt (Get-Date) } |
-  Sort-Object NotAfter -Descending | Select-Object -First 1
-if (-not $cert) { throw "no valid signing certificate for $publisherCn in Cert:\CurrentUser\My" }
-$thumb = $cert.Thumbprint
+if (-not $NoSign) {
+  $cert = Get-ChildItem Cert:\CurrentUser\My |
+    Where-Object { $_.Subject -eq $publisherCn -and $_.HasPrivateKey -and $_.NotAfter -gt (Get-Date) } |
+    Sort-Object NotAfter -Descending | Select-Object -First 1
+  if (-not $cert) { throw "no valid signing certificate for $publisherCn in Cert:\CurrentUser\My" }
+  $thumb = $cert.Thumbprint
+}
 
 if (-not (Test-Path $exe)) { throw "portable exe not found: $exe" }
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
@@ -121,8 +136,10 @@ $manifest = @"
 if (Test-Path $out) { Remove-Item $out -Force }
 & "$sdk\makeappx.exe" pack /d $stage /p $out /o | Select-Object -Last 2
 if ($LASTEXITCODE -ne 0) { throw "makeappx failed ($LASTEXITCODE)" }
-& "$sdk\signtool.exe" sign /fd SHA256 /sha1 $thumb /tr http://timestamp.digicert.com /td SHA256 $out | Select-Object -Last 2
-if ($LASTEXITCODE -ne 0) { throw "signtool failed ($LASTEXITCODE)" }
+if (-not $NoSign) {
+  & "$sdk\signtool.exe" sign /fd SHA256 /sha1 $thumb /tr http://timestamp.digicert.com /td SHA256 $out | Select-Object -Last 2
+  if ($LASTEXITCODE -ne 0) { throw "signtool failed ($LASTEXITCODE)" }
+}
 # The Store upload goes by the four-part package version, so hand it a copy
 # named that way. The signature covers the contents, not the file name.
 $storeOut = Join-Path $release "MindMapVault-FOSS_${Version}.0_x64.msix"

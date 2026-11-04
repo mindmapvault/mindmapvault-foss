@@ -207,8 +207,8 @@ with `build_number` set (for example `0.6.7.1`).
 ## Store Packages (Snap Store, Microsoft Store, Flathub)
 
 CI (`desktop-build.yml`, on a published GitHub release) builds the setup.exe,
-AppImage and DMG. It does **not** build the snap or the MSIX; both are made
-locally after the release, from the same version. Bump
+AppImage and DMG. `microsoft-store.yml` builds the MSIX (below). The snap is
+still made locally after the release, from the same version. Bump
 `desktop/snap/snapcraft.yaml` (`version`) and the default `-Version` in
 `desktop/msix/build-msix.ps1` with the other version files.
 
@@ -220,15 +220,35 @@ binary embeds it — a stale binary otherwise ships silently.
 
 ### Microsoft Store (MSIX)
 
-1. Windows: `tauri build --no-bundle` (from the Build Tools dev shell), then
-   copy `target/release/MindMapVault-foss.exe` to
-   `%USERPROFILE%\Downloads\mindmapvault-foss-X.Y.Z-release\MindMapVault-FOSS_X.Y.Z_x64-portable.exe`.
-2. `desktop/msix/build-msix.ps1 -Version X.Y.Z` packs and signs it.
-3. **The Store needs a four-part version.** Pass the three-part version to
-   the script; it writes `Version="X.Y.Z.0"` into the manifest and produces
-   two identical files. **Upload `MindMapVault-FOSS_X.Y.Z.0_x64.msix`** in
-   Partner Center (product `9NMNK1P8D7CZ`). The three-part copy is for the
-   download bucket only.
+`microsoft-store.yml` runs on every published release, or by hand with a tag.
+It builds the bare exe (`tauri build --no-bundle`), packs it with
+`desktop/msix/build-msix.ps1 -NoSign`, attaches
+`MindMapVault-FOSS_X.Y.Z.0_x64.msix` to the release and uploads it to Partner
+Center, product `9NMNK1P8D7CZ`. The package is unsigned on purpose: the Store
+signs what it accepts. The Store needs the four-part version X.Y.Z.0, and each
+upload must be higher than the last.
+
+The upload is left as a **draft submission**: open it in Partner Center and
+click Submit. A manual run with `submit` ticked sends it to certification
+directly. Without the secrets below the job still builds and attaches the
+MSIX, and skips the upload with a notice.
+
+| Secret | Where it comes from |
+|---|---|
+| `PARTNER_CENTER_TENANT_ID` | Entra admin center → Overview → Tenant ID |
+| `PARTNER_CENTER_CLIENT_ID` | the app registration's Application (client) ID |
+| `PARTNER_CENTER_CLIENT_SECRET` | the app registration → Certificates & secrets (expires; renew before it does) |
+| `PARTNER_CENTER_SELLER_ID` | Partner Center → Account settings, shown as Seller ID |
+
+The Entra app must be added in Partner Center under Account settings → User
+management → Microsoft Entra applications, with the **Manager** role.
+
+To build by hand on Windows instead: `tauri build --no-bundle` (from the Build
+Tools dev shell), copy `target/release/MindMapVault-foss.exe` to
+`%USERPROFILE%\Downloads\mindmapvault-foss-X.Y.Z-release\MindMapVault-FOSS_X.Y.Z_x64-portable.exe`
+and run `desktop/msix/build-msix.ps1 -Version X.Y.Z`. That copy is signed with
+the local certificate, for sideloading tests; upload the
+`MindMapVault-FOSS_X.Y.Z.0_x64.msix` file.
 
 ### Snap Store (`mindmapvault-foss`)
 

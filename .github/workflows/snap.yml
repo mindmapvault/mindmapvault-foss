@@ -1,0 +1,134 @@
+name: snap
+
+# Builds the snap from a release tag, attaches it to the GitHub release and
+# uploads it to the Snap Store (mindmapvault-foss). It is released to the
+# `candidate` channel unless another one is chosen on a manual run; promoting
+# it to stable is one click on snapcraft.io.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to build and upload (e.g. v0.6.7)'
+        required: true
+      channel:
+        description: 'Snap Store channel to release to'
+        type: choice
+        options: [candidate, stable, beta, edge]
+        default: candidate
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  RELEASE_TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+  SNAP_CHANNEL: ${{ github.event.inputs.channel || 'candidate' }}
+
+jobs:
+  snap:
+    name: Snap (amd64)
+    # core24 is Ubuntu 24.04; building the deb on the same release keeps its
+    # library versions in step with the GNOME platform snap it runs against.
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            squashfs-tools
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # tauri.conf.linux.json clears beforeBuildCommand, so the frontend is
+      # built here first.
+      - name: Build frontend
+        run: pnpm --dir frontend_app run build
+
+      - name: Build deb
+        working-directory: desktop/src-tauri
+        run: npx --prefix ../../frontend_app tauri build --bundles deb --config tauri.conf.json --config tauri.conf.linux.json
+
+      # snapcraft wants snap/snapcraft.yaml and the deb next to it, in a fresh
+      # directory each time.
+      - name: Stage snap project
+        run: |
+          deb=$(find desktop/src-tauri/target/release/bundle/deb -maxdepth 1 -name '*.deb' | head -n 1)
+          test -n "$deb"
+          mkdir -p snapbuild/snap snapbuild/deb
+          cp desktop/snap/snapcraft.yaml snapbuild/snap/
+          cp -r desktop/snap/gui snapbuild/snap/
+          cp "$deb" snapbuild/deb/mindmapvault-foss.deb
+
+      - name: Build snap
+        id: build
+        uses: snapcore/action-build@v1
+        with:
+          path: snapbuild
+
+      # A staged WebKit would not match the GNOME platform's helper
+      # processes and the window would come up blank (see snapcraft.yaml).
+      - name: Verify snap
+        run: |
+          snap='${{ steps.build.outputs.snap }}'
+          unsquashfs -l "$snap" > contents.txt
+          grep -q 'usr/bin/MindMapVault-foss$' contents.txt
+          if grep -q 'libwebkit2gtk-4.1.so' contents.txt; then
+            echo "::error::libwebkit2gtk is staged inside the snap"
+            exit 1
+          fi
+
+      - name: Attach snap to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$RELEASE_TAG" '${{ steps.build.outputs.snap }}' --clobber
+
+      - name: Check Snap Store credentials
+        id: store
+        env:
+          CREDS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          if [ -z "$CREDS" ]; then
+            echo "::notice::SNAPCRAFT_STORE_CREDENTIALS not set; the snap is on the release but was not uploaded."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload to the Snap Store
+        if: steps.store.outputs.ready == 'true'
+        uses: snapcore/action-publish@v1
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        with:
+          snap: ${{ steps.build.outputs.snap }}
+          release: ${{ env.SNAP_CHANNEL }}

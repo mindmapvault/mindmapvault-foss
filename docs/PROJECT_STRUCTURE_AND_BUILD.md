@@ -207,8 +207,8 @@ with `build_number` set (for example `0.6.7.1`).
 ## Store Packages (Snap Store, Microsoft Store, Flathub)
 
 CI (`desktop-build.yml`, on a published GitHub release) builds the setup.exe,
-AppImage and DMG. `microsoft-store.yml` builds the MSIX (below). The snap is
-still made locally after the release, from the same version. Bump
+AppImage and DMG. `microsoft-store.yml` builds the MSIX and `snap.yml` the
+snap (below), on the same release. Bump
 `desktop/snap/snapcraft.yaml` (`version`) and the default `-Version` in
 `desktop/msix/build-msix.ps1` with the other version files.
 
@@ -252,18 +252,31 @@ the local certificate, for sideloading tests; upload the
 
 ### Snap Store (`mindmapvault-foss`)
 
-1. Linux (WSL): sync the repo to a native folder and run
-   `tauri build --config tauri.conf.json --config tauri.conf.linux.json`.
-2. As root, in a **fresh, versioned** directory (destructive mode does not
-   re-pull the deb, so a reused directory ships the old binary):
-   `snap/snapcraft.yaml` plus the deb as `deb/mindmapvault-foss.deb`, then
-   `snapcraft pack --destructive-mode`.
-3. Verify: the entry bundle hash is in `prime/usr/bin/MindMapVault-foss`
-   (`grep -a -o`), and no `libwebkit2gtk-4.1.so*` is staged under `prime/`.
-4. Upload as the logged-in user from their **home directory** — the
-   snapcraft snap has a private `/tmp` and reports files there as
-   "not a valid file":
-   `snapcraft upload ~/mindmapvault-foss_X.Y.Z_amd64.snap --release stable`.
+`snap.yml` runs on every published release, or by hand with a tag. On
+`ubuntu-24.04` (the same Ubuntu as `base: core24`) it builds the frontend, then
+the deb with `tauri.conf.linux.json`, stages it next to `snap/snapcraft.yaml`
+in a fresh directory, and packs it with `snapcore/action-build`. It checks the
+binary is inside and that no `libwebkit2gtk-4.1.so*` is staged, attaches the
+`.snap` to the release, and uploads it to the **candidate** channel. Promote
+it to stable on snapcraft.io (Releases), or pick another channel on a manual
+run.
+
+The upload needs one secret, `SNAPCRAFT_STORE_CREDENTIALS`, made with
+
+```bash
+snapcraft export-login --snaps=mindmapvault-foss --acls=package_access,package_push,package_update,package_release snap-token.txt
+```
+
+and pasted from `snap-token.txt`. Without it the job still builds and attaches
+the snap and skips the upload. The token expires; `export-login` takes
+`--expires` to set when.
+
+To build by hand instead: `tauri build --config tauri.conf.json --config
+tauri.conf.linux.json` on Linux, then, as root in a fresh directory holding
+`snap/snapcraft.yaml` and the deb as `deb/mindmapvault-foss.deb`,
+`snapcraft pack --destructive-mode`. Upload from the home directory (the
+snapcraft snap has a private `/tmp`):
+`snapcraft upload ~/mindmapvault-foss_X.Y.Z_amd64.snap --release stable`.
 
 ### Flathub (`com.mindmapvault.MindMapVaultFOSS`)
 

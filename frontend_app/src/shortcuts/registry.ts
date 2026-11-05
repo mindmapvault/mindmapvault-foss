@@ -76,6 +76,11 @@ export const SHORTCUTS: ShortcutDef[] = [
   // ── Edit ───────────────────────────────────────────────────────────────
   { id: 'edit.undo', label: 'Undo', group: 'Edit', freemind: ['F9', 'Mod+Z'], mac: ['Mod+Z'] },
   { id: 'edit.redo', label: 'Redo', group: 'Edit', freemind: ['F10', 'Mod+Y', 'Mod+Shift+Z'], mac: ['Mod+Shift+Z'] },
+  // Paste has no dispatcher handler: the editor's paste listener takes it, so
+  // a picture on the clipboard still lands on the node as before.
+  { id: 'edit.copy', label: 'Copy branch', group: 'Edit', freemind: ['Mod+C'], mac: ['Mod+C'] },
+  { id: 'edit.cut', label: 'Cut branch', group: 'Edit', freemind: ['Mod+X'], mac: ['Mod+X'] },
+  { id: 'edit.paste', label: 'Paste as child', group: 'Edit', freemind: ['Mod+V'], mac: ['Mod+V'] },
 
   // ── Find ───────────────────────────────────────────────────────────────
   { id: 'find.search', label: 'Search', group: 'Find', freemind: ['Mod+F'], mac: ['Mod+F'] },

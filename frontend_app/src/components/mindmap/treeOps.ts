@@ -350,3 +350,73 @@ export const removeUrl = (urls: UrlEntry[] | undefined, index: number): UrlEntry
   next.splice(index, 1);
   return next;
 };
+
+// ── Copy / cut / paste ───────────────────────────────────────────────────
+
+/**
+ * The selected nodes worth copying, in map order: the root and anything
+ * under another selected node are dropped, because copying a branch already
+ * takes its children along.
+ */
+export const topLevelSelection = (
+  root: MindMapTreeNode,
+  nodeIds: Iterable<string>,
+  { includeRoot = false } = {},
+): MindMapTreeNode[] => {
+  const ids = new Set(nodeIds);
+  const out: MindMapTreeNode[] = [];
+  const walk = (n: MindMapTreeNode) => {
+    if (ids.has(n.id) && (includeRoot || n.id !== 'root')) {
+      out.push(n);
+      return;
+    }
+    n.children.forEach(walk);
+  };
+  walk(root);
+  return out;
+};
+
+/** Every node id in these branches. */
+export const subtreeIds = (nodes: MindMapTreeNode[]): Set<string> => {
+  const ids = new Set<string>();
+  const walk = (n: MindMapTreeNode) => {
+    ids.add(n.id);
+    n.children.forEach(walk);
+  };
+  nodes.forEach(walk);
+  return ids;
+};
+
+/**
+ * Put these branches under `parentId`, after its existing children. They are
+ * laid out by the tree, not by where they were dragged to before the copy.
+ */
+export const appendChildren = (
+  root: MindMapTreeNode,
+  parentId: string,
+  nodes: MindMapTreeNode[],
+): MindMapTreeNode | null => {
+  if (nodes.length === 0) return null;
+  const next = cloneTree(root);
+  const target = findNode(next, parentId);
+  if (!target) return null;
+  for (const node of nodes) {
+    const placed = cloneTree(node);
+    placed.customX = undefined;
+    placed.customY = undefined;
+    target.node.children.push(placed);
+  }
+  target.node.collapsed = false;
+  return next;
+};
+
+/** The branches as an indented text outline, for pasting into other apps. */
+export const outlineText = (nodes: MindMapTreeNode[]): string => {
+  const lines: string[] = [];
+  const walk = (n: MindMapTreeNode, depth: number) => {
+    lines.push(`${'\t'.repeat(depth)}${n.text}`);
+    n.children.forEach((c) => walk(c, depth + 1));
+  };
+  nodes.forEach((n) => walk(n, 0));
+  return lines.join('\n');
+};

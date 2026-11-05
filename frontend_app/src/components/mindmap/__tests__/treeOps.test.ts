@@ -3,6 +3,10 @@ import type { MindMapTreeNode } from '../../../types';
 import { countNodes, findNode } from '../../MindMapHelpers';
 import {
   addChild,
+  appendChildren,
+  outlineText,
+  subtreeIds,
+  topLevelSelection,
   editNodes,
   removeNodes,
   addSibling,
@@ -365,5 +369,42 @@ describe('field edits', () => {
     const urls = [{ url: 'a', label: 'a' }, { url: 'b', label: 'b' }];
     expect(removeUrl(urls, 0)).toEqual([{ url: 'b', label: 'b' }]);
     expect(urls).toHaveLength(2);
+  });
+});
+
+describe('copy, cut and paste', () => {
+  it('copies each selected branch once, in map order, without the root', () => {
+    const root = sample();
+    expect(topLevelSelection(root, ['b', 'a1', 'a', 'root']).map((n) => n.id)).toEqual(['a', 'b']);
+    expect(topLevelSelection(root, ['root'], { includeRoot: true }).map((n) => n.id)).toEqual(['root']);
+  });
+
+  it('lists every id in the copied branches', () => {
+    const root = sample();
+    expect([...subtreeIds(topLevelSelection(root, ['a']))].sort()).toEqual(['a', 'a1', 'a2']);
+  });
+
+  it('pastes under the target, unfolded, laid out by the tree, leaving the input alone', () => {
+    const root = sample();
+    const copied = { ...node('c', [node('c1')]), customX: 10, customY: 20 } as MindMapTreeNode;
+    const b = findNode(root, 'b')!.node;
+    b.collapsed = true;
+    const next = appendChildren(root, 'b', [copied])!;
+    const target = findNode(next, 'b')!.node;
+    expect(target.children.map((n) => n.id)).toEqual(['c']);
+    expect(target.collapsed).toBe(false);
+    expect(target.children[0].customX).toBeUndefined();
+    expect(countNodes(next)).toBe(countNodes(root) + 2);
+    expect(countNodes(root)).toBe(5);
+    expect(copied.customX).toBe(10);
+  });
+
+  it('refuses a target that is not there', () => {
+    expect(appendChildren(sample(), 'nope', [node('c')])).toBeNull();
+    expect(appendChildren(sample(), 'b', [])).toBeNull();
+  });
+
+  it('writes an indented outline', () => {
+    expect(outlineText(topLevelSelection(sample(), ['a', 'b']))).toBe('a\n\ta1\n\ta2\nb');
   });
 });

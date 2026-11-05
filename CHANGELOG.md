@@ -6,6 +6,9 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+### Added
+- **Copy, cut and paste nodes.** ⌘C/Ctrl+C copies the selected branch (or several), ⌘X/Ctrl+X cuts it, and ⌘V/Ctrl+V pastes it as a child of the selected node. Pasting a cut puts the same nodes back, files and all; pasting a copy makes new ones. Also in the right-click menu, and as buttons in the Standard and Large toolbars. A picture on the clipboard still pastes onto the node as before.
+
 ### Fixed
 - **Links to other apps.** A link such as `obsidian://open?vault=…` or `zotero://…` on a node opened as a broken web address, because `https://` was put in front of it. Links with their own scheme now open in the app they belong to. On the desktop app, the first link of each kind asks before it opens.
 - **Note popup in light mode.** Hovering a vault in the list view showed its note in a dark box with dim text. It is light now, like the rest of the page.

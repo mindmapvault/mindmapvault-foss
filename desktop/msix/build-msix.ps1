@@ -1,5 +1,5 @@
 ﻿param(
-  [string]$Version = "0.6.7",
+  [string]$Version = "0.6.8",
   # CI passes the exe and output folder; locally both default to the
   # Downloads release folder described below.
   [string]$Exe = "",
@@ -9,7 +9,7 @@
   [switch]$NoSign
 )
 # Packs and signs the Microsoft Store MSIX for MindMapVault FOSS from a
-# version's portable exe. Usage: .\build-msix.ps1 -Version 0.6.7 - expects
+# version's portable exe. Usage: .\build-msix.ps1 -Version 0.6.8 - expects
 # %USERPROFILE%\Downloads\mindmapvault-foss-<version>-release\MindMapVault-FOSS_<version>_x64-portable.exe
 # (target\release\MindMapVault-foss.exe from "tauri build --no-bundle") and
 # writes the .msix beside it. UPLOAD THE FOUR-PART FILE to Partner Center,

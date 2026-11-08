@@ -6,6 +6,14 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-11-08
+
+Copy, cut and paste nodes; decrypted previews and vault labels no longer stay on disk.
+
+### Security
+- **Decrypted vault previews stayed on disk.** The thumbnails in the vault list are drawn from the decrypted map, node texts included, and were cached in the WebView's local storage, which is written to disk as plain text and was never cleared on lock or logout. The cache is now kept in memory only and is dropped on lock and logout; any cache an earlier version left behind is deleted on the first start. So that the list still shows thumbnails after a restart, each vault's preview is now written as an encrypted file beside the vault, like its attachments, and decrypted when the list opens. A vault saved by an earlier version shows the "Open and save this vault to create its preview" placeholder until it is opened once. Reported by chyde80 (GHSA-3fq6-35q6-xcp9).
+- **Vault colours and labels are encrypted at rest.** The colour and labels of each vault, and the label library the editor's tags use, were also kept in plain text. They are now stored encrypted with the profile's key, like vault titles and notes, and are re-encrypted when the password is changed. Existing colours and labels are carried over on the first unlock.
+
 ### Added
 - **Copy, cut and paste nodes.** ⌘C/Ctrl+C copies the selected branch (or several), ⌘X/Ctrl+X cuts it, and ⌘V/Ctrl+V pastes it as a child of the selected node. Pasting a cut puts the same nodes back, files and all; pasting a copy makes new ones. Also in the right-click menu, and as buttons in the Standard and Large toolbars. A picture on the clipboard still pastes onto the node as before.
 

@@ -12,7 +12,7 @@
  * equal `CHANGELOG[0].version`.
  */
 
-export const APP_VERSION = '0.6.7';
+export const APP_VERSION = '0.6.8';
 
 /**
  * localStorage key recording the last version whose "What's New" the user saw.
@@ -36,6 +36,38 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.6.8',
+    date: '2026-11-08',
+    highlights: 'Copy, cut and paste nodes; decrypted previews and vault labels no longer stay on disk.',
+    items: [
+      {
+        kind: 'feature',
+        title: 'Copy, cut and paste nodes',
+        desc: '⌘C/Ctrl+C copies the selected branch, ⌘X/Ctrl+X cuts it and ⌘V/Ctrl+V pastes it under the selected node. Pasting a cut puts the same nodes back, files and all; pasting a copy makes new ones. Also in the right-click menu and the toolbar.',
+      },
+      {
+        kind: 'fix',
+        title: 'Vault previews stayed on disk',
+        desc: 'The thumbnails in the vault list are drawn from the decrypted map and were cached in plain text, which survived lock and logout. They now live in memory only, and each vault keeps an encrypted preview file beside it so the list still shows thumbnails after a restart.',
+      },
+      {
+        kind: 'fix',
+        title: 'Vault colours and labels are encrypted at rest',
+        desc: 'The colour and labels of each vault, and the label library the editor\'s tags use, are now stored encrypted with the profile\'s key, like titles and notes. Existing ones are carried over on the first unlock.',
+      },
+      {
+        kind: 'fix',
+        title: 'Links to other apps',
+        desc: 'A link such as obsidian://open?vault=… or zotero://… on a node opened as a broken web address. Links with their own scheme now open in the app they belong to; the first link of each kind asks before it opens.',
+      },
+      {
+        kind: 'fix',
+        title: 'Light mode is easier to read',
+        desc: 'The note popup in the vault list, success, warning and error messages, dates and captions, and the switches on the shortcuts card all follow light mode now instead of keeping their dark-mode colours.',
+      },
+    ],
+  },
   {
     version: '0.6.7',
     date: '2026-11-03',

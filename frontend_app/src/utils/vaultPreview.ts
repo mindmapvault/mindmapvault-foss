@@ -3,9 +3,12 @@ import { resolveLucideIcon, type LucideIconNode } from '../components/lucideIcon
 import type { MindMapGraph, MindMapTree, MindMapTreeNode } from '../types';
 import type { ThemeMode } from '../store/theme';
 
-// v4: thumbnails are laid out from the shared geometry now, so anything
-// cached under v3 was drawn with the old, off-centre arithmetic.
-const CACHE_KEY = 'cryptmind-vault-preview-cache-v4';
+// Previews are rendered from decrypted vault content, so they must never be
+// written to WebView storage: WebKitGTK/WKWebView/WebView2 persist
+// localStorage to disk in plaintext, which leaked node labels after lock and
+// logout. Keep the cache in memory only, and purge any plaintext cache left by
+// older builds.
+const LEGACY_CACHE_KEY_PREFIX = 'cryptmind-vault-preview-cache-';
 const MAX_CACHE_ENTRIES = 80;
 const PREVIEW_WIDTH = 760;
 const PREVIEW_HEIGHT = 260;
@@ -105,35 +108,51 @@ function clampLabel(value: string, maxLength = 18): string {
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}...` : normalized;
 }
 
-function readCache(): VaultPreviewCache {
-  if (typeof window === 'undefined') return {};
+/**
+ * Previews contain decrypted node labels and tags, so the cache is process
+ * memory only. It is cleared on logout/lock and whenever the WebView reloads
+ * or quits.
+ */
+let previewCache: VaultPreviewCache = {};
+
+/** Remove plaintext preview caches written by builds before this fix. */
+export function purgeLegacyVaultPreviewCaches(): void {
+  if (typeof window === 'undefined') return;
   try {
-    const raw = window.localStorage.getItem(CACHE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as VaultPreviewCache;
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (key?.startsWith(LEGACY_CACHE_KEY_PREFIX)) keys.push(key);
+    }
+    keys.forEach((key) => window.localStorage.removeItem(key));
   } catch {
-    return {};
+    // Storage can be unavailable (privacy mode, sandbox); nothing to purge.
   }
 }
 
-function writeCache(cache: VaultPreviewCache) {
-  if (typeof window === 'undefined') return;
-  try {
-    const entries = Object.entries(cache)
-      .map(([k, v]) => {
-        // pick latest saved_at among theme variants
-        const times = Object.values(v || {}).map((s) => s.saved_at).filter(Boolean) as string[];
-        const latest = times.length > 0 ? times.sort().reverse()[0] : '';
-        return [k, v, latest] as const;
-      })
-      .sort((left, right) => (right[2] || '').localeCompare(left[2] || ''))
-      .slice(0, MAX_CACHE_ENTRIES)
-      .map(([k, v]) => [k, v]);
-    window.localStorage.setItem(CACHE_KEY, JSON.stringify(Object.fromEntries(entries)));
-  } catch {
-    // Ignore preview cache persistence failures.
-  }
+purgeLegacyVaultPreviewCaches();
+
+/** Drop every cached preview, e.g. when the unlock session ends. */
+export function clearVaultPreviewCache(): void {
+  previewCache = {};
+}
+
+function readCache(): VaultPreviewCache {
+  return previewCache;
+}
+
+function writeCache(cache: VaultPreviewCache): void {
+  const entries = Object.entries(cache)
+    .map(([k, v]) => {
+      // pick latest saved_at among theme variants
+      const times = Object.values(v || {}).map((s) => s.saved_at).filter(Boolean) as string[];
+      const latest = times.length > 0 ? times.sort().reverse()[0] : '';
+      return [k, v, latest] as const;
+    })
+    .sort((left, right) => (right[2] || '').localeCompare(left[2] || ''))
+    .slice(0, MAX_CACHE_ENTRIES)
+    .map(([k, v]) => [k, v]);
+  previewCache = Object.fromEntries(entries) as VaultPreviewCache;
 }
 
 function encodeSvg(svg: string): string {

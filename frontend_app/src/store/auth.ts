@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { SessionKeys } from '../types';
+import { clearVaultPreviewCache } from '../utils/vaultPreview';
 
 interface AuthState {
   // ── Persisted (localStorage) ──────────────────────────────────────────────
@@ -35,8 +36,12 @@ export const useAuthStore = create<AuthState>()(
 
       setSessionKeys: (keys) => set({ sessionKeys: keys }),
 
-      logout: () =>
-        set({ accessToken: null, refreshToken: null, username: null, sessionKeys: null }),
+      logout: () => {
+        // Preview thumbnails are rendered from decrypted vault content, so
+        // they must not outlive the unlock session.
+        clearVaultPreviewCache();
+        set({ accessToken: null, refreshToken: null, username: null, sessionKeys: null });
+      },
 
       isAuthenticated: () => {
         const state = get();

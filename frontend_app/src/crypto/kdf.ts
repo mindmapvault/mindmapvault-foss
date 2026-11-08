@@ -88,3 +88,18 @@ export async function deriveAttachmentWrapKey(masterKey: Uint8Array): Promise<Cr
     'decrypt',
   ]);
 }
+
+/**
+ * Derives the key the lobby's per-device metadata is encrypted with:
+ *   lobby_meta_key = HKDF-SHA256(master_key, info="crypt-mind-lobby-meta-v1", len=32)
+ *
+ * Vault colours, vault labels and the label library are decrypted in the list
+ * view, like titles, and are re-encrypted on password rotation the same way.
+ */
+export async function deriveLobbyMetaKey(masterKey: Uint8Array): Promise<CryptoKey> {
+  const keyBytes = hkdf(sha256, masterKey, undefined, 'crypt-mind-lobby-meta-v1', 32);
+  return crypto.subtle.importKey('raw', toBuf(keyBytes), { name: 'AES-GCM', length: 256 }, false, [
+    'encrypt',
+    'decrypt',
+  ]);
+}

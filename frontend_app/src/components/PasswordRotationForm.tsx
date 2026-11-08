@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { buildPasswordRotationBundle } from '../crypto/keyRotation';
 import type { LocalProfileForRotation, VaultEntryForRotation } from '../crypto/keyRotation';
 import { useAuthStore } from '../store/auth';
+import { useLobbyMetaStore } from '../store/lobbyMeta';
 import { PasswordInput } from './PasswordInput';
 
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
@@ -91,6 +92,13 @@ export function PasswordRotationForm({ secondaryAction, onDone, doneAction }: Pa
         newProfile: bundle.newProfile,
         updatedVaults: bundle.updatedVaults,
       });
+
+      // The lobby's colours and labels are encrypted under the master key as
+      // well; re-encrypt them so they survive the password change.
+      if (sessionKeys) {
+        setProgress('Re-encrypting vault colours and labels…');
+        await useLobbyMetaStore.getState().rotateKey(sessionKeys.masterKey, bundle.newMasterKey, profile.username);
+      }
 
       // Update the in-memory session so the rest of the session stays valid.
       if (sessionKeys) {

@@ -14,6 +14,7 @@ import { getStorage } from '../storage';
 import { useAuthStore } from '../store/auth';
 import { useModeStore } from '../store/mode';
 import { useThemeStore } from '../store/theme';
+import { useLobbyMetaStore } from '../store/lobbyMeta';
 import { useUserLabels } from '../hooks/useUserLabels';
 import type {
   MindMapTree,
@@ -29,6 +30,7 @@ import {
   loadCachedVaultPreview,
   saveTreeVaultPreview,
 } from '../utils/vaultPreview';
+import { restoreLocalVaultPreview, saveLocalVaultPreview } from '../utils/localVaultPreview';
 import { decryptAttachmentForOwner } from '../crypto/encryptedVault';
 import {
   IMPORT_FORMATS,
@@ -45,32 +47,8 @@ import {
   buildVaultDrafts,
   normalizeHexColor,
   normalizeVaultLabels,
-  vaultColorStorageKey,
-  vaultLabelsStorageKey,
 } from './vaults/vaultState';
 // packageJson intentionally omitted when not used in this view
-
-
-/** The labels this device holds for a vault, for the local-only case. */
-function localVaultLabels(vaultId: string): string[] {
-  try {
-    const stored = JSON.parse(localStorage.getItem(vaultLabelsStorageKey(vaultId)) ?? '[]');
-    return Array.isArray(stored) ? (stored as string[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function getLocalVaultColor(vaultId: string, fallback?: string): string {
-  const stored = localStorage.getItem(vaultColorStorageKey(vaultId)) ?? undefined;
-  return normalizeHexColor(stored ?? fallback);
-}
-
-function setLocalVaultColor(vaultId: string, color: string): void {
-  localStorage.setItem(vaultColorStorageKey(vaultId), normalizeHexColor(color));
-}
-
-
 
 // ─── Table row (compact view) ────────────────────────────────────────────────
 
@@ -230,6 +208,13 @@ export function VaultsPage() {
         );
       }
 
+      // Colours and labels of local vaults live in the encrypted lobby
+      // metadata, which needs the master key; without keys there is none.
+      if (isLocalMode && sessionKeys && username) {
+        await useLobbyMetaStore.getState().hydrateEncrypted(sessionKeys.masterKey, username);
+      }
+      const lobbyVaults = isLocalMode && sessionKeys ? useLobbyMetaStore.getState().vaults : {};
+
       if (sessionKeys) {
         const decryptedTitles = await Promise.all(
           items.map(async (m) => {
@@ -254,16 +239,14 @@ export function VaultsPage() {
 
         setMaps(
           items.map((m, i) => {
-            const color = isLocalMode
-              ? getLocalVaultColor(m.id, m.vault_color)
-              : normalizeHexColor(m.vault_color);
+            const color = normalizeHexColor(lobbyVaults[m.id]?.color ?? m.vault_color);
             return {
               ...m,
               vault_color: color,
               ...buildVaultDrafts(m, {
                 title: decryptedTitles[i],
                 note: decryptedNotes[i] ?? '',
-                localLabels: isLocalMode ? localVaultLabels(m.id) : [],
+                localLabels: lobbyVaults[m.id]?.labels ?? [],
                 color,
               }),
             };
@@ -272,16 +255,14 @@ export function VaultsPage() {
       } else {
         setMaps(
           items.map((m) => {
-            const color = isLocalMode
-              ? getLocalVaultColor(m.id, m.vault_color)
-              : normalizeHexColor(m.vault_color);
+            const color = normalizeHexColor(m.vault_color);
             return {
               ...m,
               vault_color: color,
               ...buildVaultDrafts(m, {
                 title: null,
                 note: '',
-                localLabels: isLocalMode ? localVaultLabels(m.id) : [],
+                localLabels: [],
                 color,
               }),
             };
@@ -297,7 +278,7 @@ export function VaultsPage() {
     } finally {
       setLoading(false);
     }
-  }, [isLocalMode, sessionKeys, storage]);
+  }, [isLocalMode, sessionKeys, storage, username]);
 
   useEffect(() => {
     if (!showImportMenu) return;
@@ -434,13 +415,42 @@ export function VaultsPage() {
     if (!isLocalMode) {
       return;
     }
+    // What this session has already rendered shows at once; the rest is read
+    // from each vault's encrypted preview file, which needs the unlocked keys.
     const nextStates: Record<string, VaultPreviewState> = {};
+    const missing: MapWithTitle[] = [];
     for (const map of maps) {
       const summary = loadCachedVaultPreview(map.id, map.updated_at, themeMode);
-      nextStates[map.id] = summary ? { loading: false, summary } : { loading: false };
+      if (summary) {
+        nextStates[map.id] = { loading: false, summary };
+      } else {
+        nextStates[map.id] = { loading: hasKeys };
+        missing.push(map);
+      }
     }
     setPreviewStates(nextStates);
-  }, [isLocalMode, mapMetaKey, themeMode]);
+    if (!hasKeys || missing.length === 0) {
+      return;
+    }
+
+    let active = true;
+    void Promise.all(missing.map(async (map) => ({
+      id: map.id,
+      summary: await restoreLocalVaultPreview(map.id, map.updated_at, themeMode),
+    }))).then((results) => {
+      if (!active) return;
+      setPreviewStates((prev) => {
+        const next = { ...prev };
+        for (const result of results) {
+          next[result.id] = result.summary ? { loading: false, summary: result.summary } : { loading: false };
+        }
+        return next;
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, [hasKeys, isLocalMode, mapMetaKey, themeMode]);
 
   useEffect(() => {
     if (hasKeys) {
@@ -491,7 +501,9 @@ export function VaultsPage() {
 
       await storage.uploadBlob(created.id, encBlob);
       const createdDetail = await storage.getVault(created.id);
-      void saveTreeVaultPreview(created.id, createdDetail.updated_at, emptyTree);
+      void (isLocalMode
+        ? saveLocalVaultPreview(created.id, createdDetail.updated_at, emptyTree)
+        : saveTreeVaultPreview(created.id, createdDetail.updated_at, emptyTree));
 
       setNewTitle('');
       setShowCreate(false);
@@ -530,7 +542,9 @@ export function VaultsPage() {
 
     await storage.uploadBlob(created.id, encBlob);
     const createdDetail = await storage.getVault(created.id);
-    void saveTreeVaultPreview(created.id, createdDetail.updated_at, importedTree);
+    void (isLocalMode
+      ? saveLocalVaultPreview(created.id, createdDetail.updated_at, importedTree)
+      : saveTreeVaultPreview(created.id, createdDetail.updated_at, importedTree));
 
     navigate(`/vaults/${created.id}`);
   };
@@ -564,6 +578,7 @@ export function VaultsPage() {
     setDeletingVaultId(id);
     try {
       await storage.deleteVault(id);
+      if (isLocalMode) useLobbyMetaStore.getState().forgetVault(id);
       setMaps((prev) => prev.filter((m) => m.id !== id));
       await refreshStorage();
       setPendingVaultDeletion(null);
@@ -587,7 +602,7 @@ export function VaultsPage() {
         : '';
 
       if (isLocalMode) {
-        setLocalVaultColor(map.id, map.draftColor);
+        useLobbyMetaStore.getState().setVaultColor(map.id, map.draftColor);
       }
 
       await storage.updateMeta(map.id, {
@@ -636,7 +651,7 @@ export function VaultsPage() {
   const setDraftLabels = (id: string, labels: string[]) => {
     const normalized = normalizeVaultLabels(labels);
     if (isLocalMode) {
-      localStorage.setItem(`vault-labels-${id}`, JSON.stringify(normalized));
+      useLobbyMetaStore.getState().setVaultLabels(id, normalized);
     }
     setMaps((prev) => prev.map((m) => (m.id === id ? { ...m, draftLabels: normalized } : m)));
   };

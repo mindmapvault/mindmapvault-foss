@@ -24,6 +24,35 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
   return tauriInvoke<T>(cmd, args);
 }
 
+/**
+ * The vault's preview thumbnail is kept as one more encrypted file beside the
+ * attachments, under this reserved id (`utils/localVaultPreview.ts`). No node
+ * refers to it, so pruning must keep it explicitly.
+ */
+export const LOCAL_VAULT_PREVIEW_ATTACHMENT_ID = '__vault_preview';
+
+/** Writes the already encrypted preview file of a vault. */
+export async function writeLocalVaultPreviewFile(vaultId: string, ciphertext: Uint8Array): Promise<void> {
+  await invoke('save_local_attachment', {
+    vaultId,
+    attachmentId: LOCAL_VAULT_PREVIEW_ATTACHMENT_ID,
+    dataBase64: toBase64(ciphertext),
+  });
+}
+
+/** The encrypted preview file of a vault, or null when there is none yet. */
+export async function readLocalVaultPreviewFile(vaultId: string): Promise<Uint8Array | null> {
+  try {
+    const encoded = await invoke<string>('get_local_attachment', {
+      vaultId,
+      attachmentId: LOCAL_VAULT_PREVIEW_ATTACHMENT_ID,
+    });
+    return fromBase64(encoded);
+  } catch {
+    return null;
+  }
+}
+
 const eachAttachment = (root: MindMapTreeNode, visit: (ref: NodeAttachmentRef) => void): void => {
   const walk = (node: MindMapTreeNode) => {
     node.attachments?.forEach(visit);
@@ -134,7 +163,7 @@ export function withLocalVaultLock<T>(vaultId: string, task: () => Promise<T>): 
 
 /** Deletes the files the saved map no longer points at. Call right after opening it. */
 export async function pruneLocalAttachments(vaultId: string, root: MindMapTreeNode): Promise<void> {
-  const keep = new Set<string>();
+  const keep = new Set<string>([LOCAL_VAULT_PREVIEW_ATTACHMENT_ID]);
   eachAttachment(root, (ref) => {
     if (ref.local_file_key_b64) keep.add(ref.attachment_id);
   });

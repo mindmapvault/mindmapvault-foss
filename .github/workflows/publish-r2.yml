@@ -16,9 +16,11 @@ name: publish-r2
 #
 # Once the files are live, the winget job opens a PR to microsoft/winget-pkgs
 # for MindMapVault.MindMapVaultFOSS pointing at the R2 installer. It needs
-# WINGET_TOKEN: a classic token of kornelko2 with the public_repo scope (Komac
-# cannot open the PR with a fine-grained one). It skips versions already in
-# winget-pkgs, and Komac itself skips one that already has an open PR.
+# WINGET_TOKEN: a classic token of kornelko2 with the public_repo and workflow
+# scopes. Komac cannot open the PR with a fine-grained one, and the fork
+# kornelko2/winget-pkgs lags upstream .github/ changes, which GitHub only lets
+# a token with workflow push. It skips versions already in winget-pkgs, and
+# Komac itself skips one that already has an open PR.
 on:
   workflow_run:
     workflows: [desktop-build]

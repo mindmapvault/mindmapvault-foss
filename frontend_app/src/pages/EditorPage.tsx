@@ -272,16 +272,29 @@ export function EditorPage() {
       nextCreated.push(completed);
     }
 
-    const existingHiddenPreviews = allAttachments.filter(isHiddenVaultPreviewAttachment);
-    for (const attachment of existingHiddenPreviews) {
-      await encryptedVaultApi.deleteAttachment(id, attachment.id);
+    // The map itself is saved by now, so removing the old previews is
+    // best-effort. Read them from the server rather than local state: another
+    // tab may have replaced them already, and a stale id that 404s here used
+    // to fail every save that followed.
+    try {
+      const createdIds = new Set(nextCreated.map((attachment) => attachment.id));
+      const stalePreviews = (await encryptedVaultApi.listAttachments(id)).filter(
+        (attachment) => isHiddenVaultPreviewAttachment(attachment) && !createdIds.has(attachment.id),
+      );
+      for (const attachment of stalePreviews) {
+        await encryptedVaultApi.deleteAttachment(id, attachment.id).catch((err) => {
+          console.warn('Failed to remove old vault preview', attachment.id, err);
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to list old vault previews', err);
     }
 
     setAllAttachments((current) => {
       const preserved = current.filter((attachment) => !isHiddenVaultPreviewAttachment(attachment));
       return [...preserved, ...nextCreated];
     });
-  }, [allAttachments, id, isHiddenVaultPreviewAttachment, isLocalMode, sessionKeys]);
+  }, [id, isHiddenVaultPreviewAttachment, isLocalMode, sessionKeys]);
 
   useEffect(() => {
     if (!id || !sessionKeys || isLocalMode) return;

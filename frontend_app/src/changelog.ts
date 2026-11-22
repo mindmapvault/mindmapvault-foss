@@ -12,7 +12,7 @@
  * equal `CHANGELOG[0].version`.
  */
 
-export const APP_VERSION = '0.6.8';
+export const APP_VERSION = '0.6.9';
 
 /**
  * localStorage key recording the last version whose "What's New" the user saw.
@@ -36,6 +36,18 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.6.9',
+    date: '2026-11-22',
+    highlights: 'Saving no longer fails with "attachment not found".',
+    items: [
+      {
+        kind: 'fix',
+        title: 'Saving failed with "attachment not found"',
+        desc: "If the map's previous thumbnail had already been removed, for example from another tab, every save showed this error, although the map itself had been saved. Cleaning up old thumbnails can no longer fail a save, and the ones left behind are removed on the next save.",
+      },
+    ],
+  },
   {
     version: '0.6.8',
     date: '2026-11-08',

@@ -6,6 +6,13 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+## [0.6.9] - 2026-11-22
+
+Saving no longer fails with "attachment not found".
+
+### Fixed
+- **Saving failed with "attachment not found".** This affected vaults stored on a server. After every save the editor replaces the map's thumbnail in the vault list and deletes the old one. If the old thumbnail had already been removed, for example from another tab, that delete failed, and so did every save after it, although the map itself had been saved each time. The old thumbnails are now looked up on the server, and a failed clean-up no longer fails the save. Thumbnails left behind by the failed saves are removed on the next save.
+
 ## [0.6.8] - 2026-11-08
 
 Copy, cut and paste nodes; decrypted previews and vault labels no longer stay on disk.

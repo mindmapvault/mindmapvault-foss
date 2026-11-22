@@ -67,10 +67,11 @@ export function LocalUnlockPage() {
   const { mode: themeMode, toggleMode } = useThemeStore();
 
   // 'loading'  — scanning the folder
+  // 'choose'   — App Store build with no folder picked yet → must pick one
   // 'unlock'   — profile found in folder → show login form
   // 'empty'    — folder exists but has no profile → offer to pick folder or create
   // 'create'   — user explicitly chose to create a new profile
-  const [step, setStep] = useState<'loading' | 'unlock' | 'empty' | 'create'>('loading');
+  const [step, setStep] = useState<'loading' | 'choose' | 'unlock' | 'empty' | 'create'>('loading');
   const [prevStep, setPrevStep] = useState<'unlock' | 'empty'>('empty');
   const [profile, setProfile] = useState<LocalProfile | null>(null);
   const [username, setUsername] = useState('');
@@ -141,8 +142,14 @@ export function LocalUnlockPage() {
   useEffect(() => {
     (async () => {
       try {
-        const info = await invoke<{ path: string; is_override: boolean }>('get_local_storage_dir');
+        const info = await invoke<{ path: string; is_override: boolean; sandboxed?: boolean }>('get_local_storage_dir');
         setStorageDir(info.path);
+        // In the sandbox the default folder is the hidden app container.
+        // App Review rejects keeping user data there, so ask for a folder.
+        if (info.sandboxed && !info.is_override) {
+          setStep('choose');
+          return;
+        }
       } catch { /* non-fatal */ }
       await refreshProfiles();
     })();
@@ -165,7 +172,7 @@ export function LocalUnlockPage() {
     setError('');
     setChangingDir(true);
     try {
-      const picked = await openDialog({ directory: true, multiple: false });
+      const picked = await openDialog({ directory: true, multiple: false, canCreateDirectories: true });
       if (typeof picked === 'string') {
         const info = await invoke<{ path: string; is_override: boolean }>('set_local_storage_dir', { path: picked });
         setStorageDir(info.path);
@@ -345,11 +352,32 @@ export function LocalUnlockPage() {
           <p className="text-xs text-[var(--fg-muted)] mb-1">Local-only desktop edition (no cloud)</p>
           <p className="text-sm text-[var(--fg-muted)]">
             {step === 'unlock' && `Local vault workspace — ${selectedUsername || profile?.username}`}
+            {step === 'choose' && 'Choose where to keep your vaults'}
             {step === 'empty'  && 'No vault found in this folder'}
             {step === 'create' && 'Create a new local profile'}
           </p>
         </div>
 
+        {step === 'choose' && (
+          <div className="space-y-3">
+            <p className="text-sm text-[var(--fg-muted)]">
+              Your encrypted vaults are saved as files in a folder of your choice, for example
+              a new “MindMapVault” folder in Documents. You can back it up, sync it or move it
+              to another computer. If you already have a vault folder, choose that one.
+            </p>
+            {error && <p className="text-sm text-red-400">{error}</p>}
+            <button
+              onClick={handlePickFolder}
+              disabled={changingDir}
+              className="w-full py-3 rounded-lg bg-[var(--accent)] text-white font-medium
+                         hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50"
+            >
+              {changingDir ? 'Opening…' : 'Choose folder'}
+            </button>
+          </div>
+        )}
+
+        {step !== 'choose' && (
         <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3">
           <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[var(--fg-muted)]">
             Vault folder
@@ -366,6 +394,7 @@ export function LocalUnlockPage() {
             {changingDir ? 'Opening…' : 'Choose folder'}
           </button>
         </div>
+        )}
 
         {/* ── UNLOCK: profile detected → login fields only ── */}
         {step === 'unlock' && (

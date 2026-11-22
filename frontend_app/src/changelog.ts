@@ -12,7 +12,7 @@
  * equal `CHANGELOG[0].version`.
  */
 
-export const APP_VERSION = '0.6.9';
+export const APP_VERSION = '0.6.10';
 
 /**
  * localStorage key recording the last version whose "What's New" the user saw.
@@ -36,6 +36,18 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.6.10',
+    date: '2026-11-22',
+    highlights: 'The Mac App Store version asks where to keep your vaults.',
+    items: [
+      {
+        kind: 'improvement',
+        title: 'Choose the vault folder on first start (Mac App Store)',
+        desc: 'The App Store version used to keep vaults inside its hidden app container. It now asks for a folder on the first start, so the vault files are where you can see, back up and sync them. Other versions are unchanged.',
+      },
+    ],
+  },
   {
     version: '0.6.9',
     date: '2026-11-22',

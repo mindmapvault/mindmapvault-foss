@@ -202,6 +202,15 @@ struct LocalStoreConfig {
 pub struct LocalStorageDirInfo {
     pub path: String,
     pub is_override: bool,
+    /// Running in the macOS App Sandbox (the Mac App Store build). There the
+    /// default folder is the hidden app container, which App Review does not
+    /// accept for user data, so the user has to pick a folder first.
+    pub sandboxed: bool,
+}
+
+/// macOS sets this variable for every sandboxed process.
+fn is_sandboxed() -> bool {
+    cfg!(target_os = "macos") && std::env::var_os("APP_SANDBOX_CONTAINER_ID").is_some()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1203,6 +1212,7 @@ pub fn get_local_storage_dir(app: AppHandle) -> Result<LocalStorageDirInfo, Loca
     Ok(LocalStorageDirInfo {
         path: path.to_string_lossy().to_string(),
         is_override: cfg.storage_dir_override.as_deref().map(|v| !v.trim().is_empty()).unwrap_or(false),
+        sandboxed: is_sandboxed(),
     })
 }
 
@@ -1234,6 +1244,12 @@ pub fn set_local_storage_dir(app: AppHandle, path: String) -> Result<LocalStorag
 
 #[tauri::command]
 pub fn reset_local_storage_dir(app: AppHandle) -> Result<LocalStorageDirInfo, LocalStoreError> {
+    if is_sandboxed() {
+        return Err(LocalStoreError::Io(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "The App Store version keeps vaults in a folder you choose",
+        )));
+    }
     let mut cfg = read_config(&app)?;
     cfg.storage_dir_override = None;
     cfg.storage_dir_bookmark = None;

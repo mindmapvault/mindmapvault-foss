@@ -6,6 +6,13 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+## [0.6.10] - 2026-11-22
+
+The Mac App Store version asks where to keep your vaults.
+
+### Changed
+- **Vault folder on first start (Mac App Store).** The sandboxed build kept vaults in its app container under `~/Library/Containers`, which is hidden and which App Review does not accept for user data. It now asks for a vault folder before the first profile is created, and "Use default" is gone from its settings. Other builds keep their default folder.
+
 ## [0.6.9] - 2026-11-22
 
 Saving no longer fails with "attachment not found".

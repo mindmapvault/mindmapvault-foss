@@ -25,6 +25,7 @@ export type SettingsTab = 'account' | 'changelog' | 'appearance' | 'interface' |
 interface LocalStorageDirInfo {
   path: string;
   is_override: boolean;
+  sandboxed?: boolean;
 }
 
 async function invokeTauri<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
@@ -177,7 +178,7 @@ function LocalStorageFolderSection({ onFolderChanged }: { onFolderChanged?: () =
   const handleBrowse = async () => {
     setPathError('');
     try {
-      const selected = await openDialog({ directory: true, multiple: false });
+      const selected = await openDialog({ directory: true, multiple: false, canCreateDirectories: true });
       if (typeof selected === 'string') setPathInput(selected);
     } catch (err) {
       setPathError(err instanceof Error ? err.message : String(err));
@@ -234,15 +235,17 @@ function LocalStorageFolderSection({ onFolderChanged }: { onFolderChanged?: () =
         >
           {working ? 'Saving…' : 'Set folder'}
         </button>
-        <button
-          type="button"
-          onClick={() => void handleReset()}
-          disabled={working}
-          className="rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50"
-          style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-light)' }}
-        >
-          Use default
-        </button>
+        {!pathInfo?.sandboxed && (
+          <button
+            type="button"
+            onClick={() => void handleReset()}
+            disabled={working}
+            className="rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50"
+            style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)', border: '1px solid var(--border-light)' }}
+          >
+            Use default
+          </button>
+        )}
       </div>
 
       {pathInfo && (
